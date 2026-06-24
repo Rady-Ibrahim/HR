@@ -1,0 +1,335 @@
+@extends('layouts.app')
+@section('title', 'إدارة الموظفين')
+@section('page-title', 'إدارة الموظفين')
+
+@section('content')
+<div class="page-header">
+    <div>
+        <h1><i class="fas fa-user-tie me-2 text-primary"></i> الموظفين</h1>
+        <div class="breadcrumb">إدارة بيانات الموظفين</div>
+    </div>
+    <button class="btn-primary-custom" onclick="openAddModal()">
+        <i class="fas fa-plus me-1"></i> إضافة موظف
+    </button>
+</div>
+
+<!-- FILTERS -->
+<div class="section-card mb-4">
+    <div class="section-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-4"><label class="form-label">بحث</label>
+                <div class="input-group"><span class="input-group-text"><i class="fas fa-search text-muted"></i></span>
+                <input type="text" id="searchInput" class="form-control" placeholder="اسم، كود، إيميل..."></div>
+            </div>
+            <div class="col-md-2"><label class="form-label">الحالة</label>
+                <select id="statusFilter" class="form-select">
+                    <option value="">الكل</option><option value="active">نشط</option>
+                    <option value="inactive">غير نشط</option><option value="on_leave">إجازة</option>
+                    <option value="suspended">موقوف</option><option value="resigned">استقال</option>
+                </select>
+            </div>
+            <div class="col-md-2"><label class="form-label">القسم</label>
+                <input type="text" id="deptFilter" class="form-control" placeholder="القسم">
+            </div>
+            <div class="col-md-2"><button class="btn-primary-custom w-100" onclick="loadEmployees()"><i class="fas fa-filter me-1"></i> بحث</button></div>
+            <div class="col-md-2"><button class="btn btn-outline-secondary w-100" onclick="resetFilters()"><i class="fas fa-undo me-1"></i> إعادة</button></div>
+        </div>
+    </div>
+</div>
+
+<!-- STATS -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value" id="statTotal">-</div><div class="stat-label">إجمالي</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value text-success" id="statActive">-</div><div class="stat-label">نشط</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value text-warning" id="statLeave">-</div><div class="stat-label">إجازة</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value text-danger" id="statOther">-</div><div class="stat-label">غيرهم</div></div></div>
+</div>
+
+<!-- TABLE -->
+<div class="section-card">
+    <div class="section-header">
+        <i class="fas fa-list text-primary"></i>
+        <h5 class="section-title">قائمة الموظفين</h5>
+        <span class="ms-auto text-muted" style="font-size:.8rem" id="totalCount"></span>
+    </div>
+    <div class="table-responsive">
+        <table class="data-table">
+            <thead><tr><th>كود</th><th>الاسم</th><th>الوظيفة</th><th>القسم</th><th>الهاتف</th><th>الراتب الأساسي</th><th>تاريخ التعيين</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+            <tbody id="employeesTable">
+                <tr><td colspan="9" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="section-body d-flex justify-content-between align-items-center">
+        <div id="paginationInfo" class="text-muted" style="font-size:.8rem"></div>
+        <div id="pagination"></div>
+    </div>
+</div>
+
+<!-- ═══════════════ ADD / EDIT MODAL ═══════════════ -->
+<div class="modal fade" id="employeeModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="empModalTitle"><i class="fas fa-user-plus me-2"></i> إضافة موظف</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="employeeForm">
+                    <input type="hidden" id="empId">
+                    <div class="row g-3">
+                        <div class="col-md-4"><label class="form-label">كود الموظف *</label><input type="text" name="employee_code" id="ef_code" class="form-control" required placeholder="EMP001"></div>
+                        <div class="col-md-4"><label class="form-label">الاسم الكامل *</label><input type="text" name="name" id="ef_name" class="form-control" required></div>
+                        <div class="col-md-4"><label class="form-label">رقم الهاتف *</label><input type="text" name="phone" id="ef_phone" class="form-control" required></div>
+                        <div class="col-md-6"><label class="form-label">البريد الإلكتروني</label><input type="email" name="email" id="ef_email" class="form-control"></div>
+                        <div class="col-md-6"><label class="form-label">الوظيفة *</label><input type="text" name="position" id="ef_position" class="form-control" required></div>
+                        <div class="col-md-6"><label class="form-label">القسم *</label><input type="text" name="department" id="ef_department" class="form-control" required></div>
+                        <div class="col-md-6"><label class="form-label">تاريخ التعيين *</label><input type="date" name="joining_date" id="ef_joining_date" class="form-control" required></div>
+                        <div class="col-md-6"><label class="form-label">الراتب الأساسي *</label>
+                            <div class="input-group"><input type="number" name="base_salary" id="ef_base_salary" class="form-control" required><span class="input-group-text">ج.م</span></div>
+                        </div>
+                        <div class="col-md-6"><label class="form-label">الحالة *</label>
+                            <select name="status" id="ef_status" class="form-select" required>
+                                <option value="active">نشط</option><option value="inactive">غير نشط</option>
+                                <option value="on_leave">إجازة</option><option value="suspended">موقوف</option><option value="resigned">استقال</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6"><label class="form-label">رقم السيارة</label><input type="text" name="car_number" id="ef_car_number" class="form-control"></div>
+                        <div class="col-md-6"><label class="form-label">رخصة القيادة</label><input type="text" name="car_license" id="ef_car_license" class="form-control"></div>
+                        <div class="col-md-6"><label class="form-label">الرقم القومي</label><input type="text" name="national_id" id="ef_national_id" class="form-control"></div>
+                        <div class="col-md-6"><label class="form-label">الرقم الوظيفي للمدير</label><input type="number" name="manager_id" id="ef_manager_id" class="form-control" placeholder="ID المدير المباشر"></div>
+                        <div class="col-12"><label class="form-label">ملاحظات</label><textarea name="notes" id="ef_notes" class="form-control" rows="2"></textarea></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <button type="button" class="btn-primary-custom" onclick="saveEmployee()"><i class="fas fa-save me-1"></i> حفظ</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ VIEW CARD MODAL ═══════════════ -->
+<div class="modal fade" id="viewEmployeeModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-id-card me-2"></i> كارت الموظف</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="employeeCardContent">
+                <div class="text-center py-5"><div class="spinner mx-auto"></div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ DELETE MODAL ═══════════════ -->
+<div class="modal fade" id="empDeleteModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header border-0"><h5 class="modal-title text-danger"><i class="fas fa-trash me-2"></i>تأكيد الحذف</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body text-center">
+                <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+                <p>هل تريد حذف الموظف<br><strong id="empDeleteName"></strong>؟</p>
+                <p class="text-muted small">لا يمكن التراجع عن هذا الإجراء</p>
+            </div>
+            <div class="modal-footer border-0 justify-content-center">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <button type="button" class="btn btn-danger" id="empDeleteBtn"><i class="fas fa-trash me-1"></i>حذف نهائي</button>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+
+@push('scripts')
+<script>
+let currentPage = 1, empDeleteId = null;
+const statusLabels = { active:'نشط', inactive:'غير نشط', on_leave:'إجازة', suspended:'موقوف', resigned:'استقال' };
+const statusBadge  = { active:'badge-active', inactive:'badge-inactive', on_leave:'badge-approved', suspended:'badge-rejected', resigned:'badge-draft' };
+
+// ─── LIST ─────────────────────────────────────────────
+async function loadEmployees(page = 1) {
+    currentPage = page;
+    const params = new URLSearchParams({ per_page:15, page,
+        search: document.getElementById('searchInput').value,
+        status: document.getElementById('statusFilter').value,
+        department: document.getElementById('deptFilter').value,
+    });
+    document.getElementById('employeesTable').innerHTML =
+        '<tr><td colspan="9" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>';
+    const r = await apiFetch('/employees?' + params);
+    if (!r.success) return;
+    const { data, total, current_page, last_page } = r.data;
+    document.getElementById('totalCount').textContent     = `إجمالي: ${total}`;
+    document.getElementById('paginationInfo').textContent = `صفحة ${current_page} من ${last_page}`;
+    document.getElementById('statTotal').textContent  = total;
+    document.getElementById('statActive').textContent = data.filter(e=>e.status==='active').length;
+    document.getElementById('statLeave').textContent  = data.filter(e=>e.status==='on_leave').length;
+    document.getElementById('statOther').textContent  = data.filter(e=>!['active','on_leave'].includes(e.status)).length;
+    if (!data.length) {
+        document.getElementById('employeesTable').innerHTML =
+            '<tr><td colspan="9" class="text-center py-4 text-muted"><i class="fas fa-inbox fa-2x d-block mb-2"></i>لا يوجد موظفون</td></tr>';
+        return;
+    }
+    document.getElementById('employeesTable').innerHTML = data.map(e => `
+        <tr>
+            <td><span class="fw-bold text-primary">${e.employee_code}</span></td>
+            <td><strong>${e.name}</strong><br><small class="text-muted">${e.email??''}</small></td>
+            <td>${e.position}</td>
+            <td>${e.department}</td>
+            <td>${e.phone??'-'}</td>
+            <td class="fw-bold">${Number(e.base_salary).toLocaleString('ar-EG')} ج.م</td>
+            <td>${e.joining_date?new Date(e.joining_date).toLocaleDateString('ar-EG'):'-'}</td>
+            <td><span class="badge-status ${statusBadge[e.status]||'badge-draft'}">${statusLabels[e.status]||e.status}</span></td>
+            <td>
+                <div class="d-flex gap-1 flex-wrap">
+                    <button class="btn btn-sm btn-outline-info"    onclick="viewEmployee(${e.id})" title="عرض"><i class="fas fa-eye"></i></button>
+                    <button class="btn btn-sm btn-outline-warning"  onclick="openEditModal(${e.id})" title="تعديل"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-outline-danger"   onclick="confirmDelete(${e.id},'${e.name.replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i></button>
+                </div>
+            </td>
+        </tr>`).join('');
+    const pages=[];
+    for(let i=1;i<=last_page;i++) pages.push(`<button class="btn btn-sm ${i===current_page?'btn-primary':'btn-outline-primary'} mx-1" onclick="loadEmployees(${i})">${i}</button>`);
+    document.getElementById('pagination').innerHTML = pages.join('');
+}
+
+// ─── ADD ──────────────────────────────────────────────
+function openAddModal() {
+    document.getElementById('empId').value = '';
+    document.getElementById('employeeForm').reset();
+    document.getElementById('empModalTitle').innerHTML = '<i class="fas fa-user-plus me-2"></i> إضافة موظف جديد';
+    document.getElementById('ef_status').value = 'active';
+    new bootstrap.Modal(document.getElementById('employeeModal')).show();
+}
+
+// ─── EDIT ─────────────────────────────────────────────
+async function openEditModal(id) {
+    document.getElementById('empModalTitle').innerHTML = '<i class="fas fa-edit me-2"></i> تعديل بيانات الموظف';
+    new bootstrap.Modal(document.getElementById('employeeModal')).show();
+    const r = await apiFetch('/employees/' + id);
+    if (!r.success) { showAlert('فشل تحميل البيانات', 'danger'); return; }
+    const e = r.data;
+    document.getElementById('empId').value          = e.id;
+    document.getElementById('ef_code').value        = e.employee_code ?? '';
+    document.getElementById('ef_name').value        = e.name ?? '';
+    document.getElementById('ef_phone').value       = e.phone ?? '';
+    document.getElementById('ef_email').value       = e.email ?? '';
+    document.getElementById('ef_position').value    = e.position ?? '';
+    document.getElementById('ef_department').value  = e.department ?? '';
+    document.getElementById('ef_joining_date').value = e.joining_date ? e.joining_date.substring(0,10) : '';
+    document.getElementById('ef_base_salary').value = e.base_salary ?? '';
+    document.getElementById('ef_status').value      = e.status ?? 'active';
+    document.getElementById('ef_car_number').value  = e.car_number ?? '';
+    document.getElementById('ef_car_license').value = e.car_license ?? '';
+    document.getElementById('ef_national_id').value = e.national_id ?? '';
+    document.getElementById('ef_manager_id').value  = e.manager_id ?? '';
+    document.getElementById('ef_notes').value       = e.notes ?? '';
+}
+
+// ─── SAVE ─────────────────────────────────────────────
+async function saveEmployee() {
+    const id   = document.getElementById('empId').value;
+    const data = Object.fromEntries(new FormData(document.getElementById('employeeForm')));
+    data.base_salary = parseFloat(data.base_salary);
+    if (data.manager_id) data.manager_id = parseInt(data.manager_id); else delete data.manager_id;
+    const r = await apiFetch(id?`/employees/${id}`:'/employees', { method:id?'PUT':'POST', body:JSON.stringify(data) });
+    if (r.success) {
+        bootstrap.Modal.getInstance(document.getElementById('employeeModal')).hide();
+        showAlert(id ? 'تم تحديث بيانات الموظف' : 'تم إضافة الموظف بنجاح');
+        loadEmployees(currentPage);
+    } else {
+        const msgs = r.errors ? Object.values(r.errors).flat().join('<br>') : (r.message||'فشل الحفظ');
+        showAlert(msgs, 'danger');
+    }
+}
+
+// ─── DELETE ───────────────────────────────────────────
+function confirmDelete(id, name) {
+    empDeleteId = id;
+    document.getElementById('empDeleteName').textContent = name;
+    new bootstrap.Modal(document.getElementById('empDeleteModal')).show();
+}
+document.getElementById('empDeleteBtn').addEventListener('click', async () => {
+    if (!empDeleteId) return;
+    const r = await apiFetch(`/employees/${empDeleteId}`, { method:'DELETE' });
+    bootstrap.Modal.getInstance(document.getElementById('empDeleteModal')).hide();
+    if (r.success) { showAlert('تم حذف الموظف'); loadEmployees(currentPage); }
+    else showAlert(r.message||'فشل الحذف', 'danger');
+    empDeleteId = null;
+});
+
+// ─── VIEW CARD ────────────────────────────────────────
+async function viewEmployee(id) {
+    const modal = new bootstrap.Modal(document.getElementById('viewEmployeeModal'));
+    document.getElementById('employeeCardContent').innerHTML = '<div class="text-center py-5"><div class="spinner mx-auto"></div></div>';
+    modal.show();
+    const [empR, salR] = await Promise.all([apiFetch(`/employees/${id}`), apiFetch(`/employees/${id}/salary-history`)]);
+    const e = empR.data, salary = salR.data?.[0];
+    document.getElementById('employeeCardContent').innerHTML = `
+    <div class="row g-3">
+        <div class="col-md-4">
+            <div class="section-card p-3 text-center">
+                <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#1a237e,#1abc9c);color:#fff;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;margin:0 auto 16px">${e.name.charAt(0)}</div>
+                <h5 class="mb-1">${e.name}</h5><p class="text-muted mb-1">${e.position}</p>
+                <p class="text-muted mb-2" style="font-size:.8rem">${e.department}</p>
+                <span class="badge-status ${statusBadge[e.status]||'badge-draft'}">${statusLabels[e.status]||e.status}</span>
+                <hr>
+                <div class="text-start" style="font-size:.85rem">
+                    <p class="mb-1"><i class="fas fa-id-card me-2 text-primary"></i>${e.employee_code}</p>
+                    <p class="mb-1"><i class="fas fa-phone me-2 text-primary"></i>${e.phone??'-'}</p>
+                    <p class="mb-1"><i class="fas fa-envelope me-2 text-primary"></i>${e.email??'-'}</p>
+                    <p class="mb-1"><i class="fas fa-calendar me-2 text-primary"></i>${e.joining_date?new Date(e.joining_date).toLocaleDateString('ar-EG'):'-'}</p>
+                    <p class="mb-0"><i class="fas fa-car me-2 text-primary"></i>${e.car_number??'-'}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="section-card p-3 mb-3">
+                <h6 class="fw-bold mb-3"><i class="fas fa-money-bill-wave me-2 text-success"></i>آخر راتب</h6>
+                ${salary?`
+                    <div class="d-flex justify-content-between mb-1"><span class="text-muted">أساسي:</span><span>${Number(salary.base_salary).toLocaleString()} ج.م</span></div>
+                    <div class="d-flex justify-content-between mb-1"><span class="text-muted">إجمالي:</span><span>${Number(salary.gross_salary??0).toLocaleString()} ج.م</span></div>
+                    <div class="d-flex justify-content-between fw-bold border-top pt-2"><span>صافي:</span><span class="text-success">${Number(salary.net_salary).toLocaleString()} ج.م</span></div>
+                `:'<p class="text-muted text-center mb-0">لا يوجد راتب محسوب</p>'}
+            </div>
+            <div class="section-card p-3">
+                <h6 class="fw-bold mb-2 text-warning"><i class="fas fa-exchange-alt me-2"></i>تغيير الحالة</h6>
+                <div class="d-grid gap-1">
+                    <button class="btn btn-success btn-sm" onclick="changeStatus(${e.id},'active')"><i class="fas fa-check me-1"></i>نشط</button>
+                    <button class="btn btn-warning btn-sm" onclick="changeStatus(${e.id},'on_leave')"><i class="fas fa-umbrella-beach me-1"></i>إجازة</button>
+                    <button class="btn btn-danger btn-sm"  onclick="changeStatus(${e.id},'suspended')"><i class="fas fa-ban me-1"></i>موقوف</button>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="section-card p-3">
+                <h6 class="fw-bold mb-3"><i class="fas fa-cogs me-2 text-primary"></i>إجراءات سريعة</h6>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-warning btn-sm" onclick="bootstrap.Modal.getInstance(document.getElementById('viewEmployeeModal')).hide();setTimeout(()=>openEditModal(${e.id}),400)"><i class="fas fa-edit me-1"></i>تعديل البيانات</button>
+                    <button class="btn btn-outline-info    btn-sm" onclick="window.location='/attendance?employee_id=${e.id}'"><i class="fas fa-clock me-1"></i>سجل الحضور</button>
+                    <button class="btn btn-outline-success btn-sm" onclick="window.location='/incentives?employee_id=${e.id}'"><i class="fas fa-star me-1"></i>الحوافز</button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="window.location='/advances?employee_id=${e.id}'"><i class="fas fa-hand-holding-usd me-1"></i>السلف</button>
+                    <button class="btn btn-outline-primary btn-sm" onclick="window.location='/salaries?employee_id=${e.id}'"><i class="fas fa-money-bill-wave me-1"></i>الرواتب</button>
+                </div>
+            </div>
+        </div>
+    </div>`;
+}
+
+async function changeStatus(id, status) {
+    const r = await apiFetch(`/employees/${id}/status`, { method:'PUT', body:JSON.stringify({ status }) });
+    if (r.success) {
+        bootstrap.Modal.getInstance(document.getElementById('viewEmployeeModal')).hide();
+        showAlert('تم تحديث الحالة'); loadEmployees(currentPage);
+    } else showAlert(r.message, 'danger');
+}
+
+function resetFilters() { ['searchInput','statusFilter','deptFilter'].forEach(id=>document.getElementById(id).value=''); loadEmployees(); }
+document.getElementById('searchInput').addEventListener('keypress', e => { if(e.key==='Enter') loadEmployees(); });
+document.addEventListener('DOMContentLoaded', loadEmployees);
+</script>
+@endpush
