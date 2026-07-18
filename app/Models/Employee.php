@@ -30,6 +30,30 @@ class Employee extends Model
         'employee_type' => EmployeeTypeEnum::class,
     ];
 
+    protected static function booted(): void
+    {
+        // Soft delete keeps the row; free unique columns so phone/email/code can be reused.
+        static::softDeleted(function (Employee $employee) {
+            $employee->releaseUniqueConstraints();
+        });
+    }
+
+    public function releaseUniqueConstraints(): void
+    {
+        $originalPhone = $this->getRawOriginal('phone') ?? $this->phone ?? '';
+        $originalCode = $this->getRawOriginal('employee_code') ?? $this->employee_code ?? '';
+
+        static::withTrashed()
+            ->whereKey($this->id)
+            ->update([
+                'phone' => mb_substr('del' . $this->id . '_' . $originalPhone, 0, 255),
+                'email' => null,
+                'employee_code' => mb_substr('DEL' . $this->id . '_' . $originalCode, 0, 255),
+                'national_id' => null,
+                'updated_at' => now(),
+            ]);
+    }
+
     public function getEmployeeTypeLabelAttribute(): string
     {
         $type = $this->employee_type instanceof EmployeeTypeEnum
