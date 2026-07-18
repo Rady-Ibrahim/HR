@@ -17,6 +17,12 @@ class AllowanceController
         if ($request->filled('allowance_type')) $query->where('allowance_type', $request->allowance_type);
 
         $allowances = $query->orderByDesc('start_date')->paginate($request->get('per_page', 15));
+        $allowances->getCollection()->transform(function ($allowance) {
+            $allowance->month = optional($allowance->start_date)->month;
+            $allowance->year = optional($allowance->start_date)->year;
+            $allowance->is_recurring = (bool) $allowance->recurring;
+            return $allowance;
+        });
 
         return response()->json(['success' => true, 'data' => $allowances]);
     }
@@ -27,11 +33,20 @@ class AllowanceController
             'employee_id'    => 'required|exists:employees,id',
             'allowance_type' => 'required|string|max:100',
             'amount'         => 'required|numeric|min:0',
-            'start_date'     => 'required|date',
-            'end_date'       => 'nullable|date|after:start_date',
+            'month'          => 'nullable|integer|min:1|max:12',
+            'year'           => 'nullable|integer|min:2000|max:2100',
+            'start_date'     => 'nullable|date',
+            'end_date'       => 'nullable|date|after_or_equal:start_date',
             'recurring'      => 'boolean',
+            'is_recurring'   => 'boolean',
             'notes'          => 'nullable|string',
         ]);
+
+        $month = $validated['month'] ?? now()->month;
+        $year = $validated['year'] ?? now()->year;
+        $validated['start_date'] = $validated['start_date'] ?? sprintf('%04d-%02d-01', $year, $month);
+        $validated['recurring'] = $validated['recurring'] ?? $validated['is_recurring'] ?? false;
+        unset($validated['month'], $validated['year'], $validated['is_recurring']);
 
         $validated['status'] = 'active';
         $allowance = Allowance::create($validated);
@@ -45,18 +60,40 @@ class AllowanceController
 
     public function show($id): JsonResponse
     {
-        return response()->json(['success' => true, 'data' => Allowance::with('employee')->findOrFail($id)]);
+        $allowance = Allowance::with('employee')->findOrFail($id);
+        $allowance->month = optional($allowance->start_date)->month;
+        $allowance->year = optional($allowance->start_date)->year;
+        $allowance->is_recurring = (bool) $allowance->recurring;
+
+        return response()->json(['success' => true, 'data' => $allowance]);
     }
 
     public function update(Request $request, $id): JsonResponse
     {
         $allowance = Allowance::findOrFail($id);
         $validated = $request->validate([
-            'amount'      => 'sometimes|numeric|min:0',
-            'end_date'    => 'nullable|date',
-            'status'      => 'sometimes|in:active,inactive,paused',
-            'notes'       => 'nullable|string',
+            'employee_id'    => 'sometimes|exists:employees,id',
+            'allowance_type' => 'sometimes|string|max:100',
+            'amount'         => 'sometimes|numeric|min:0',
+            'month'          => 'nullable|integer|min:1|max:12',
+            'year'           => 'nullable|integer|min:2000|max:2100',
+            'start_date'     => 'nullable|date',
+            'end_date'       => 'nullable|date',
+            'recurring'      => 'boolean',
+            'is_recurring'   => 'boolean',
+            'status'         => 'sometimes|in:active,inactive,paused',
+            'notes'          => 'nullable|string',
         ]);
+
+        if (!empty($validated['month']) || !empty($validated['year'])) {
+            $month = $validated['month'] ?? optional($allowance->start_date)->month ?? now()->month;
+            $year = $validated['year'] ?? optional($allowance->start_date)->year ?? now()->year;
+            $validated['start_date'] = sprintf('%04d-%02d-01', $year, $month);
+        }
+        if (array_key_exists('is_recurring', $validated)) {
+            $validated['recurring'] = $validated['is_recurring'];
+        }
+        unset($validated['month'], $validated['year'], $validated['is_recurring']);
 
         $allowance->update($validated);
 

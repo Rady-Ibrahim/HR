@@ -141,6 +141,7 @@ return [
         'check_in_time' => '08:00',
         'check_out_time' => '17:00',
         'late_threshold_minutes' => 15,
+        'half_day_deduction_after_minutes' => 120,
         'timezone' => 'Africa/Cairo',
     ],
 

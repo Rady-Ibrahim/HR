@@ -152,7 +152,7 @@ async function loadSalaries(page = 1) {
             <td class="text-success">+${Number(s.total_allowances ?? 0).toLocaleString()}</td>
             <td class="text-success">+${Number(s.total_commissions ?? 0).toLocaleString()}</td>
             <td class="text-danger">-${Number(s.total_deductions ?? 0).toLocaleString()}</td>
-            <td class="text-danger">-${Number(s.advance_deductions ?? 0).toLocaleString()}</td>
+            <td class="text-danger">-${Number(s.total_advances ?? 0).toLocaleString()}</td>
             <td class="fw-bold text-primary fs-6">${Number(s.net_salary).toLocaleString()} ج.م</td>
             <td><span class="badge-status ${salBadge[s.status] || 'badge-draft'}">${salLabel[s.status] || s.status}</span></td>
             <td>
@@ -211,9 +211,17 @@ async function viewSalary(id) {
     const r = await apiFetch('/salaries/' + id);
     if (!r.success) return;
     const s = r.data;
+    const components = s.components || [];
+    const attendanceComponents = components.filter(c => c.component_type === 'attendance_deduction');
     document.getElementById('salaryDetailBody').innerHTML = `
     <h6 class="fw-bold text-primary">${s.employee?.name ?? '-'} - ${s.month}/${s.year}</h6>
     <hr>
+    ${attendanceComponents.length ? `
+        <div class="alert alert-warning py-2" style="font-size:.85rem">
+            <i class="fas fa-business-time me-1"></i>
+            يوجد خصم حضور تلقائي ضمن الراتب: ${attendanceComponents.map(c => `${c.component_name} (${Math.abs(Number(c.amount)).toLocaleString()} ج.م)`).join('، ')}
+        </div>
+    ` : ''}
     <div class="row g-2 mb-3">
         <div class="col-12"><h6 class="text-muted mb-2">المستحقات</h6></div>
         <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">أساسي</small><div class="fw-bold">${Number(s.base_salary).toLocaleString()} ج.م</div></div></div>
@@ -222,14 +230,43 @@ async function viewSalary(id) {
         <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">عمولات</small><div class="fw-bold text-success">+${Number(s.total_commissions ?? 0).toLocaleString()} ج.م</div></div></div>
         <div class="col-12 mt-2"><h6 class="text-muted mb-2">الخصومات</h6></div>
         <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">خصومات</small><div class="fw-bold text-danger">-${Number(s.total_deductions ?? 0).toLocaleString()} ج.م</div></div></div>
-        <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">سلف</small><div class="fw-bold text-danger">-${Number(s.advance_deductions ?? 0).toLocaleString()} ج.م</div></div></div>
-        <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">غياب</small><div class="fw-bold text-danger">-${Number(s.absence_deductions ?? 0).toLocaleString()} ج.م</div></div></div>
-        <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">تأخير</small><div class="fw-bold text-danger">-${Number(s.late_deductions ?? 0).toLocaleString()} ج.م</div></div></div>
+        <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">سلف</small><div class="fw-bold text-danger">-${Number(s.total_advances ?? 0).toLocaleString()} ج.م</div></div></div>
+        <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">مخالفات</small><div class="fw-bold text-danger">-${Number(s.total_violations ?? 0).toLocaleString()} ج.م</div></div></div>
+        <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">خصم حضور</small><div class="fw-bold text-danger">-${attendanceComponents.reduce((sum, c) => sum + Math.abs(Number(c.amount || 0)), 0).toLocaleString()} ج.م</div></div></div>
     </div>
+    ${components.length ? `
+        <h6 class="text-muted mb-2">تفاصيل المكونات</h6>
+        <div class="table-responsive mb-3">
+            <table class="data-table">
+                <thead><tr><th>النوع</th><th>الوصف</th><th>المبلغ</th></tr></thead>
+                <tbody>
+                    ${components.map(c => `
+                        <tr>
+                            <td>${componentLabel(c.component_type)}</td>
+                            <td>${c.component_name ?? '-'}</td>
+                            <td class="${Number(c.amount) < 0 ? 'text-danger' : 'text-success'} fw-bold">${Number(c.amount).toLocaleString()} ج.م</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    ` : ''}
     <div class="d-flex justify-content-between p-3 bg-primary text-white rounded">
         <span class="fw-bold fs-5">صافي الراتب</span>
         <span class="fw-bold fs-4">${Number(s.net_salary).toLocaleString()} ج.م</span>
     </div>`;
+}
+
+function componentLabel(type) {
+    return {
+        incentive: 'حافز',
+        allowance: 'بدل',
+        commission: 'عمولة',
+        deduction: 'خصم',
+        attendance_deduction: 'خصم حضور',
+        advance: 'سلفة',
+        violation: 'مخالفة'
+    }[type] || type;
 }
 
 function exportSalaries() { window.location = `/reports/salaries?month=${document.getElementById('salMonth').value}&year=${document.getElementById('salYear').value}`; }

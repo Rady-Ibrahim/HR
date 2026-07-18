@@ -146,7 +146,7 @@
                 <i class="fas fa-trophy text-primary"></i>
                 <h5 class="section-title">أفضل المندوبين تسليماً</h5>
             </div>
-            <div class="section-body p-0">
+            <div class="section-body p-0 table-responsive">
                 <table class="data-table">
                     <thead><tr><th>#</th><th>الاسم</th><th>القسم</th><th>التسليمات</th></tr></thead>
                     <tbody id="topDriversTable">

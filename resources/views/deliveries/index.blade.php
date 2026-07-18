@@ -11,9 +11,9 @@
 <!-- STATS -->
 <div class="row g-3 mb-4" id="statsRow">
     <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value" id="stTotal">-</div><div class="stat-label">إجمالي</div></div></div>
-    <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value text-success" id="stDelivered">-</div><div class="stat-label">مسلّم</div></div></div>
-    <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value text-warning" id="stPartial">-</div><div class="stat-label">جزئي</div></div></div>
-    <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value text-danger" id="stFailed">-</div><div class="stat-label">فاشل</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value text-success" id="stDelivered">-</div><div class="stat-label">اتسلم</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value text-danger" id="stFailed">-</div><div class="stat-label">لم تسلم</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value text-warning" id="stPending">-</div><div class="stat-label">معلق</div></div></div>
 </div>
 
 <!-- FILTERS -->
@@ -22,7 +22,7 @@
         <div class="row g-2 align-items-end">
             <div class="col-md-3"><label class="form-label">بحث</label><input type="text" id="delSearch" class="form-control" placeholder="رقم الطلب، اسم العميل..."></div>
             <div class="col-md-2"><label class="form-label">الحالة</label>
-                <select id="delStatus" class="form-select"><option value="">الكل</option><option value="pending">معلق</option><option value="in_progress">جاري</option><option value="delivered">مسلّم</option><option value="partial">جزئي</option><option value="failed">فاشل</option><option value="returned">مرتجع</option></select>
+                <select id="delStatus" class="form-select"><option value="">الكل</option><option value="delivered">اتسلم</option><option value="not_delivered">لم تسلم</option><option value="pending">معلق</option></select>
             </div>
             <div class="col-md-2"><label class="form-label">التاريخ</label><input type="date" id="delDate" class="form-control"></div>
             <div class="col-md-2"><button class="btn-primary-custom w-100 mt-4" onclick="loadDeliveries()"><i class="fas fa-search me-1"></i> بحث</button></div>
@@ -57,18 +57,36 @@
                 <form id="delForm">
                     <input type="hidden" id="delId">
                     <div class="row g-3">
-                        <div class="col-md-6"><label class="form-label">طلب البيع (ID) *</label><input type="number" name="request_id" id="df2_request" class="form-control" required></div>
-                        <div class="col-md-6"><label class="form-label">المندوب (ID) *</label><input type="number" name="employee_id" id="df2_emp" class="form-control" required></div>
-                        <div class="col-md-6"><label class="form-label">خط السير (ID)</label><input type="number" name="route_id" id="df2_route" class="form-control"></div>
-                        <div class="col-md-6"><label class="form-label">تاريخ التسليم المخطط</label><input type="date" name="scheduled_date" id="df2_sched" class="form-control" value="{{ date('Y-m-d') }}"></div>
+                        <div class="col-md-6"><label class="form-label">طلب البيع</label><select name="request_id" id="df2_request" class="form-select" data-lookup="requests" data-placeholder="اختر طلب البيع"></select></div>
+                        <div class="col-md-6"><label class="form-label">المندوب / السائق</label><select name="driver_id" id="df2_driver" class="form-select" data-lookup="employees" data-placeholder="اختر المندوب / السائق"></select></div>
+                        <div class="col-md-6"><label class="form-label">خط السير</label><select name="route_id" id="df2_route" class="form-select" data-lookup="routes" data-placeholder="اختر خط السير"></select></div>
+                        <div class="col-md-6"><label class="form-label">تاريخ التسليم المخطط</label><input type="date" name="scheduled_date" id="df2_sched" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">الحالة</label>
                             <select name="status" id="df2_status" class="form-select">
-                                <option value="pending">معلق</option><option value="in_progress">جاري</option>
-                                <option value="delivered">مسلّم</option><option value="partial">جزئي</option>
-                                <option value="failed">فاشل</option><option value="returned">مرتجع</option>
+                                <option value="delivered">اتسلم</option>
+                                <option value="not_delivered">لم تسلم</option>
                             </select>
                         </div>
                         <div class="col-md-6"><label class="form-label">المبلغ المحصّل</label><div class="input-group"><input type="number" name="collected_amount" id="df2_collected" class="form-control" placeholder="0.00"><span class="input-group-text">ج.م</span></div></div>
+                        <div class="col-md-6"><label class="form-label">طريقة الدفع</label>
+                            <select name="payment_method" id="df2_payment_method" class="form-select">
+                                <option value="cash">نقدي</option>
+                                <option value="bank_transfer">تحويل بنكي</option>
+                                <option value="check">شيك</option>
+                                <option value="instapay">إنستاباي</option>
+                                <option value="fawry">فوري</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6"><label class="form-label">إشعار موظف</label>
+                            <select name="notify_employee_id" id="df2_notify_employee" class="form-select" data-lookup="employees" data-placeholder="بدون إشعار">
+                                <option value="">بدون إشعار</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <div class="alert alert-info py-2 mb-0" style="font-size:.82rem">
+                                عند اختيار "اتسلم" وإدخال مبلغ، سيتم إنشاء تحصيل تلقائي في صفحة التحصيلات وإرسال إشعار للموظف المختار.
+                            </div>
+                        </div>
                         <div class="col-12"><label class="form-label">ملاحظات</label><textarea name="notes" id="df2_notes" class="form-control" rows="2"></textarea></div>
                     </div>
                 </form>
@@ -107,8 +125,16 @@
 @push('scripts')
 <script>
 let delDeleteId=null, delPage=1;
-const delStatusLabels = { pending:'معلق', in_progress:'جاري', delivered:'مسلّم', partial:'جزئي', failed:'فاشل', returned:'مرتجع' };
-const delStatusBadge  = { pending:'badge-pending', in_progress:'badge-approved', delivered:'badge-active', partial:'badge-pending', failed:'badge-rejected', returned:'badge-draft' };
+let employeesLookup = [];
+const delStatusLabels = { pending:'معلق', in_transit:'جاري', completed:'اتسلم', failed:'لم تسلم', partially_delivered:'جزئي', delivered:'اتسلم', not_delivered:'لم تسلم' };
+const delStatusBadge  = { pending:'badge-pending', in_transit:'badge-approved', completed:'badge-active', failed:'badge-rejected', partially_delivered:'badge-pending', delivered:'badge-active', not_delivered:'badge-rejected' };
+
+async function loadDeliveryLookups() {
+    const employees = await apiFetch('/employees?per_page=1000');
+    employeesLookup = employees.success ? (employees.data.data || []) : [];
+    const options = employeesLookup.map(e => `<option value="${e.id}">${escapeHtml(e.name)} - ${escapeHtml(e.employee_code ?? e.id)}</option>`).join('');
+    document.getElementById('df2_notify_employee').innerHTML = '<option value="">بدون إشعار</option>' + options;
+}
 
 async function loadDeliveries(page=1) {
     delPage=page;
@@ -124,18 +150,18 @@ async function loadDeliveries(page=1) {
     if (summary) {
         document.getElementById('stTotal').textContent=summary.total||total;
         document.getElementById('stDelivered').textContent=summary.delivered||0;
-        document.getElementById('stPartial').textContent=summary.partial||0;
-        document.getElementById('stFailed').textContent=summary.failed||0;
+        document.getElementById('stFailed').textContent=summary.not_delivered||summary.failed||0;
+        document.getElementById('stPending').textContent=summary.pending||0;
     }
     if (!data.length) { document.getElementById('delTable').innerHTML='<tr><td colspan="8" class="text-center py-4 text-muted">لا توجد تسليمات</td></tr>'; return; }
     document.getElementById('delTable').innerHTML = data.map(d=>`
         <tr>
             <td><strong>#${d.id}</strong></td>
             <td>${d.request?.customer?.name??'-'}</td>
-            <td>${d.employee?.name??'-'}</td>
-            <td>${d.route?.name??'-'}</td>
-            <td>${d.scheduled_date?new Date(d.scheduled_date).toLocaleDateString('ar-EG'):'-'}</td>
-            <td>${d.collected_amount?Number(d.collected_amount).toLocaleString()+' ج.م':'-'}</td>
+            <td>${d.driver?.name??d.sales_rep?.name??'-'}</td>
+            <td>${d.route?.route_name??d.route?.route_code??'-'}</td>
+            <td>${deliveryDate(d)}</td>
+            <td>${d.expected_collection_amount?Number(d.expected_collection_amount).toLocaleString()+' ج.م':'-'}</td>
             <td><span class="badge-status ${delStatusBadge[d.status]||'badge-pending'}">${delStatusLabels[d.status]||d.status}</span></td>
             <td>
                 <div class="d-flex gap-1 flex-wrap">
@@ -153,7 +179,10 @@ async function loadDeliveries(page=1) {
 function openAddModal() {
     document.getElementById('delId').value=''; document.getElementById('delForm').reset();
     document.getElementById('delModalTitle').innerHTML='<i class="fas fa-truck me-2"></i> إضافة تسليمة جديدة';
-    document.getElementById('df2_status').value='pending'; document.getElementById('df2_sched').value='{{ date("Y-m-d") }}';
+    document.getElementById('df2_status').value='delivered';
+    document.getElementById('df2_payment_method').value='cash';
+    document.getElementById('df2_notify_employee').value='';
+    document.getElementById('df2_sched').value='';
     new bootstrap.Modal(document.getElementById('delModal')).show();
 }
 async function openEditModal(id) {
@@ -161,23 +190,52 @@ async function openEditModal(id) {
     new bootstrap.Modal(document.getElementById('delModal')).show();
     const r=await apiFetch('/deliveries/'+id); if(!r.success) return; const d=r.data;
     document.getElementById('delId').value=d.id;
-    document.getElementById('df2_request').value=d.request_id;
-    document.getElementById('df2_emp').value=d.employee_id;
+    document.getElementById('df2_request').value=d.request_id??'';
+    document.getElementById('df2_driver').value=d.driver_id??'';
     document.getElementById('df2_route').value=d.route_id??'';
-    document.getElementById('df2_sched').value=d.scheduled_date?d.scheduled_date.substring(0,10):'';
-    document.getElementById('df2_status').value=d.status;
-    document.getElementById('df2_collected').value=d.collected_amount??'';
-    document.getElementById('df2_notes').value=d.notes??'';
+    document.getElementById('df2_sched').value=d.delivery_items?.scheduled_date??'';
+    document.getElementById('df2_status').value=d.status==='completed'?'delivered':(d.status==='failed'?'not_delivered':'delivered');
+    document.getElementById('df2_collected').value=d.expected_collection_amount??'';
+    document.getElementById('df2_payment_method').value='cash';
+    document.getElementById('df2_notify_employee').value=d.collection_notify_employee_id??'';
+    document.getElementById('df2_notes').value=d.delivery_notes??'';
 }
 async function saveDelivery() {
     const id=document.getElementById('delId').value;
     const data=Object.fromEntries(new FormData(document.getElementById('delForm')));
-    data.request_id=parseInt(data.request_id); data.employee_id=parseInt(data.employee_id);
+    const shouldAutoCollect = data.status === 'delivered' && data.collected_amount;
+    const autoCollectPayload = {
+        delivery_status: data.status,
+        collected_amount: data.collected_amount ? parseFloat(data.collected_amount) : null,
+        payment_method: data.payment_method || 'cash',
+        notify_employee_id: data.notify_employee_id ? parseInt(data.notify_employee_id) : null,
+        notes: data.notes || null
+    };
+    if(data.request_id) data.request_id=parseInt(data.request_id); else delete data.request_id;
+    if(data.driver_id) data.driver_id=parseInt(data.driver_id); else delete data.driver_id;
     if(data.route_id) data.route_id=parseInt(data.route_id); else delete data.route_id;
     if(data.collected_amount) data.collected_amount=parseFloat(data.collected_amount); else delete data.collected_amount;
+    if(data.notify_employee_id) data.notify_employee_id=parseInt(data.notify_employee_id); else delete data.notify_employee_id;
+    if(!data.payment_method) delete data.payment_method;
+    if(!data.scheduled_date) delete data.scheduled_date;
+    if(!data.notes) delete data.notes;
     const r=await apiFetch(id?`/deliveries/${id}`:'/deliveries',{method:id?'PUT':'POST',body:JSON.stringify(data)});
-    if(r.success){bootstrap.Modal.getInstance(document.getElementById('delModal')).hide();showAlert(id?'تم التحديث':'تم الإضافة');loadDeliveries(delPage);}
-    else showAlert(r.message||'فشل الحفظ','danger');
+    if(r.success){
+        const deliveryId = id || r.data?.id;
+        if (deliveryId && shouldAutoCollect) {
+            const auto = await apiFetch(`/deliveries/${deliveryId}/complete-with-collection`, { method:'POST', body:JSON.stringify(autoCollectPayload) });
+            if (!auto.success) {
+                showAlert(auto.message || 'تم حفظ التسليمة لكن فشل إنشاء التحصيل', 'danger');
+            } else {
+                showAlert('تم حفظ التسليمة وإنشاء التحصيل وإرسال الإشعار');
+                if (typeof loadNotifCount === 'function') loadNotifCount();
+            }
+        } else {
+            showAlert(id?'تم التحديث':'تم الإضافة');
+        }
+        bootstrap.Modal.getInstance(document.getElementById('delModal')).hide();
+        loadDeliveries(delPage);
+    } else showAlert(r.message||'فشل الحفظ','danger');
 }
 
 async function viewDelivery(id) {
@@ -192,17 +250,17 @@ async function viewDelivery(id) {
                 <h6 class="fw-bold mb-3"><i class="fas fa-info-circle me-2 text-primary"></i>معلومات التسليمة</h6>
                 <p class="mb-1"><strong>رقم:</strong> #${d.id}</p>
                 <p class="mb-1"><strong>العميل:</strong> ${d.request?.customer?.name??'-'}</p>
-                <p class="mb-1"><strong>المندوب:</strong> ${d.employee?.name??'-'}</p>
-                <p class="mb-1"><strong>الخط:</strong> ${d.route?.name??'-'}</p>
-                <p class="mb-1"><strong>تاريخ التسليم:</strong> ${d.actual_date?new Date(d.actual_date).toLocaleDateString('ar-EG'):'-'}</p>
+                <p class="mb-1"><strong>المندوب / السائق:</strong> ${d.driver?.name??d.sales_rep?.name??'-'}</p>
+                <p class="mb-1"><strong>الخط:</strong> ${d.route?.route_name??d.route?.route_code??'-'}</p>
+                <p class="mb-1"><strong>تاريخ التسليم:</strong> ${deliveryDate(d)}</p>
                 <p class="mb-0"><strong>الحالة:</strong> <span class="badge-status ${delStatusBadge[d.status]||'badge-pending'}">${delStatusLabels[d.status]||d.status}</span></p>
             </div>
         </div>
         <div class="col-md-6">
             <div class="section-card p-3">
                 <h6 class="fw-bold mb-3"><i class="fas fa-money-bill me-2 text-success"></i>التحصيل</h6>
-                <p class="mb-1"><strong>المحصّل:</strong> ${d.collected_amount?Number(d.collected_amount).toLocaleString()+' ج.م':'غير محصّل'}</p>
-                <p class="mb-1"><strong>ملاحظات:</strong> ${d.notes??'-'}</p>
+                <p class="mb-1"><strong>المحصّل:</strong> ${d.expected_collection_amount?Number(d.expected_collection_amount).toLocaleString()+' ج.م':'غير محصّل'}</p>
+                <p class="mb-1"><strong>ملاحظات:</strong> ${d.delivery_notes??'-'}</p>
                 ${d.proof_image?`<img src="${d.proof_image}" class="img-fluid rounded mt-2" style="max-height:200px" alt="إثبات التسليم">`:'' }
             </div>
         </div>
@@ -226,7 +284,9 @@ document.getElementById('delDeleteBtn').addEventListener('click', async()=>{
     delDeleteId=null;
 });
 function resetDelFilter() { ['delSearch','delStatus','delDate'].forEach(id=>document.getElementById(id).value=''); loadDeliveries(); }
+function deliveryDate(d) { return d.delivery_items?.scheduled_date ? new Date(d.delivery_items.scheduled_date).toLocaleDateString('ar-EG') : (d.end_time ? new Date(d.end_time).toLocaleDateString('ar-EG') : '-'); }
+function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char])); }
 document.getElementById('delSearch').addEventListener('keypress', e=>{ if(e.key==='Enter') loadDeliveries(); });
-document.addEventListener('DOMContentLoaded', loadDeliveries);
+document.addEventListener('DOMContentLoaded', async () => { await loadDeliveryLookups(); loadDeliveries(); });
 </script>
 @endpush

@@ -63,7 +63,7 @@
                             <div class="input-group"><input type="number" name="unit_price" id="if_unit_price" class="form-control" required step="0.01"><span class="input-group-text">ج.م</span></div>
                         </div>
                         <div class="col-md-4"><label class="form-label">الوحدة</label><input type="text" name="unit" id="if_unit" class="form-control" placeholder="قطعة، كيلو، لتر..."></div>
-                        <div class="col-md-6"><label class="form-label">المخزن (ID)</label><input type="number" name="warehouse_id" id="if_warehouse_id" class="form-control"></div>
+                        <div class="col-md-6"><label class="form-label">المخزن</label><select name="warehouse_id" id="if_warehouse_id" class="form-select" data-lookup="warehouses" data-placeholder="اختر المخزن"></select></div>
                         <div class="col-md-6"><label class="form-label">متاح للبيع؟</label>
                             <select name="is_available" id="if_is_available" class="form-select"><option value="1">متاح</option><option value="0">غير متاح</option></select>
                         </div>

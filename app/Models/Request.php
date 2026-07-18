@@ -14,8 +14,9 @@ class Request extends Model
 
     protected $fillable = [
         'request_number', 'customer_id', 'customer_name', 'company_name', 'warehouse',
-        'assigned_employee_id', 'items_count', 'total_quantity', 'total_amount', 'status',
-        'created_by_id', 'prepared_by_id', 'reviewed_by_id', 'approved_by_id',
+        'assigned_employee_id', 'items_count', 'orders_count', 'total_quantity', 'total_amount',
+        'payment_type', 'status', 'created_by_id', 'prepared_by_id', 'reviewer_employee_id',
+        'reviewed_by_id', 'approved_by_id',
         'prepared_at', 'reviewed_at', 'approved_at', 'estimated_delivery_date',
         'actual_delivery_date', 'notes', 'rejection_reason'
     ];
@@ -59,6 +60,11 @@ class Request extends Model
         return $this->belongsTo(Employee::class, 'prepared_by_id');
     }
 
+    public function reviewerEmployee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'reviewer_employee_id');
+    }
+
     public function reviewedBy(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'reviewed_by_id');
@@ -72,5 +78,10 @@ class Request extends Model
     public function assignedEmployee(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'assigned_employee_id');
+    }
+
+    public function employee(): BelongsTo
+    {
+        return $this->assignedEmployee();
     }
 }

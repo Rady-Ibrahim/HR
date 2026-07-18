@@ -60,9 +60,9 @@
                 <form id="colForm">
                     <input type="hidden" id="colId">
                     <div class="row g-3">
-                        <div class="col-md-6"><label class="form-label">المندوب (ID) *</label><input type="number" name="employee_id" id="clf_emp" class="form-control" required></div>
-                        <div class="col-md-6"><label class="form-label">التسليمة (ID)</label><input type="number" name="delivery_id" id="clf_delivery" class="form-control"></div>
-                        <div class="col-md-6"><label class="form-label">العميل (ID)</label><input type="number" name="customer_id" id="clf_customer" class="form-control"></div>
+                        <div class="col-md-6"><label class="form-label">المندوب *</label><select name="employee_id" id="clf_emp" class="form-select" data-lookup="employees" data-placeholder="اختر المندوب" required></select></div>
+                        <div class="col-md-6"><label class="form-label">التسليمة</label><select name="delivery_id" id="clf_delivery" class="form-select" data-lookup="deliveries" data-placeholder="اختر التسليمة"></select></div>
+                        <div class="col-md-6"><label class="form-label">العميل</label><select name="customer_id" id="clf_customer" class="form-select" data-lookup="customers" data-placeholder="اختر العميل"></select></div>
                         <div class="col-md-6"><label class="form-label">المبلغ *</label><div class="input-group"><input type="number" name="amount" id="clf_amount" class="form-control" required step="0.01"><span class="input-group-text">ج.م</span></div></div>
                         <div class="col-md-6"><label class="form-label">طريقة الدفع *</label>
                             <select name="payment_method" id="clf_method" class="form-select" required>
@@ -100,7 +100,7 @@
 @push('scripts')
 <script>
 let colDeleteId=null, colPage=1;
-const paymentLabels = { cash:'نقدي', check:'شيك', bank_transfer:'تحويل بنكي', other:'أخرى' };
+const paymentLabels = { cash:'نقدي', check:'شيك', bank_transfer:'تحويل بنكي', instapay:'إنستاباي', fawry:'فوري', other:'أخرى' };
 
 document.getElementById('clf_method').addEventListener('change', function() {
     document.getElementById('checkFields').style.display = this.value==='check' ? '' : 'none';
@@ -110,11 +110,16 @@ document.getElementById('clf_method').addEventListener('change', function() {
 async function loadDailySummary() {
     const r = await apiFetch('/collections/daily-summary?date={{ date("Y-m-d") }}');
     if (!r.success) return;
-    const s = r.data;
-    document.getElementById('sumTotal').textContent   = s.total ? Number(s.total).toLocaleString()+' ج.م' : '0 ج.م';
-    document.getElementById('sumCash').textContent    = s.cash  ? Number(s.cash).toLocaleString()+' ج.م' : '0 ج.م';
-    document.getElementById('sumCheck').textContent   = s.check ? Number(s.check).toLocaleString()+' ج.م' : '0 ج.م';
-    document.getElementById('sumPending').textContent = (s.pending_count??0)+' طلب';
+    const rows = r.data || [];
+    const byMethod = rows.reduce((acc, row) => {
+        acc[row.payment_method] = (acc[row.payment_method] || 0) + Number(row.total || 0);
+        acc.pendingCount += row.collection_status === 'pending' ? Number(row.count || 0) : 0;
+        return acc;
+    }, { pendingCount: 0 });
+    document.getElementById('sumTotal').textContent   = r.total ? Number(r.total).toLocaleString()+' ج.م' : '0 ج.م';
+    document.getElementById('sumCash').textContent    = byMethod.cash ? Number(byMethod.cash).toLocaleString()+' ج.م' : '0 ج.م';
+    document.getElementById('sumCheck').textContent   = byMethod.check ? Number(byMethod.check).toLocaleString()+' ج.م' : '0 ج.م';
+    document.getElementById('sumPending').textContent = byMethod.pendingCount + ' طلب';
 }
 
 async function loadCollections(page=1) {
@@ -133,16 +138,16 @@ async function loadCollections(page=1) {
     document.getElementById('colTable').innerHTML = data.map(c=>`
         <tr>
             <td>#${c.id}</td>
-            <td>${c.employee?.name??'-'}</td>
+            <td>${c.driver?.name??'-'}</td>
             <td>${c.customer?.name??c.delivery?.request?.customer?.name??'-'}</td>
-            <td class="fw-bold">${Number(c.amount).toLocaleString()} ج.م</td>
+            <td class="fw-bold">${Number(c.total_amount ?? 0).toLocaleString()} ج.م</td>
             <td>${paymentLabels[c.payment_method]||c.payment_method}</td>
-            <td>${c.collection_date?new Date(c.collection_date).toLocaleDateString('ar-EG'):'-'}</td>
-            <td><span class="badge-status ${c.status==='approved'?'badge-active':c.status==='rejected'?'badge-rejected':'badge-pending'}">${c.status==='approved'?'معتمد':c.status==='rejected'?'مرفوض':'معلق'}</span></td>
+            <td>${c.collected_date?new Date(c.collected_date).toLocaleDateString('ar-EG'):'-'}</td>
+            <td><span class="badge-status ${collectionBadge(c.collection_status)}">${collectionLabel(c.collection_status)}</span></td>
             <td>
                 <div class="d-flex gap-1 flex-wrap">
                     <button class="btn btn-sm btn-outline-warning" onclick="openEditModal(${c.id})"><i class="fas fa-edit"></i></button>
-                    ${c.status==='pending'?`
+                    ${c.collection_status==='pending'?`
                         <button class="btn btn-sm btn-success" onclick="approveCol(${c.id})"><i class="fas fa-check"></i></button>
                         <button class="btn btn-sm btn-outline-secondary" onclick="rejectCol(${c.id})"><i class="fas fa-times"></i></button>
                     `:''}
@@ -168,12 +173,12 @@ async function openEditModal(id) {
     new bootstrap.Modal(document.getElementById('colModal')).show();
     const r=await apiFetch('/collections/'+id); if(!r.success) return; const c=r.data;
     document.getElementById('colId').value=c.id;
-    document.getElementById('clf_emp').value=c.employee_id;
+    document.getElementById('clf_emp').value=c.driver_id??'';
     document.getElementById('clf_delivery').value=c.delivery_id??'';
     document.getElementById('clf_customer').value=c.customer_id??'';
-    document.getElementById('clf_amount').value=c.amount;
+    document.getElementById('clf_amount').value=c.total_amount;
     document.getElementById('clf_method').value=c.payment_method;
-    document.getElementById('clf_date').value=c.collection_date?c.collection_date.substring(0,10):'';
+    document.getElementById('clf_date').value=c.collected_date?c.collected_date.substring(0,10):'';
     document.getElementById('clf_check_no').value=c.check_number??'';
     document.getElementById('clf_ref').value=c.reference_number??'';
     document.getElementById('clf_notes').value=c.notes??'';
@@ -183,9 +188,11 @@ async function openEditModal(id) {
 async function saveCollection() {
     const id=document.getElementById('colId').value;
     const data=Object.fromEntries(new FormData(document.getElementById('colForm')));
-    data.amount=parseFloat(data.amount); data.employee_id=parseInt(data.employee_id);
+    data.total_amount=parseFloat(data.amount); delete data.amount;
+    data.driver_id=parseInt(data.employee_id); delete data.employee_id;
+    data.collected_date=data.collection_date; delete data.collection_date;
     if(data.delivery_id) data.delivery_id=parseInt(data.delivery_id); else delete data.delivery_id;
-    if(data.customer_id) data.customer_id=parseInt(data.customer_id); else delete data.customer_id;
+    delete data.customer_id;
     if(!data.check_number) delete data.check_number;
     if(!data.reference_number) delete data.reference_number;
     const r=await apiFetch(id?`/collections/${id}`:'/collections',{method:id?'PUT':'POST',body:JSON.stringify(data)});
@@ -210,6 +217,8 @@ document.getElementById('colDeleteBtn').addEventListener('click', async()=>{
     colDeleteId=null;
 });
 function resetColFilter() { ['colSearch','colPayment','colStatus','colDate'].forEach(id=>document.getElementById(id).value=''); loadCollections(); }
+function collectionLabel(status) { return { pending:'معلق', collected:'محصل تلقائي', deposited:'معتمد', rejected:'مرفوض' }[status] || status; }
+function collectionBadge(status) { return { pending:'badge-pending', collected:'badge-approved', deposited:'badge-active', rejected:'badge-rejected' }[status] || 'badge-pending'; }
 document.getElementById('colSearch').addEventListener('keypress', e=>{ if(e.key==='Enter') loadCollections(); });
 document.addEventListener('DOMContentLoaded', ()=>{ loadDailySummary(); loadCollections(); });
 </script>

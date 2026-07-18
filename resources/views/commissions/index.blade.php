@@ -47,7 +47,7 @@
                 <form id="comForm">
                     <input type="hidden" id="comId">
                     <div class="row g-3">
-                        <div class="col-12"><label class="form-label">الموظف (ID) *</label><input type="number" name="employee_id" id="cf2_emp" class="form-control" required></div>
+                        <div class="col-12"><label class="form-label">الموظف *</label><select name="employee_id" id="cf2_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select></div>
                         <div class="col-md-6"><label class="form-label">إجمالي المبيعات *</label><div class="input-group"><input type="number" name="total_sales" id="cf2_sales" class="form-control" required><span class="input-group-text">ج.م</span></div></div>
                         <div class="col-md-6"><label class="form-label">نسبة العمولة % *</label><div class="input-group"><input type="number" name="commission_rate" id="cf2_rate" class="form-control" required step="0.01" min="0" max="100"><span class="input-group-text">%</span></div></div>
                         <div class="col-md-6"><label class="form-label">مبلغ العمولة</label><div class="input-group"><input type="number" name="commission_amount" id="cf2_amount" class="form-control"><span class="input-group-text">ج.م</span></div></div>
@@ -104,7 +104,7 @@ async function loadCommissions(page=1) {
             <td>${c.employee?.name??'-'}</td>
             <td>${c.total_sales?Number(c.total_sales).toLocaleString()+' ج.م':'-'}</td>
             <td>${c.commission_rate??0}%</td>
-            <td class="fw-bold text-success">${Number(c.commission_amount).toLocaleString()} ج.م</td>
+            <td class="fw-bold text-success">${Number(c.amount ?? 0).toLocaleString()} ج.م</td>
             <td>${c.month}/${c.year}</td>
             <td><span class="badge-status ${c.status==='approved'?'badge-active':c.status==='rejected'?'badge-rejected':'badge-pending'}">${c.status==='approved'?'معتمد':c.status==='rejected'?'مرفوض':'معلق'}</span></td>
             <td>
@@ -133,7 +133,7 @@ async function openEditModal(id) {
     document.getElementById('cf2_emp').value=c.employee_id;
     document.getElementById('cf2_sales').value=c.total_sales??'';
     document.getElementById('cf2_rate').value=c.commission_rate??'';
-    document.getElementById('cf2_amount').value=c.commission_amount??'';
+    document.getElementById('cf2_amount').value=c.amount??'';
     document.getElementById('cf2_method').value=c.calculation_method??'percentage';
     document.getElementById('cf2_month').value=c.month;
     document.getElementById('cf2_year').value=c.year;
@@ -144,7 +144,11 @@ async function saveCommission() {
     const data=Object.fromEntries(new FormData(document.getElementById('comForm')));
     if(data.total_sales) data.total_sales=parseFloat(data.total_sales);
     if(data.commission_rate) data.commission_rate=parseFloat(data.commission_rate);
-    if(data.commission_amount) data.commission_amount=parseFloat(data.commission_amount);
+    if(data.commission_amount) data.amount=parseFloat(data.commission_amount);
+    delete data.commission_amount;
+    delete data.calculation_method;
+    if(data.notes) data.description=data.notes;
+    delete data.notes;
     data.month=parseInt(data.month); data.year=parseInt(data.year); data.employee_id=parseInt(data.employee_id);
     const r=await apiFetch(id?`/commissions/${id}`:'/commissions',{method:id?'PUT':'POST',body:JSON.stringify(data)});
     if(r.success){bootstrap.Modal.getInstance(document.getElementById('comModal')).hide();showAlert(id?'تم التحديث':'تم الإضافة');loadCommissions(comPage);}

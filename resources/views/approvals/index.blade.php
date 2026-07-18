@@ -32,8 +32,8 @@
         <div class="section-header"><i class="fas fa-clipboard-list text-primary"></i><h5 class="section-title">الطلبات المعلقة</h5></div>
         <div class="table-responsive">
             <table class="data-table">
-                <thead><tr><th>رقم الطلب</th><th>العميل</th><th>الموظف</th><th>الإجمالي</th><th>التاريخ</th><th>إجراءات</th></tr></thead>
-                <tbody id="pendingReqsTable"><tr><td colspan="6" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr></tbody>
+                <thead><tr><th>رقم الطلب</th><th>العميل</th><th>صاحب الطلب</th><th>المرحلة</th><th>المسؤول</th><th>الإجمالي</th><th>التاريخ</th><th>إجراءات</th></tr></thead>
+                <tbody id="pendingReqsTable"><tr><td colspan="8" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr></tbody>
             </table>
         </div>
     </div>
@@ -91,7 +91,8 @@ async function loadPending() {
     document.getElementById('pendCols').textContent  = s.pending_collections ?? 0;
     document.getElementById('pendSals').textContent  = s.pending_salaries ?? 0;
     document.getElementById('pendTotal').textContent = s.total_pending ?? 0;
-    document.getElementById('pendingCount').textContent = s.total_pending ?? 0;
+    const pendingCount = document.getElementById('pendingCount');
+    if (pendingCount) pendingCount.textContent = s.total_pending ?? 0;
 
     // Requests
     const reqs = d.requests ?? [];
@@ -99,23 +100,25 @@ async function loadPending() {
         <tr>
             <td>#${req.request_number ?? req.id}</td>
             <td>${req.customer?.name ?? '-'}</td>
-            <td>${req.employee?.name ?? '-'}</td>
+            <td>${req.created_by?.name ?? req.prepared_by?.name ?? '-'}</td>
+            <td><span class="badge-status ${req.pending_approval_type === 'reviewer_request_review' ? 'badge-pending' : 'badge-approved'}">${req.pending_approval_type === 'reviewer_request_review' ? 'مراجعة موظف' : 'اعتماد مدير'}</span></td>
+            <td>${req.pending_approver?.name ?? req.reviewer_employee?.name ?? req.created_by?.manager?.name ?? '-'}</td>
             <td class="fw-bold">${Number(req.total_amount ?? 0).toLocaleString()} ج.م</td>
             <td>${req.created_at ? new Date(req.created_at).toLocaleDateString('ar-EG') : '-'}</td>
             <td>
                 <div class="d-flex gap-1">
-                    <button class="btn btn-sm btn-success" onclick="approveItem('request', ${req.id})"><i class="fas fa-check"></i> اعتماد</button>
-                    <button class="btn btn-sm btn-danger" onclick="rejectItem('request', ${req.id})"><i class="fas fa-times"></i> رفض</button>
+                    <button class="btn btn-sm btn-success" onclick="approveRequestStage(${req.id}, '${req.pending_approval_type}')"><i class="fas fa-check"></i> اعتماد</button>
+                    <button class="btn btn-sm btn-danger" onclick="rejectRequestStage(${req.id}, '${req.pending_approval_type}')"><i class="fas fa-times"></i> رفض</button>
                 </div>
             </td>
         </tr>
-    `).join('') : '<tr><td colspan="6" class="text-center py-4 text-muted">لا توجد طلبات معلقة</td></tr>';
+    `).join('') : '<tr><td colspan="8" class="text-center py-4 text-muted">لا توجد طلبات معلقة</td></tr>';
 
     // Collections
     const cols = d.collections ?? [];
     document.getElementById('pendingColsTable').innerHTML = cols.length ? cols.map(c => `
         <tr>
-            <td class="fw-bold text-success">${Number(c.amount).toLocaleString()} ج.م</td>
+            <td class="fw-bold text-success">${Number(c.total_amount ?? c.amount ?? 0).toLocaleString()} ج.م</td>
             <td>${c.driver?.name ?? '-'}</td>
             <td>${c.payment_method ?? '-'}</td>
             <td>${c.created_at ? new Date(c.created_at).toLocaleDateString('ar-EG') : '-'}</td>
@@ -152,6 +155,27 @@ async function approveItem(type, id) {
     if (type === 'collection') { url = `/collections/${id}/approve`; body = { notes }; }
     const r = await apiFetch(url, { method: 'POST', body: JSON.stringify(body) });
     if (r.success) { showAlert('تم الاعتماد'); loadPending(); }
+    else showAlert(r.message, 'danger');
+}
+
+async function approveRequestStage(id, stage) {
+    const notes = prompt('ملاحظات (اختياري):') ?? '';
+    const url = stage === 'reviewer_request_review'
+        ? `/requests/${id}/reviewer-approve`
+        : `/requests/${id}/manager-approve`;
+    const r = await apiFetch(url, { method: 'POST', body: JSON.stringify({ notes }) });
+    if (r.success) { showAlert(stage === 'reviewer_request_review' ? 'تمت مراجعة الطلب وإرساله للمدير' : 'تم اعتماد الطلب'); loadPending(); }
+    else showAlert(r.message, 'danger');
+}
+
+async function rejectRequestStage(id, stage) {
+    const reason = prompt('سبب الرفض:');
+    if (!reason) return;
+    const url = stage === 'reviewer_request_review'
+        ? `/requests/${id}/reviewer-reject`
+        : `/requests/${id}/manager-reject`;
+    const r = await apiFetch(url, { method: 'POST', body: JSON.stringify({ reason, rejection_reason: reason }) });
+    if (r.success) { showAlert('تم رفض الطلب', 'warning'); loadPending(); }
     else showAlert(r.message, 'danger');
 }
 

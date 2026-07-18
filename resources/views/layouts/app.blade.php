@@ -29,21 +29,50 @@
             background: #f4f6fb;
             color: #2d3748;
         }
+        body.sidebar-open {
+            overflow: hidden;
+        }
 
         /* SIDEBAR */
+        html, body {
+            max-width: 100%;
+            overflow-x: hidden;
+        }
+
         .sidebar {
             position: fixed;
             top: 0; right: 0;
             width: var(--sidebar-w);
             height: 100vh;
+            height: 100dvh;
+            max-height: 100dvh;
             background: linear-gradient(180deg, #1a237e 0%, #283593 60%, #3949ab 100%);
+            overflow-x: hidden;
             overflow-y: auto;
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
             z-index: 1000;
             transition: width .3s ease;
             box-shadow: -4px 0 20px rgba(0,0,0,.18);
+            padding-bottom: 20px;
         }
-        .sidebar::-webkit-scrollbar { width: 4px; }
-        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,.2); border-radius: 4px; }
+        .sidebar-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, .48);
+            z-index: 998;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .2s ease;
+        }
+        .sidebar-backdrop.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .sidebar::-webkit-scrollbar { width: 6px; }
+        .sidebar::-webkit-scrollbar-track { background: rgba(255,255,255,.06); }
+        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,.32); border-radius: 6px; }
+        .sidebar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.46); }
 
         .sidebar .brand {
             height: var(--header-h);
@@ -199,6 +228,10 @@
         .section-card .section-body  { padding: 20px 22px; }
 
         /* TABLE */
+        .table-responsive {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
         .data-table { width: 100%; border-collapse: separate; border-spacing: 0; }
         .data-table thead th {
             background: #f8f9fe;
@@ -244,6 +277,10 @@
             font-weight: 600;
             font-size: .875rem;
             transition: all .2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
         }
         .btn-primary-custom:hover { box-shadow: 0 4px 14px rgba(44,62,140,.35); transform: translateY(-1px); color: #fff; }
 
@@ -276,11 +313,224 @@
         }
         .form-label { font-weight: 600; font-size: .83rem; color: #4a5568; }
 
-        /* MOBILE */
-        @media (max-width: 768px) {
-            .sidebar { width: 0; overflow: hidden; }
-            .sidebar.open { width: var(--sidebar-w); }
-            .topbar, .main-wrapper { margin-right: 0; right: 0; }
+        .nav-tabs {
+            overflow-x: auto;
+            overflow-y: hidden;
+            flex-wrap: nowrap;
+            -webkit-overflow-scrolling: touch;
+        }
+        .nav-tabs .nav-link {
+            white-space: nowrap;
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 1199.98px) {
+            :root { --sidebar-w: 236px; }
+            .page-content { padding: 22px 20px 34px; }
+            .stat-card { padding: 18px; }
+            .section-card .section-body { padding: 18px; }
+            .modal-xl { --bs-modal-width: calc(100vw - 40px); }
+        }
+
+        @media (max-width: 991.98px) {
+            .sidebar {
+                width: min(86vw, 300px);
+                height: 100dvh;
+                max-height: 100dvh;
+                overflow-y: auto;
+                transform: translateX(105%);
+                transition: transform .25s ease;
+                z-index: 1001;
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            .topbar {
+                right: 0;
+                padding: 0 14px;
+            }
+            .main-wrapper {
+                margin-right: 0;
+            }
+            .page-content {
+                padding: 18px 14px 30px;
+            }
+            .page-header {
+                align-items: stretch;
+                gap: 12px;
+                flex-direction: column;
+            }
+            .page-header h1 {
+                font-size: 1.35rem;
+                line-height: 1.35;
+            }
+            .page-header .btn-primary-custom,
+            .page-header .btn {
+                width: 100%;
+            }
+            .section-card {
+                border-radius: 12px;
+            }
+            .section-card .section-header {
+                padding: 14px 16px;
+                flex-wrap: wrap;
+            }
+            .section-card .section-body {
+                padding: 16px;
+            }
+            .stat-card {
+                border-radius: 12px;
+                padding: 16px;
+            }
+            .stat-card .stat-value {
+                font-size: 1.55rem;
+            }
+            .data-table {
+                min-width: 760px;
+            }
+            .data-table thead th,
+            .data-table tbody td {
+                padding: 10px 12px;
+                white-space: nowrap;
+            }
+            .modal-dialog {
+                margin: 10px;
+            }
+            .modal-lg,
+            .modal-xl {
+                --bs-modal-width: calc(100vw - 20px);
+            }
+            .modal-content {
+                border-radius: 12px;
+            }
+            .modal-header,
+            .modal-footer {
+                padding: 12px 16px;
+            }
+            .modal-body {
+                padding: 16px;
+            }
+            .modal-footer {
+                gap: 8px;
+            }
+            .modal-footer .btn,
+            .modal-footer .btn-primary-custom {
+                flex: 1 1 auto;
+            }
+            .alert-float {
+                left: 12px;
+                right: 12px;
+                bottom: 12px;
+                min-width: 0;
+            }
+        }
+
+        @media (max-width: 575.98px) {
+            :root { --header-h: 58px; }
+            .topbar {
+                gap: 8px;
+            }
+            .topbar .page-title {
+                font-size: .95rem;
+                max-width: 45vw;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .topbar .topbar-btn {
+                width: 34px;
+                height: 34px;
+                border-radius: 9px;
+            }
+            .topbar .user-info {
+                padding: 0;
+                gap: 0;
+            }
+            .topbar .user-info > div:not(.user-avatar) {
+                display: none;
+            }
+            .topbar .user-avatar {
+                width: 34px;
+                height: 34px;
+            }
+            .page-content {
+                padding: 14px 10px 24px;
+            }
+            .page-header {
+                margin-bottom: 16px;
+            }
+            .page-header h1 {
+                font-size: 1.2rem;
+            }
+            .page-header .breadcrumb {
+                font-size: .75rem;
+            }
+            .section-card .section-header {
+                padding: 12px 14px;
+                gap: 8px;
+            }
+            .section-card .section-title {
+                font-size: .93rem;
+            }
+            .section-card .section-body {
+                padding: 14px;
+            }
+            .stat-card {
+                padding: 14px 12px;
+            }
+            .stat-card .stat-icon {
+                width: 42px;
+                height: 42px;
+                border-radius: 12px;
+                font-size: 1.15rem;
+                margin-bottom: 10px;
+            }
+            .stat-card .stat-value {
+                font-size: 1.35rem;
+            }
+            .btn-primary-custom,
+            .btn {
+                min-height: 38px;
+            }
+            .form-control,
+            .form-select {
+                min-height: 40px;
+                font-size: .85rem;
+            }
+            .modal-dialog {
+                margin: 0;
+                min-height: 100vh;
+                width: 100%;
+                max-width: none;
+                display: flex;
+                align-items: stretch;
+            }
+            .modal-content {
+                border-radius: 0;
+                min-height: 100vh;
+            }
+            .modal-body {
+                overflow-y: auto;
+            }
+            .modal-footer {
+                position: sticky;
+                bottom: 0;
+                background: #fff;
+                z-index: 2;
+            }
+            .modal-footer .btn,
+            .modal-footer .btn-primary-custom {
+                width: 100%;
+            }
+            .data-table {
+                min-width: 680px;
+            }
+            .badge-status {
+                padding: 4px 9px;
+            }
+            .chart-container {
+                height: 220px;
+            }
         }
 
         /* LOADER */
@@ -298,6 +548,8 @@
     @stack('styles')
 </head>
 <body>
+
+<div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
 
 <!-- SIDEBAR -->
 <nav class="sidebar" id="sidebar">
@@ -347,6 +599,9 @@
         <a href="/requests" class="nav-link {{ request()->is('requests*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-clipboard-list"></i></span> الطلبات
         </a>
+        <a href="/prepaid-requests" class="nav-link {{ request()->is('prepaid-requests*') ? 'active' : '' }}">
+            <span class="icon"><i class="fas fa-receipt"></i></span> المسبق الدفع
+        </a>
         <a href="/routes" class="nav-link {{ request()->is('routes*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-route"></i></span> خطوط السير
         </a>
@@ -382,12 +637,15 @@
         <a href="/reports" class="nav-link {{ request()->is('reports*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-chart-bar"></i></span> التقارير
         </a>
+        <a href="/locations" class="nav-link {{ request()->is('locations*') ? 'active' : '' }}">
+            <span class="icon"><i class="fas fa-map-marker-alt"></i></span> مواقع العمل
+        </a>
     </div>
 </nav>
 
 <!-- TOPBAR -->
 <header class="topbar">
-    <button class="topbar-btn d-md-none" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+    <button class="topbar-btn d-lg-none" onclick="toggleSidebar()" aria-label="فتح القائمة"><i class="fas fa-bars"></i></button>
     <div class="page-title">@yield('page-title', 'الرئيسية')</div>
     <div class="spacer"></div>
     <div class="position-relative">
@@ -446,7 +704,17 @@ localStorage.setItem('api_token', '{{ session("api_token") }}');
 const TOKEN = localStorage.getItem('api_token') || '';
 
 function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('open');
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    const isOpen = sidebar.classList.toggle('open');
+    backdrop.classList.toggle('show', isOpen);
+    document.body.classList.toggle('sidebar-open', isOpen);
+}
+
+function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebarBackdrop').classList.remove('show');
+    document.body.classList.remove('sidebar-open');
 }
 
 function showAlert(msg, type = 'success') {
@@ -472,6 +740,85 @@ async function apiFetch(url, options = {}) {
     return res.json();
 }
 
+const lookupCache = {};
+const lookupConfig = {
+    employees: {
+        url: '/employees?per_page=1000',
+        rows: r => r.data?.data ?? r.data ?? [],
+        label: e => `${e.name ?? '-'}${e.employee_code ? ' - ' + e.employee_code : ''}`,
+    },
+    customers: {
+        url: '/customers?per_page=1000',
+        rows: r => r.data?.data ?? r.data ?? [],
+        label: c => `${c.name ?? '-'}${c.company_name ? ' - ' + c.company_name : ''}`,
+    },
+    requests: {
+        url: '/requests?per_page=1000',
+        rows: r => r.data?.data ?? r.data ?? [],
+        label: req => `${req.request_number ?? '#' + req.id} - ${req.customer?.name ?? req.customer_name ?? 'بدون عميل'}`,
+    },
+    deliveries: {
+        url: '/deliveries?per_page=1000',
+        rows: r => r.data?.data ?? r.data ?? [],
+        label: d => `${d.delivery_number ?? '#' + d.id} - ${d.request?.customer?.name ?? d.customer?.name ?? 'بدون عميل'}`,
+    },
+    routes: {
+        url: '/routes?per_page=1000',
+        rows: r => r.data?.data ?? r.data ?? [],
+        label: route => `${route.route_name ?? route.route_code ?? '#' + route.id}`,
+    },
+    warehouses: {
+        url: '/warehouses?per_page=1000',
+        rows: r => r.data?.data ?? r.data ?? [],
+        label: w => `${w.name ?? w.warehouse_name ?? '#' + w.id}`,
+    },
+    items: {
+        url: '/items?per_page=1000',
+        rows: r => r.data?.data ?? r.data ?? [],
+        label: item => `${item.name ?? '-'}${item.item_code ? ' - ' + item.item_code : ''}`,
+    },
+};
+
+async function getLookupRows(type) {
+    if (lookupCache[type]) return lookupCache[type];
+    const config = lookupConfig[type];
+    if (!config) return [];
+    const response = await apiFetch(config.url);
+    lookupCache[type] = response.success ? config.rows(response) : [];
+    return lookupCache[type];
+}
+
+async function hydrateLookupSelect(select) {
+    if (!select || select.dataset.lookupReady === '1') return;
+    const type = select.dataset.lookup;
+    const rows = await getLookupRows(type);
+    const config = lookupConfig[type];
+    const placeholder = select.dataset.placeholder || 'اختر';
+    const current = select.dataset.selected || select.value || '';
+
+    select.innerHTML = `<option value="">${placeholder}</option>` + rows.map(row => {
+        const selected = String(row.id) === String(current) ? 'selected' : '';
+        return `<option value="${row.id}" ${selected}>${escapeLookupHtml(config.label(row))}</option>`;
+    }).join('');
+    select.dataset.lookupReady = '1';
+    if (current) select.value = current;
+}
+
+function hydrateLookupSelects(root = document) {
+    root.querySelectorAll('select[data-lookup]').forEach(select => hydrateLookupSelect(select));
+}
+
+function resetLookupSelect(select, value = '') {
+    if (!select) return;
+    select.dataset.selected = value ?? '';
+    select.dataset.lookupReady = '0';
+    hydrateLookupSelect(select);
+}
+
+function escapeLookupHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char]));
+}
+
 // Load pending approvals count
 async function loadPendingCount() {
     try {
@@ -494,10 +841,26 @@ async function loadNotifCount() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    hydrateLookupSelects();
+
     if (TOKEN) {
         loadPendingCount();
         loadNotifCount();
     }
+
+    document.querySelectorAll('#sidebar .nav-link').forEach(link => {
+        link.addEventListener('click', () => {
+            if (window.innerWidth < 992) closeSidebar();
+        });
+    });
+});
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeSidebar();
+});
+
+window.addEventListener('resize', () => {
+    if (window.innerWidth >= 992) closeSidebar();
 });
 </script>
 @stack('scripts')
