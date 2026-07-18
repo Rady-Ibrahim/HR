@@ -727,7 +727,26 @@ function showAlert(msg, type = 'success') {
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>`;
     el.style.display = 'block';
-    setTimeout(() => { el.style.display = 'none'; }, 4000);
+    setTimeout(() => { el.style.display = 'none'; }, 5000);
+}
+
+function formatApiError(payload) {
+    if (!payload) return 'حدث خطأ غير متوقع';
+    if (payload.errors && typeof payload.errors === 'object') {
+        const list = Object.values(payload.errors).flat().filter(Boolean);
+        if (list.length) return list.join('<br>');
+    }
+    if (payload.message && !String(payload.message).includes('SQLSTATE')) {
+        return payload.message;
+    }
+    if (payload.message && String(payload.message).includes('Duplicate entry')) {
+        if (payload.message.includes('phone')) return 'رقم الهاتف مستخدم من قبل.';
+        if (payload.message.includes('email')) return 'البريد الإلكتروني مستخدم من قبل.';
+        if (payload.message.includes('national_id')) return 'الرقم القومي مستخدم من قبل.';
+        if (payload.message.includes('employee_code')) return 'كود الموظف مستخدم من قبل.';
+        return 'هذه البيانات مسجّلة من قبل. راجع الحقول المكررة.';
+    }
+    return 'تعذر إتمام العملية. راجع البيانات وحاول مرة أخرى.';
 }
 
 async function apiFetch(url, options = {}) {
@@ -739,8 +758,37 @@ async function apiFetch(url, options = {}) {
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
         }
     };
-    const res = await fetch(API_BASE + url, { ...defaults, ...options, headers: { ...defaults.headers, ...(options.headers || {}) } });
-    return res.json();
+    try {
+        const res = await fetch(API_BASE + url, {
+            ...defaults,
+            ...options,
+            headers: { ...defaults.headers, ...(options.headers || {}) },
+        });
+
+        let data = {};
+        const text = await res.text();
+        try {
+            data = text ? JSON.parse(text) : {};
+        } catch (_) {
+            return {
+                success: false,
+                message: res.ok ? 'استجابة غير متوقعة من الخادم' : formatApiError({ message: text }),
+            };
+        }
+
+        if (data.success === undefined) {
+            if (res.ok) data.success = true;
+            else data.success = false;
+        }
+
+        if (!data.success) {
+            data.message = formatApiError(data);
+        }
+
+        return data;
+    } catch (err) {
+        return { success: false, message: 'تعذر الاتصال بالخادم. تحقق من الشبكة وحاول مرة أخرى.' };
+    }
 }
 
 const lookupCache = {};

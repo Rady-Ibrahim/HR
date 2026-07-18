@@ -19,7 +19,7 @@ class EmployeeController
     {
         $query = Employee::query();
 
-        if ($request->has('status')) {
+        if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
 
@@ -27,21 +27,23 @@ class EmployeeController
             $query->where('employee_type', $request->employee_type);
         }
 
-        if ($request->has('search')) {
+        if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                     ->orWhere('employee_code', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%");
             });
         }
 
-        if ($request->has('department')) {
+        if ($request->filled('department')) {
             $query->where('department', $request->department);
         }
 
         $employees = $query->with(['manager', 'user.roles'])
             ->withCount('subordinates')
+            ->orderByDesc('id')
             ->paginate($request->get('per_page', 15));
 
         return response()->json([
@@ -68,7 +70,7 @@ class EmployeeController
             'manager_id' => 'nullable|exists:employees,id',
             'car_number' => 'nullable|string',
             'car_license' => 'nullable|string',
-            'national_id' => 'nullable|string',
+            'national_id' => ['nullable', 'string', 'max:50', Rule::unique('employees', 'national_id')->whereNull('deleted_at')],
             'notes' => 'nullable|string',
             'is_manager' => 'nullable|boolean',
             'password'      => 'required|string|min:6|confirmed',
@@ -79,6 +81,10 @@ class EmployeeController
             $employeeType = $this->resolveEmployeeType($validated);
             unset($validated['manager_id'], $validated['is_manager']);
             $validated['employee_type'] = $employeeType->value;
+
+            if (array_key_exists('national_id', $validated) && trim((string) $validated['national_id']) === '') {
+                $validated['national_id'] = null;
+            }
 
             $user = User::create([
                 'name'      => $validated['name'],
@@ -126,8 +132,8 @@ class EmployeeController
 
         $validated = $request->validate([
             'name' => 'sometimes|string',
-            'email' => 'sometimes|email|unique:employees,email,' . $id,
-            'phone' => 'sometimes|string|unique:employees,phone,' . $id,
+            'email' => ['sometimes', 'email', Rule::unique('employees', 'email')->whereNull('deleted_at')->ignore($id), Rule::unique('users', 'email')->ignore($employee->user_id)],
+            'phone' => ['sometimes', 'string', Rule::unique('employees', 'phone')->whereNull('deleted_at')->ignore($id)],
             'position' => 'sometimes|string',
             'department' => 'sometimes|string',
             'employee_type' => ['sometimes', Rule::in(EmployeeTypeEnum::values())],
@@ -136,17 +142,21 @@ class EmployeeController
             'status' => 'sometimes|in:active,inactive,suspended,resigned,on_leave',
             'reporting_manager_id' => 'nullable|exists:employees,id',
             'manager_id' => 'nullable|exists:employees,id',
-            'employee_code' => 'sometimes|string',
+            'employee_code' => ['sometimes', 'string', Rule::unique('employees', 'employee_code')->whereNull('deleted_at')->ignore($id)],
             'joining_date' => 'sometimes|date',
             'car_number' => 'nullable|string',
             'car_license' => 'nullable|string',
-            'national_id' => 'nullable|string',
+            'national_id' => ['nullable', 'string', 'max:50', Rule::unique('employees', 'national_id')->whereNull('deleted_at')->ignore($id)],
             'notes' => 'nullable|string',
             'is_manager' => 'nullable|boolean',
         ]);
 
         if (array_key_exists('manager_id', $validated) || array_key_exists('reporting_manager_id', $validated)) {
             $validated['reporting_manager_id'] = $validated['reporting_manager_id'] ?? $validated['manager_id'] ?? null;
+        }
+
+        if (array_key_exists('national_id', $validated) && trim((string) ($validated['national_id'] ?? '')) === '') {
+            $validated['national_id'] = null;
         }
 
         $shouldSyncType = array_key_exists('employee_type', $validated) || array_key_exists('is_manager', $validated);
