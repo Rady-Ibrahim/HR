@@ -17,7 +17,7 @@
 <div class="section-card mb-4">
     <div class="section-body">
         <div class="row g-2 align-items-end">
-            <div class="col-md-4"><label class="form-label">بحث</label>
+            <div class="col-md-3"><label class="form-label">بحث</label>
                 <div class="input-group"><span class="input-group-text"><i class="fas fa-search text-muted"></i></span>
                 <input type="text" id="searchInput" class="form-control" placeholder="اسم، كود، إيميل..."></div>
             </div>
@@ -28,11 +28,21 @@
                     <option value="suspended">موقوف</option><option value="resigned">استقال</option>
                 </select>
             </div>
+            <div class="col-md-2"><label class="form-label">النوع</label>
+                <select id="typeFilter" class="form-select">
+                    <option value="">الكل</option>
+                    <option value="manager">مدير</option>
+                    <option value="employee">موظف عادي</option>
+                    <option value="driver_representative">سائق / مندوب</option>
+                </select>
+            </div>
             <div class="col-md-2"><label class="form-label">القسم</label>
                 <input type="text" id="deptFilter" class="form-control" placeholder="القسم">
             </div>
-            <div class="col-md-2"><button class="btn-primary-custom w-100" onclick="loadEmployees()"><i class="fas fa-filter me-1"></i> بحث</button></div>
-            <div class="col-md-2"><button class="btn btn-outline-secondary w-100" onclick="resetFilters()"><i class="fas fa-undo me-1"></i> إعادة</button></div>
+            <div class="col-md-3 d-flex gap-2">
+                <button class="btn-primary-custom flex-fill" onclick="loadEmployees()"><i class="fas fa-filter me-1"></i> بحث</button>
+                <button class="btn btn-outline-secondary flex-fill" onclick="resetFilters()"><i class="fas fa-undo me-1"></i> إعادة</button>
+            </div>
         </div>
     </div>
 </div>
@@ -54,9 +64,9 @@
     </div>
     <div class="table-responsive">
         <table class="data-table">
-            <thead><tr><th>كود</th><th>الاسم</th><th>الوظيفة</th><th>القسم</th><th>المدير</th><th>الهاتف</th><th>الراتب الأساسي</th><th>تاريخ التعيين</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+            <thead><tr><th>كود</th><th>الاسم</th><th>النوع</th><th>الوظيفة</th><th>القسم</th><th>المدير</th><th>الهاتف</th><th>الراتب الأساسي</th><th>تاريخ التعيين</th><th>الحالة</th><th>إجراءات</th></tr></thead>
             <tbody id="employeesTable">
-                <tr><td colspan="10" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>
+                <tr><td colspan="11" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>
             </tbody>
         </table>
     </div>
@@ -83,6 +93,14 @@
                         <div class="col-md-4"><label class="form-label">رقم الهاتف *</label><input type="text" name="phone" id="ef_phone" class="form-control" required></div>
                         <div class="col-md-6"><label class="form-label">البريد الإلكتروني</label><input type="email" name="email" id="ef_email" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">الوظيفة *</label><input type="text" name="position" id="ef_position" class="form-control" required></div>
+                        <div class="col-md-6"><label class="form-label">نوع الموظف *</label>
+                            <select name="employee_type" id="ef_employee_type" class="form-select" required>
+                                <option value="employee">موظف عادي</option>
+                                <option value="manager">مدير</option>
+                                <option value="driver_representative">سائق / مندوب</option>
+                            </select>
+                            <small class="text-muted">السائق والمندوب نفس النوع والصلاحيات</small>
+                        </div>
                         <div class="col-md-6"><label class="form-label">القسم *</label><input type="text" name="department" id="ef_department" class="form-control" required></div>
                         <div class="col-md-6"><label class="form-label">تاريخ التعيين *</label><input type="date" name="joining_date" id="ef_joining_date" class="form-control" required></div>
                         <div class="col-md-6"><label class="form-label">الراتب الأساسي *</label>
@@ -98,13 +116,6 @@
                         <div class="col-md-6"><label class="form-label">رخصة القيادة</label><input type="text" name="car_license" id="ef_car_license" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">الرقم القومي</label><input type="text" name="national_id" id="ef_national_id" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">المدير المباشر</label><select name="manager_id" id="ef_manager_id" class="form-select"><option value="">بدون مدير</option></select></div>
-                        <div class="col-md-6">
-                            <label class="form-label d-block">صلاحية إدارية</label>
-                            <label class="form-check border rounded p-2 d-flex align-items-center gap-2" style="cursor:pointer">
-                                <input class="form-check-input m-0" type="checkbox" name="is_manager" id="ef_is_manager" value="1">
-                                <span><strong>مدير</strong><small class="text-muted d-block">يظهر في قائمة اختيار المديرين ويمكن ربط موظفين به</small></span>
-                            </label>
-                        </div>
                         <div class="col-12"><label class="form-label">ملاحظات</label><textarea name="notes" id="ef_notes" class="form-control" rows="2"></textarea></div>
                         <div class="col-md-6" id="passwordGroup">
                             <label class="form-label">كلمة المرور <span id="passwordRequired" class="text-danger">*</span></label>
@@ -188,6 +199,8 @@
 let currentPage = 1, empDeleteId = null, employeesLookup = [], managersLookup = [], teamSelectedIds = new Set();
 const statusLabels = { active:'نشط', inactive:'غير نشط', on_leave:'إجازة', suspended:'موقوف', resigned:'استقال' };
 const statusBadge  = { active:'badge-active', inactive:'badge-inactive', on_leave:'badge-approved', suspended:'badge-rejected', resigned:'badge-draft' };
+const typeLabels = { manager:'مدير', employee:'موظف عادي', driver_representative:'سائق / مندوب' };
+const typeBadge  = { manager:'badge-approved', employee:'badge-draft', driver_representative:'badge-active' };
 
 // ─── LIST ─────────────────────────────────────────────
 async function loadEmployees(page = 1) {
@@ -195,10 +208,11 @@ async function loadEmployees(page = 1) {
     const params = new URLSearchParams({ per_page:15, page,
         search: document.getElementById('searchInput').value,
         status: document.getElementById('statusFilter').value,
+        employee_type: document.getElementById('typeFilter').value,
         department: document.getElementById('deptFilter').value,
     });
     document.getElementById('employeesTable').innerHTML =
-        '<tr><td colspan="10" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>';
+        '<tr><td colspan="11" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>';
     const r = await apiFetch('/employees?' + params);
     if (!r.success) return;
     const { data, total, current_page, last_page } = r.data;
@@ -210,14 +224,15 @@ async function loadEmployees(page = 1) {
     document.getElementById('statOther').textContent  = data.filter(e=>!['active','on_leave'].includes(e.status)).length;
     if (!data.length) {
         document.getElementById('employeesTable').innerHTML =
-            '<tr><td colspan="10" class="text-center py-4 text-muted"><i class="fas fa-inbox fa-2x d-block mb-2"></i>لا يوجد موظفون</td></tr>';
+            '<tr><td colspan="11" class="text-center py-4 text-muted"><i class="fas fa-inbox fa-2x d-block mb-2"></i>لا يوجد موظفون</td></tr>';
         return;
     }
     document.getElementById('employeesTable').innerHTML = data.map(e => `
         <tr>
             <td><span class="fw-bold text-primary">${e.employee_code}</span></td>
             <td><strong>${e.name}</strong><br><small class="text-muted">${e.email??''}</small></td>
-            <td>${e.position} ${isManagerEmployee(e) ? '<span class="badge-status badge-approved d-block mt-1">مدير</span>' : ''}</td>
+            <td><span class="badge-status ${typeBadge[e.employee_type]||'badge-draft'}">${e.employee_type_label || typeLabels[e.employee_type] || e.employee_type || '-'}</span></td>
+            <td>${e.position}</td>
             <td>${e.department}</td>
             <td>${e.manager?.name ?? '-'}</td>
             <td>${e.phone??'-'}</td>
@@ -228,7 +243,7 @@ async function loadEmployees(page = 1) {
                 <div class="d-flex gap-1 flex-wrap">
                     <button class="btn btn-sm btn-outline-info"    onclick="viewEmployee(${e.id})" title="عرض"><i class="fas fa-eye"></i></button>
                     <button class="btn btn-sm btn-outline-warning"  onclick="openEditModal(${e.id})" title="تعديل"><i class="fas fa-edit"></i></button>
-                    <button class="btn btn-sm btn-outline-primary"  onclick="openTeamModal(${e.id},'${e.name.replace(/'/g,"\\'")}')" title="موظفو المدير"><i class="fas fa-users"></i></button>
+                    ${isManagerEmployee(e) ? `<button class="btn btn-sm btn-outline-primary"  onclick="openTeamModal(${e.id},'${e.name.replace(/'/g,"\\'")}')" title="موظفو المدير"><i class="fas fa-users"></i></button>` : ''}
                     <button class="btn btn-sm btn-outline-danger"   onclick="confirmDelete(${e.id},'${e.name.replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i></button>
                 </div>
             </td>
@@ -245,6 +260,7 @@ function openAddModal() {
     renderManagerOptions();
     document.getElementById('empModalTitle').innerHTML = '<i class="fas fa-user-plus me-2"></i> إضافة موظف جديد';
     document.getElementById('ef_status').value = 'active';
+    document.getElementById('ef_employee_type').value = 'employee';
     document.getElementById('ef_password').required = true;
     document.getElementById('ef_password_confirmation').required = true;
     document.getElementById('passwordRequired').style.display = '';
@@ -267,6 +283,7 @@ async function openEditModal(id) {
     document.getElementById('ef_email').value       = e.email ?? '';
     document.getElementById('ef_position').value    = e.position ?? '';
     document.getElementById('ef_department').value  = e.department ?? '';
+    document.getElementById('ef_employee_type').value = e.employee_type ?? 'employee';
     document.getElementById('ef_joining_date').value = e.joining_date ? e.joining_date.substring(0,10) : '';
     document.getElementById('ef_base_salary').value = e.base_salary ?? '';
     document.getElementById('ef_status').value      = e.status ?? 'active';
@@ -274,7 +291,6 @@ async function openEditModal(id) {
     document.getElementById('ef_car_license').value = e.car_license ?? '';
     document.getElementById('ef_national_id').value = e.national_id ?? '';
     document.getElementById('ef_manager_id').value  = e.reporting_manager_id ?? e.manager_id ?? '';
-    document.getElementById('ef_is_manager').checked = isManagerEmployee(e);
     document.getElementById('ef_notes').value       = e.notes ?? '';
     // Password optional in edit mode
     document.getElementById('ef_password').value = '';
@@ -291,7 +307,7 @@ async function saveEmployee() {
     const data = Object.fromEntries(new FormData(document.getElementById('employeeForm')));
     data.base_salary = parseFloat(data.base_salary);
     if (data.manager_id) data.manager_id = parseInt(data.manager_id); else delete data.manager_id;
-    data.is_manager = document.getElementById('ef_is_manager').checked;
+    delete data.is_manager;
 
     const password = data.password;
     const passwordConfirmation = data.password_confirmation;
@@ -359,6 +375,7 @@ function renderManagerOptions(excludeId = null) {
 }
 
 function isManagerEmployee(employee) {
+    if (employee.employee_type === 'manager' || employee.is_manager) return true;
     const roles = employee.user?.roles ?? [];
     return roles.some(role => role.name === 'manager' || role.name?.endsWith('_manager')) || Number(employee.subordinates_count ?? 0) > 0;
 }
@@ -443,6 +460,7 @@ async function viewEmployee(id) {
                 <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#1a237e,#1abc9c);color:#fff;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;margin:0 auto 16px">${e.name.charAt(0)}</div>
                 <h5 class="mb-1">${e.name}</h5><p class="text-muted mb-1">${e.position}</p>
                 <p class="text-muted mb-2" style="font-size:.8rem">${e.department}</p>
+                <span class="badge-status ${typeBadge[e.employee_type]||'badge-draft'} me-1">${e.employee_type_label || typeLabels[e.employee_type] || '-'}</span>
                 <span class="badge-status ${statusBadge[e.status]||'badge-draft'}">${statusLabels[e.status]||e.status}</span>
                 <hr>
                 <div class="text-start" style="font-size:.85rem">
@@ -495,7 +513,7 @@ async function changeStatus(id, status) {
     } else showAlert(r.message, 'danger');
 }
 
-function resetFilters() { ['searchInput','statusFilter','deptFilter'].forEach(id=>document.getElementById(id).value=''); loadEmployees(); }
+function resetFilters() { ['searchInput','statusFilter','typeFilter','deptFilter'].forEach(id=>document.getElementById(id).value=''); loadEmployees(); }
 document.getElementById('searchInput').addEventListener('keypress', e => { if(e.key==='Enter') loadEmployees(); });
 document.addEventListener('DOMContentLoaded', async () => {
     await loadEmployeeLookups();

@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Casts\AsCollection;
+use App\Enums\EmployeeTypeEnum;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,15 +17,37 @@ class Employee extends Model
     protected $fillable = [
         'user_id', 'employee_code', 'name', 'email', 'phone', 'phone_alternative',
         'national_id', 'date_of_birth', 'joining_date', 'position', 'department',
-        'salary_type', 'base_salary', 'status', 'car_license', 'car_number',
+        'employee_type', 'salary_type', 'base_salary', 'status', 'car_license', 'car_number',
         'gps_device_id', 'reporting_manager_id', 'notes'
     ];
+
+    protected $appends = ['employee_type_label', 'is_manager'];
 
     protected $casts = [
         'joining_date' => 'date',
         'date_of_birth' => 'date',
         'base_salary' => 'decimal:2',
+        'employee_type' => EmployeeTypeEnum::class,
     ];
+
+    public function getEmployeeTypeLabelAttribute(): string
+    {
+        $type = $this->employee_type instanceof EmployeeTypeEnum
+            ? $this->employee_type
+            : EmployeeTypeEnum::tryFrom((string) $this->employee_type);
+
+        return $type?->label() ?? EmployeeTypeEnum::EMPLOYEE->label();
+    }
+
+    public function getIsManagerAttribute(): bool
+    {
+        return $this->employee_type === EmployeeTypeEnum::MANAGER;
+    }
+
+    public function isDriverRepresentative(): bool
+    {
+        return $this->employee_type === EmployeeTypeEnum::DRIVER_REPRESENTATIVE;
+    }
 
     public function user(): BelongsTo
     {

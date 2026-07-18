@@ -147,7 +147,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{id}',            [DeliveryController::class, 'update']);
         Route::delete('/{id}',         [DeliveryController::class, 'destroy']);
         Route::put('/{id}/status',     [DeliveryController::class, 'updateStatus']);
-        Route::post('/{id}/complete-with-collection', [DeliveryController::class, 'completeWithCollection']);
+        Route::post('/{id}/complete-with-collection', [DeliveryController::class, 'completeWithCollection'])
+            ->middleware('permission:create_collections');
         Route::post('/{id}/proof',     [DeliveryController::class, 'uploadProof']);
         Route::post('/{id}/tracking',  [DeliveryController::class, 'addTracking']);
         Route::get('/{id}/tracking',   [DeliveryController::class, 'tracking']);
@@ -158,12 +159,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/daily-summary',              [CollectionController::class, 'dailySummary']);
         Route::get('/driver/{driverId}/summary',  [CollectionController::class, 'driverSummary']);
         Route::get('/',                           [CollectionController::class, 'index']);
-        Route::post('/',                          [CollectionController::class, 'store']);
+        Route::post('/',                          [CollectionController::class, 'store'])
+            ->middleware('permission:create_collections');
         Route::get('/{id}',                       [CollectionController::class, 'show']);
-        Route::put('/{id}',                       [CollectionController::class, 'update']);
+        Route::put('/{id}',                       [CollectionController::class, 'update'])
+            ->middleware('permission:create_collections');
         Route::delete('/{id}',                    [CollectionController::class, 'destroy']);
-        Route::post('/{id}/approve',              [CollectionController::class, 'approve']);
-        Route::post('/{id}/reject',               [CollectionController::class, 'reject']);
+        Route::post('/{id}/approve',              [CollectionController::class, 'approve'])
+            ->middleware('permission:approve_collections');
+        Route::post('/{id}/reject',               [CollectionController::class, 'reject'])
+            ->middleware('permission:approve_collections');
     });
 
     // Attendance

@@ -20,7 +20,8 @@ class RoleAndPermissionSeeder extends Seeder
             'approver_level_1' => 'موافق المستوى الأول',
             'approver_level_2' => 'موافق المستوى الثاني',
             'approver_level_3' => 'موافق المستوى الثالث',
-            'driver' => 'السائق',
+            'manager' => 'مدير',
+            'driver' => 'سائق / مندوب',
             'employee' => 'الموظف',
             'report_viewer' => 'عارض التقارير',
         ];
@@ -90,6 +91,25 @@ class RoleAndPermissionSeeder extends Seeder
         if ($superAdminRole) {
             $permissions = Permission::all();
             $superAdminRole->permissions()->sync($permissions);
+        }
+
+        $collectionPermissions = Permission::whereIn('name', [
+            'view_collections',
+            'create_collections',
+        ])->pluck('id');
+
+        foreach (['hr_manager', 'driver'] as $roleName) {
+            $role = Role::where('name', $roleName)->first();
+            if ($role && $collectionPermissions->isNotEmpty()) {
+                $role->permissions()->syncWithoutDetaching($collectionPermissions);
+            }
+        }
+
+        // HR can also approve collections
+        $hrRole = Role::where('name', 'hr_manager')->first();
+        $approveCollection = Permission::where('name', 'approve_collections')->first();
+        if ($hrRole && $approveCollection) {
+            $hrRole->permissions()->syncWithoutDetaching([$approveCollection->id]);
         }
     }
 }

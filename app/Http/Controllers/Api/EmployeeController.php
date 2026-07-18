@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\EmployeeTypeEnum;
+use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\Role;
 use App\Models\Salary;
-use App\Models\Attendance;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,11 +23,17 @@ class EmployeeController
             $query->where('status', $request->status);
         }
 
+        if ($request->filled('employee_type')) {
+            $query->where('employee_type', $request->employee_type);
+        }
+
         if ($request->has('search')) {
             $search = $request->search;
-            $query->where('name', 'like', "%{$search}%")
-                ->orWhere('employee_code', 'like', "%{$search}%")
-                ->orWhere('email', 'like', "%{$search}%");
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('employee_code', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
+            });
         }
 
         if ($request->has('department')) {
@@ -52,6 +59,7 @@ class EmployeeController
             'employee_code' => ['required', 'string', Rule::unique('employees', 'employee_code')->whereNull('deleted_at')],
             'position'      => 'required|string',
             'department'    => 'required|string',
+            'employee_type' => ['required', Rule::in(EmployeeTypeEnum::values())],
             'joining_date'  => 'required|date',
             'base_salary'   => 'required|numeric|min:0',
             'status'        => 'required|in:active,inactive,suspended,resigned,on_leave',
@@ -67,8 +75,9 @@ class EmployeeController
 
         return DB::transaction(function () use ($validated) {
             $validated['reporting_manager_id'] = $validated['reporting_manager_id'] ?? $validated['manager_id'] ?? null;
-            $isManager = (bool) ($validated['is_manager'] ?? false);
+            $employeeType = $this->resolveEmployeeType($validated);
             unset($validated['manager_id'], $validated['is_manager']);
+            $validated['employee_type'] = $employeeType->value;
 
             $user = User::create([
                 'name'      => $validated['name'],
@@ -82,7 +91,7 @@ class EmployeeController
             $validated['user_id'] = $user->id;
 
             $employee = Employee::create($validated);
-            $this->syncManagerRole($user, $isManager);
+            $this->syncEmployeeTypeRole($user, $employeeType);
 
             return response()->json([
                 'success' => true,
@@ -97,6 +106,7 @@ class EmployeeController
         $employee = Employee::with([
             'manager',
             'subordinates',
+            'user.roles',
             'salaries',
             'attendances',
             'incentives',
@@ -119,6 +129,7 @@ class EmployeeController
             'phone' => 'sometimes|string|unique:employees,phone,' . $id,
             'position' => 'sometimes|string',
             'department' => 'sometimes|string',
+            'employee_type' => ['sometimes', Rule::in(EmployeeTypeEnum::values())],
             'base_salary' => 'sometimes|numeric|min:0',
             'status' => 'sometimes|in:active,inactive,suspended,resigned,on_leave',
             'reporting_manager_id' => 'nullable|exists:employees,id',
@@ -135,13 +146,21 @@ class EmployeeController
         if (array_key_exists('manager_id', $validated) || array_key_exists('reporting_manager_id', $validated)) {
             $validated['reporting_manager_id'] = $validated['reporting_manager_id'] ?? $validated['manager_id'] ?? null;
         }
-        $syncManagerRole = array_key_exists('is_manager', $validated);
-        $isManager = (bool) ($validated['is_manager'] ?? false);
+
+        $shouldSyncType = array_key_exists('employee_type', $validated) || array_key_exists('is_manager', $validated);
+        $employeeType = $shouldSyncType
+            ? $this->resolveEmployeeType($validated, $employee->employee_type)
+            : null;
+
         unset($validated['manager_id'], $validated['is_manager']);
+        if ($employeeType) {
+            $validated['employee_type'] = $employeeType->value;
+        }
 
         $employee->update($validated);
-        if ($syncManagerRole && $employee->user) {
-            $this->syncManagerRole($employee->user, $isManager);
+
+        if ($employeeType && $employee->user) {
+            $this->syncEmployeeTypeRole($employee->user, $employeeType);
         }
 
         return response()->json([
@@ -153,10 +172,13 @@ class EmployeeController
 
     public function managers()
     {
-        $employees = Employee::whereHas('user.roles', function ($query) {
-                $query->where('name', 'manager')->orWhere('name', 'like', '%_manager');
+        $employees = Employee::where(function ($query) {
+                $query->where('employee_type', EmployeeTypeEnum::MANAGER->value)
+                    ->orWhereHas('user.roles', function ($q) {
+                        $q->where('name', 'manager')->orWhere('name', 'like', '%_manager');
+                    })
+                    ->orHas('subordinates');
             })
-            ->orHas('subordinates')
             ->with(['user.roles'])
             ->withCount('subordinates')
             ->orderBy('name')
@@ -377,26 +399,56 @@ class EmployeeController
         ]);
     }
 
-    private function syncManagerRole(User $user, bool $isManager): void
+    private function resolveEmployeeType(array $validated, ?EmployeeTypeEnum $fallback = null): EmployeeTypeEnum
     {
-        $role = Role::firstOrCreate(
-            ['name' => 'manager'],
-            ['description' => 'مدير']
-        );
-
-        if ($isManager) {
-            $user->roles()->syncWithoutDetaching([$role->id]);
-            return;
+        if (!empty($validated['employee_type'])) {
+            return EmployeeTypeEnum::from($validated['employee_type']);
         }
 
-        $user->roles()->detach($role->id);
+        if (array_key_exists('is_manager', $validated)) {
+            return !empty($validated['is_manager'])
+                ? EmployeeTypeEnum::MANAGER
+                : ($fallback && $fallback !== EmployeeTypeEnum::MANAGER
+                    ? $fallback
+                    : EmployeeTypeEnum::EMPLOYEE);
+        }
+
+        return $fallback ?? EmployeeTypeEnum::EMPLOYEE;
+    }
+
+    private function syncEmployeeTypeRole(User $user, EmployeeTypeEnum $type): void
+    {
+        $typeRoles = [
+            EmployeeTypeEnum::MANAGER->roleName(),
+            EmployeeTypeEnum::EMPLOYEE->roleName(),
+            EmployeeTypeEnum::DRIVER_REPRESENTATIVE->roleName(),
+        ];
+
+        foreach ($typeRoles as $roleName) {
+            $role = Role::firstOrCreate(
+                ['name' => $roleName],
+                ['description' => match ($roleName) {
+                    'manager' => 'مدير',
+                    'driver' => 'سائق / مندوب',
+                    default => 'موظف',
+                }]
+            );
+
+            if ($roleName === $type->roleName()) {
+                $user->roles()->syncWithoutDetaching([$role->id]);
+            } else {
+                $user->roles()->detach($role->id);
+            }
+        }
     }
 
     private function currentEmployee(): ?Employee
     {
         if (auth()->id()) {
             $employee = Employee::where('user_id', auth()->id())->first();
-            if ($employee) return $employee;
+            if ($employee) {
+                return $employee;
+            }
         }
 
         return Employee::find(1);
