@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Models\Customer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Database\QueryException;
 
 class CustomerController
 {
@@ -49,9 +50,7 @@ class CustomerController
             'notes'             => 'nullable|string',
         ]);
 
-        $validated['customer_code'] = 'CUS-' . str_pad(Customer::count() + 1, 5, '0', STR_PAD_LEFT);
-
-        $customer = Customer::create($validated);
+        $customer = $this->createCustomerWithUniqueCode($validated);
 
         return response()->json([
             'success' => true,
@@ -128,5 +127,34 @@ class CustomerController
             ->paginate($request->get('per_page', 15));
 
         return response()->json(['success' => true, 'data' => $requests]);
+    }
+
+    private function createCustomerWithUniqueCode(array $validated): Customer
+    {
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            $validated['customer_code'] = $this->nextCustomerCode($attempt);
+
+            try {
+                return Customer::create($validated);
+            } catch (QueryException $e) {
+                if (($e->errorInfo[1] ?? null) !== 1062) {
+                    throw $e;
+                }
+            }
+        }
+
+        throw new \RuntimeException('تعذر توليد كود عميل غير مكرر');
+    }
+
+    private function nextCustomerCode(int $offset = 0): string
+    {
+        $lastCode = Customer::withTrashed()
+            ->where('customer_code', 'like', 'CUS-%')
+            ->orderByRaw("CAST(SUBSTRING(customer_code, 5) AS UNSIGNED) DESC")
+            ->value('customer_code');
+
+        $lastNumber = $lastCode ? (int) substr($lastCode, 4) : 0;
+
+        return 'CUS-' . str_pad($lastNumber + 1 + $offset, 5, '0', STR_PAD_LEFT);
     }
 }

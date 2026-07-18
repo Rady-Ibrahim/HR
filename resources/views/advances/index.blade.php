@@ -14,7 +14,7 @@
         <div class="row g-2 align-items-end">
             <div class="col-md-4"><label class="form-label">الموظف</label><input type="text" id="advEmp" class="form-control" placeholder="اسم الموظف..."></div>
             <div class="col-md-3"><label class="form-label">الحالة</label>
-                <select id="advStatus" class="form-select"><option value="">الكل</option><option value="pending">معلق</option><option value="approved">معتمد</option><option value="rejected">مرفوض</option><option value="settled">مسدد</option></select>
+                <select id="advStatus" class="form-select"><option value="">الكل</option><option value="pending">معلق</option><option value="active">معتمد</option><option value="paid">مسدد</option><option value="partially_paid">مسدد جزئياً</option></select>
             </div>
             <div class="col-md-2"><button class="btn-primary-custom w-100 mt-4" onclick="loadAdvances()"><i class="fas fa-search me-1"></i> بحث</button></div>
             <div class="col-md-2"><button class="btn btn-outline-secondary w-100 mt-4" onclick="resetAdvFilter()"><i class="fas fa-undo me-1"></i> إعادة</button></div>
@@ -48,7 +48,7 @@
                 <form id="advForm">
                     <input type="hidden" id="advId">
                     <div class="row g-3">
-                        <div class="col-12"><label class="form-label">الموظف (ID) *</label><input type="number" name="employee_id" id="af_emp" class="form-control" required></div>
+                        <div class="col-12"><label class="form-label">الموظف *</label><select name="employee_id" id="af_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select></div>
                         <div class="col-md-6"><label class="form-label">المبلغ *</label><div class="input-group"><input type="number" name="amount" id="af_amount" class="form-control" required><span class="input-group-text">ج.م</span></div></div>
                         <div class="col-md-6"><label class="form-label">عدد الأقساط (شهر)</label><input type="number" name="installments" id="af_installments" class="form-control" min="1" value="1"></div>
                         <div class="col-md-6"><label class="form-label">تاريخ الطلب</label><input type="date" name="request_date" id="af_request_date" class="form-control" value="{{ date('Y-m-d') }}"></div>
@@ -81,8 +81,8 @@
 @push('scripts')
 <script>
 let advDeleteId=null, advPage=1;
-const advStatuses = { pending:'معلق', approved:'معتمد', rejected:'مرفوض', settled:'مسدد' };
-const advBadges   = { pending:'badge-pending', approved:'badge-active', rejected:'badge-rejected', settled:'badge-approved' };
+const advStatuses = { pending:'معلق', active:'معتمد', paid:'مسدد', partially_paid:'مسدد جزئياً' };
+const advBadges   = { pending:'badge-pending', active:'badge-active', paid:'badge-approved', partially_paid:'badge-approved' };
 
 async function loadAdvances(page=1) {
     advPage=page;
@@ -100,9 +100,9 @@ async function loadAdvances(page=1) {
             <td>${a.employee?.name??'-'}</td>
             <td class="fw-bold">${Number(a.amount).toLocaleString()} ج.م</td>
             <td class="text-warning">${Number(a.remaining_amount??a.amount).toLocaleString()} ج.م</td>
-            <td>${a.installments??1} شهر</td>
-            <td>${a.request_date?new Date(a.request_date).toLocaleDateString('ar-EG'):'-'}</td>
-            <td>${a.reason??'-'}</td>
+            <td>${a.installments_count??1} شهر</td>
+            <td>${a.advance_date?new Date(a.advance_date).toLocaleDateString('ar-EG'):'-'}</td>
+            <td>${a.notes??'-'}</td>
             <td><span class="badge-status ${advBadges[a.status]||'badge-pending'}">${advStatuses[a.status]||a.status}</span></td>
             <td>
                 <div class="d-flex gap-1 flex-wrap">
@@ -134,14 +134,21 @@ async function openEditModal(id) {
     document.getElementById('advId').value=a.id;
     document.getElementById('af_emp').value=a.employee_id;
     document.getElementById('af_amount').value=a.amount;
-    document.getElementById('af_installments').value=a.installments??1;
-    document.getElementById('af_request_date').value=a.request_date?a.request_date.substring(0,10):'';
-    document.getElementById('af_reason').value=a.reason??'';
+    document.getElementById('af_installments').value=a.installments_count??1;
+    document.getElementById('af_request_date').value=a.advance_date?a.advance_date.substring(0,10):'';
+    document.getElementById('af_reason').value=a.notes??'';
 }
 async function saveAdvance() {
     const id=document.getElementById('advId').value;
     const data=Object.fromEntries(new FormData(document.getElementById('advForm')));
-    data.amount=parseFloat(data.amount); data.installments=parseInt(data.installments||1); data.employee_id=parseInt(data.employee_id);
+    data.amount=parseFloat(data.amount);
+    data.installments_count=parseInt(data.installments||1);
+    data.advance_date=data.request_date;
+    data.notes=data.reason || '';
+    data.employee_id=parseInt(data.employee_id);
+    delete data.installments;
+    delete data.request_date;
+    delete data.reason;
     if (!data.start_month) delete data.start_month;
     const r=await apiFetch(id?`/advances/${id}`:'/advances',{method:id?'PUT':'POST',body:JSON.stringify(data)});
     if(r.success){bootstrap.Modal.getInstance(document.getElementById('advModal')).hide();showAlert(id?'تم التحديث':'تم الإضافة');loadAdvances(advPage);}

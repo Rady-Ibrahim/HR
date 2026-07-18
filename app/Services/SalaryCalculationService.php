@@ -13,6 +13,7 @@ use App\Models\Incentive;
 use App\Models\Salary;
 use App\Models\SalaryComponentLog;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 
 class SalaryCalculationService
@@ -57,7 +58,7 @@ class SalaryCalculationService
             // 3. Commissions
             $commissions = Commission::where('employee_id', $employee->id)
                 ->where('month', $month)->where('year', $year)
-                ->where('status', 'approved')->get();
+                ->whereIn('status', ['pending', 'approved'])->get();
             $totalCommissions = $commissions->sum('amount');
             foreach ($commissions as $com) {
                 $components[] = ['type' => 'commission', 'name' => 'عمولة مبيعات', 'id' => $com->id, 'amount' => $com->amount];
@@ -75,11 +76,17 @@ class SalaryCalculationService
                 $components[] = ['type' => 'deduction', 'name' => $ded->deduction_type, 'id' => $ded->id, 'amount' => -$ded->amount];
             }
 
-            // 5. Attendance deductions (late & absence)
-            $attendanceDeduction = $this->calculateAttendanceDeduction($employee, $month, $year, $baseSalary);
+            // 5. Attendance deductions (late, half-day late & absence)
+            $attendanceSummary = $this->calculateAttendanceDeduction($employee, $month, $year, $baseSalary);
+            $attendanceDeduction = $attendanceSummary['amount'];
             if ($attendanceDeduction > 0) {
                 $totalDeductions += $attendanceDeduction;
-                $components[]     = ['type' => 'attendance_deduction', 'name' => 'خصم تأخير/غياب', 'id' => null, 'amount' => -$attendanceDeduction];
+                $components[]     = [
+                    'type' => 'attendance_deduction',
+                    'name' => $attendanceSummary['label'],
+                    'id' => null,
+                    'amount' => -$attendanceDeduction,
+                ];
             }
 
             // 6. Advances
@@ -155,14 +162,17 @@ class SalaryCalculationService
         }
     }
 
-    private function calculateAttendanceDeduction(Employee $employee, int $month, int $year, float $baseSalary): float
+    private function calculateAttendanceDeduction(Employee $employee, int $month, int $year, float $baseSalary): array
     {
         $workingDays = $this->getWorkingDaysInMonth($month, $year);
-        if ($workingDays === 0) return 0;
+        if ($workingDays === 0) {
+            return ['amount' => 0, 'label' => 'خصم تأخير/غياب'];
+        }
 
         $dailyRate   = $baseSalary / $workingDays;
         $hourlyRate  = $dailyRate / 8;
         $minuteRate  = $hourlyRate / 60;
+        $halfDayAfterMinutes = (int) Config::get('hr.working_hours.half_day_deduction_after_minutes', 120);
 
         $records = Attendance::where('employee_id', $employee->id)
             ->whereMonth('attendance_date', $month)
@@ -170,12 +180,24 @@ class SalaryCalculationService
             ->get();
 
         $absentDays   = $records->where('status', 'absent')->count();
-        $lateMinutes  = $records->sum('late_minutes');
+        $halfDayLateRecords = $records->filter(fn ($record) => (int) $record->late_minutes >= $halfDayAfterMinutes);
+        $regularLateMinutes = $records
+            ->reject(fn ($record) => (int) $record->late_minutes >= $halfDayAfterMinutes)
+            ->sum('late_minutes');
 
         $absentDeduction = $absentDays * $dailyRate;
-        $lateDeduction   = $lateMinutes * $minuteRate;
+        $halfDayDeduction = $halfDayLateRecords->count() * ($dailyRate / 2);
+        $lateDeduction   = $regularLateMinutes * $minuteRate;
 
-        return round($absentDeduction + $lateDeduction, 2);
+        return [
+            'amount' => round($absentDeduction + $halfDayDeduction + $lateDeduction, 2),
+            'label' => sprintf(
+                'خصم حضور: %d غياب، %d نصف يوم، %d دقيقة تأخير',
+                $absentDays,
+                $halfDayLateRecords->count(),
+                $regularLateMinutes
+            ),
+        ];
     }
 
     private function getWorkingDaysInMonth(int $month, int $year): int

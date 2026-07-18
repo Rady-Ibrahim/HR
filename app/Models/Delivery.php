@@ -13,7 +13,9 @@ class Delivery extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'delivery_number', 'request_id', 'route_id', 'driver_id', 'vehicle_number',
+        'delivery_number', 'request_id', 'route_id', 'route_stop_id', 'driver_id',
+        'sales_rep_id', 'vehicle_number', 'expected_collection_amount', 'packages_count',
+        'collection_notify_employee_id',
         'status', 'start_latitude', 'start_longitude', 'end_latitude', 'end_longitude',
         'start_time', 'end_time', 'delivery_notes', 'delivery_photo', 'signature_proof',
         'delivery_items'
@@ -35,9 +37,24 @@ class Delivery extends Model
         return $this->belongsTo(Route::class);
     }
 
+    public function routeStop(): BelongsTo
+    {
+        return $this->belongsTo(RouteStop::class);
+    }
+
     public function driver(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'driver_id');
+    }
+
+    public function salesRep(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'sales_rep_id');
+    }
+
+    public function collectionNotifyEmployee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'collection_notify_employee_id');
     }
 
     public function checkpoints(): HasMany

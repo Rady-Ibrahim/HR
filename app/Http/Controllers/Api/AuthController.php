@@ -69,7 +69,7 @@ class AuthController
             'data'    => [
                 'user'        => $user,
                 'employee'    => $employee,
-                'permissions' => $user->getAllPermissions(),
+                'permissions' => $this->getAllPermissions($user),
             ],
         ]);
     }

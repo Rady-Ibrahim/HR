@@ -51,7 +51,7 @@
                 <form id="cvForm">
                     <input type="hidden" id="cvId">
                     <div class="row g-3">
-                        <div class="col-md-6"><label class="form-label">الموظف (ID) *</label><input type="number" name="employee_id" id="cvf_emp" class="form-control" required></div>
+                        <div class="col-md-6"><label class="form-label">الموظف *</label><select name="employee_id" id="cvf_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select></div>
                         <div class="col-md-6"><label class="form-label">رقم السيارة</label><input type="text" name="car_number" id="cvf_car" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">نوع المخالفة *</label>
                             <select name="violation_type" id="cvf_type" class="form-select" required>

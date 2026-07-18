@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\SalaryController;
 use App\Http\Controllers\Api\ApprovalController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\WorkLocationController;
 
 // Public
 Route::post('/auth/login', [AuthController::class, 'login']);
@@ -49,10 +50,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('employees')->group(function () {
         Route::get('/',                    [EmployeeController::class, 'index']);
         Route::post('/',                   [EmployeeController::class, 'store']);
+        Route::get('/managers',            [EmployeeController::class, 'managers']);
+        Route::get('/peers',               [EmployeeController::class, 'peers']);
+        Route::get('/me/manager',          [EmployeeController::class, 'myManager']);
+        Route::get('/me/subordinates',     [EmployeeController::class, 'mySubordinates']);
         Route::get('/{id}',                [EmployeeController::class, 'show']);
         Route::put('/{id}',                [EmployeeController::class, 'update']);
         Route::delete('/{id}',             [EmployeeController::class, 'destroy']);
         Route::put('/{id}/status',         [EmployeeController::class, 'updateStatus']);
+        Route::put('/{id}/manager',        [EmployeeController::class, 'updateManager']);
+        Route::get('/{id}/subordinates',   [EmployeeController::class, 'subordinates']);
+        Route::put('/{id}/subordinates',   [EmployeeController::class, 'assignSubordinates']);
+        Route::post('/{id}/reset-password', [EmployeeController::class, 'resetPassword']);
         Route::get('/{id}/salary-history', [EmployeeController::class, 'getSalaryHistory']);
         Route::get('/{id}/attendance',     [EmployeeController::class, 'getAttendanceRecords']);
     });
@@ -91,13 +100,26 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Requests
     Route::prefix('requests')->group(function () {
+        Route::post('/prepaid',                 [RequestController::class, 'storePrepaid']);
+        Route::get('/my',                       [RequestController::class, 'myRequests']);
+        Route::get('/received/pending',         [RequestController::class, 'receivedPending']);
+        Route::get('/reviewer/pending',         [RequestController::class, 'reviewerPending']);
+        Route::get('/manager/pending',          [RequestController::class, 'managerPending']);
         Route::get('/',                        [RequestController::class, 'index']);
         Route::post('/',                       [RequestController::class, 'store']);
         Route::get('/{id}',                    [RequestController::class, 'show']);
         Route::put('/{id}',                    [RequestController::class, 'update']);
         Route::delete('/{id}',                 [RequestController::class, 'destroy']);
         Route::post('/{id}/items',             [RequestController::class, 'addItems']);
+        Route::post('/{id}/prepare',           [RequestController::class, 'prepare']);
         Route::post('/{id}/submit-for-review', [RequestController::class, 'submitForReview']);
+        Route::post('/{id}/submit-reviewer-review', [RequestController::class, 'submitReviewerReview']);
+        Route::post('/{id}/transfer-to-employee', [RequestController::class, 'transferToEmployee']);
+        Route::post('/{id}/reviewer-approve',  [RequestController::class, 'reviewerApprove']);
+        Route::post('/{id}/reviewer-reject',   [RequestController::class, 'reviewerReject']);
+        Route::post('/{id}/submit-manager-review', [RequestController::class, 'submitManagerReview']);
+        Route::post('/{id}/manager-approve',   [RequestController::class, 'managerApprove']);
+        Route::post('/{id}/manager-reject',    [RequestController::class, 'managerReject']);
         Route::post('/{id}/approve',           [RequestController::class, 'approve']);
         Route::post('/{id}/reject',            [RequestController::class, 'reject']);
     });
@@ -105,11 +127,15 @@ Route::middleware('auth:sanctum')->group(function () {
     // Delivery Routes (خطوط السير)
     Route::prefix('routes')->group(function () {
         Route::get('/daily',   [RouteController::class, 'daily']);
+        Route::post('/with-stops', [RouteController::class, 'storeWithStops']);
         Route::get('/',        [RouteController::class, 'index']);
         Route::post('/',       [RouteController::class, 'store']);
         Route::get('/{id}',    [RouteController::class, 'show']);
         Route::put('/{id}',    [RouteController::class, 'update']);
         Route::delete('/{id}', [RouteController::class, 'destroy']);
+        Route::get('/{id}/stops', [RouteController::class, 'stops']);
+        Route::put('/{id}/with-stops', [RouteController::class, 'updateWithStops']);
+        Route::post('/{id}/dispatch', [RouteController::class, 'dispatch']);
     });
 
     // Deliveries
@@ -118,7 +144,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/',                [DeliveryController::class, 'index']);
         Route::post('/',               [DeliveryController::class, 'store']);
         Route::get('/{id}',            [DeliveryController::class, 'show']);
+        Route::put('/{id}',            [DeliveryController::class, 'update']);
+        Route::delete('/{id}',         [DeliveryController::class, 'destroy']);
         Route::put('/{id}/status',     [DeliveryController::class, 'updateStatus']);
+        Route::post('/{id}/complete-with-collection', [DeliveryController::class, 'completeWithCollection']);
         Route::post('/{id}/proof',     [DeliveryController::class, 'uploadProof']);
         Route::post('/{id}/tracking',  [DeliveryController::class, 'addTracking']);
         Route::get('/{id}/tracking',   [DeliveryController::class, 'tracking']);
@@ -131,6 +160,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/',                           [CollectionController::class, 'index']);
         Route::post('/',                          [CollectionController::class, 'store']);
         Route::get('/{id}',                       [CollectionController::class, 'show']);
+        Route::put('/{id}',                       [CollectionController::class, 'update']);
+        Route::delete('/{id}',                    [CollectionController::class, 'destroy']);
         Route::post('/{id}/approve',              [CollectionController::class, 'approve']);
         Route::post('/{id}/reject',               [CollectionController::class, 'reject']);
     });
@@ -142,6 +173,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/leave-requests',             [AttendanceController::class, 'leaveRequests']);
         Route::get('/monthly-report/{empId}',     [AttendanceController::class, 'monthlyReport']);
         Route::get('/',                           [AttendanceController::class, 'index']);
+        Route::post('/',                          [AttendanceController::class, 'store']);
+        Route::get('/{id}',                       [AttendanceController::class, 'show']);
+        Route::put('/{id}',                       [AttendanceController::class, 'update']);
+        Route::delete('/{id}',                    [AttendanceController::class, 'destroy']);
         Route::post('/check-in',                  [AttendanceController::class, 'checkIn']);
         Route::post('/check-out',                 [AttendanceController::class, 'checkOut']);
         Route::post('/request-leave',             [AttendanceController::class, 'requestLeave']);
@@ -175,6 +210,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/',              [AdvanceController::class, 'index']);
         Route::post('/',             [AdvanceController::class, 'store']);
         Route::get('/{id}',          [AdvanceController::class, 'show']);
+        Route::put('/{id}',          [AdvanceController::class, 'update']);
+        Route::delete('/{id}',       [AdvanceController::class, 'destroy']);
         Route::post('/{id}/approve', [AdvanceController::class, 'approve']);
         Route::post('/{id}/reject',  [AdvanceController::class, 'reject']);
     });
@@ -195,6 +232,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/',              [CommissionController::class, 'index']);
         Route::post('/',             [CommissionController::class, 'store']);
         Route::get('/{id}',          [CommissionController::class, 'show']);
+        Route::put('/{id}',          [CommissionController::class, 'update']);
         Route::delete('/{id}',       [CommissionController::class, 'destroy']);
         Route::post('/{id}/approve', [CommissionController::class, 'approve']);
         Route::post('/{id}/reject',  [CommissionController::class, 'reject']);
@@ -240,6 +278,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/performance',      [ReportController::class, 'performance']);
         Route::get('/incentives',       [ReportController::class, 'incentivesReport']);
         Route::get('/monthly-summary',  [ReportController::class, 'monthlyAdminSummary']);
+    });
+
+    // Work Locations
+    Route::prefix('work-locations')->group(function () {
+        Route::get('/',        [WorkLocationController::class, 'index']);
+        Route::post('/',       [WorkLocationController::class, 'store']);
+        Route::get('/{id}',    [WorkLocationController::class, 'show']);
+        Route::put('/{id}',    [WorkLocationController::class, 'update']);
+        Route::delete('/{id}', [WorkLocationController::class, 'destroy']);
     });
 
     // Notifications

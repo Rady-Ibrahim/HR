@@ -14,9 +14,9 @@
         <div class="d-flex gap-2 flex-wrap align-items-center">
             <span class="text-muted ms-auto me-2" style="font-size:.8rem">فلتر الحالة:</span>
             <button class="btn btn-sm btn-outline-secondary active-tab" onclick="filterStatus('')"         id="tab-all">الكل</button>
-            <button class="btn btn-sm btn-outline-warning"  onclick="filterStatus('pending')"    id="tab-pending">معلق</button>
-            <button class="btn btn-sm btn-outline-primary"  onclick="filterStatus('preparation')" id="tab-prep">تجهيز</button>
-            <button class="btn btn-sm btn-outline-info"     onclick="filterStatus('review')"      id="tab-review">مراجعة</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="filterStatus('draft')"       id="tab-draft">مسودة</button>
+            <button class="btn btn-sm btn-outline-primary"  onclick="filterStatus('prepared')"     id="tab-prepared">تم التحضير</button>
+            <button class="btn btn-sm btn-outline-info"     onclick="filterStatus('under_review')" id="tab-under_review">مراجعة</button>
             <button class="btn btn-sm btn-outline-success"  onclick="filterStatus('approved')"    id="tab-approved">معتمد</button>
             <button class="btn btn-sm btn-outline-danger"   onclick="filterStatus('rejected')"    id="tab-rejected">مرفوض</button>
             <button class="btn btn-sm btn-outline-dark"     onclick="filterStatus('delivered')"   id="tab-delivered">مسلّم</button>
@@ -38,8 +38,8 @@
     </div>
     <div class="table-responsive">
         <table class="data-table">
-            <thead><tr><th>رقم الطلب</th><th>العميل</th><th>مندوب المبيعات</th><th>عدد الأصناف</th><th>المجموع</th><th>تاريخ الطلب</th><th>الحالة</th><th>إجراءات</th></tr></thead>
-            <tbody id="reqTable"><tr><td colspan="8" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr></tbody>
+            <thead><tr><th>رقم الطلب</th><th>العميل</th><th>صاحب الطلب</th><th>المراجع</th><th>عدد الأصناف</th><th>المجموع</th><th>تاريخ الطلب</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+            <tbody id="reqTable"><tr><td colspan="9" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr></tbody>
         </table>
     </div>
     <div class="section-body d-flex justify-content-between">
@@ -57,8 +57,9 @@
                 <form id="reqForm">
                     <input type="hidden" id="reqId">
                     <div class="row g-3 mb-3">
-                        <div class="col-md-4"><label class="form-label">العميل (ID) *</label><input type="number" name="customer_id" id="rqf_customer" class="form-control" required></div>
-                        <div class="col-md-4"><label class="form-label">المندوب (ID)</label><input type="number" name="employee_id" id="rqf_emp" class="form-control"></div>
+                        <div class="col-md-4"><label class="form-label">العميل *</label><select name="customer_id" id="rqf_customer" class="form-select" data-lookup="customers" data-placeholder="اختر العميل" required></select></div>
+                        <div class="col-md-4"><label class="form-label">المندوب</label><select name="employee_id" id="rqf_emp" class="form-select" data-lookup="employees" data-placeholder="اختر المندوب"></select></div>
+                        <div class="col-md-4"><label class="form-label">موظف المراجعة *</label><select name="reviewer_employee_id" id="rqf_reviewer" class="form-select" data-lookup="employees" data-placeholder="اختر موظف المراجعة" required></select></div>
                         <div class="col-md-4"><label class="form-label">تاريخ التسليم المطلوب</label><input type="date" name="delivery_date" id="rqf_delivery_date" class="form-control"></div>
                         <div class="col-12"><label class="form-label">ملاحظات</label><textarea name="notes" id="rqf_notes" class="form-control" rows="2"></textarea></div>
                     </div>
@@ -71,7 +72,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
                 <button type="button" class="btn btn-outline-primary" onclick="saveRequest('draft')"><i class="fas fa-save me-1"></i> حفظ مسودة</button>
-                <button type="button" class="btn-primary-custom" onclick="saveRequest('pending')"><i class="fas fa-paper-plane me-1"></i> إرسال</button>
+                <button type="button" class="btn-primary-custom" onclick="saveRequest('under_review')"><i class="fas fa-paper-plane me-1"></i> إرسال</button>
             </div>
         </div>
     </div>
@@ -102,9 +103,9 @@
 
 @push('scripts')
 <script>
-let reqDeleteId=null, reqPage=1, currentStatus='';
-const reqStatusLabels = { draft:'مسودة', pending:'معلق', preparation:'تجهيز', review:'مراجعة', approved:'معتمد', rejected:'مرفوض', delivered:'مسلّم' };
-const reqStatusBadge  = { draft:'badge-draft', pending:'badge-pending', preparation:'badge-approved', review:'badge-approved', approved:'badge-active', rejected:'badge-rejected', delivered:'badge-active' };
+let reqDeleteId=null, reqPage=1, currentStatus='', requestEmployees = [];
+const reqStatusLabels = { draft:'مسودة', prepared:'تم التحضير', under_review:'تحت المراجعة', approved:'معتمد', rejected:'مرفوض', ready_for_delivery:'جاهز للتسليم', in_delivery:'في الطريق', delivered:'مسلّم', collected:'تم التحصيل', closed:'مغلق' };
+const reqStatusBadge  = { draft:'badge-draft', prepared:'badge-approved', under_review:'badge-pending', approved:'badge-active', rejected:'badge-rejected', ready_for_delivery:'badge-approved', in_delivery:'badge-approved', delivered:'badge-active', collected:'badge-active', closed:'badge-active' };
 
 function filterStatus(status) {
     currentStatus = status;
@@ -125,12 +126,13 @@ async function loadRequests(page=1) {
     const { data, total, current_page, last_page } = r.data;
     document.getElementById('reqCount').textContent=`إجمالي: ${total}`;
     document.getElementById('reqPagInfo').textContent=`صفحة ${current_page} من ${last_page}`;
-    if (!data.length) { document.getElementById('reqTable').innerHTML='<tr><td colspan="8" class="text-center py-4 text-muted">لا توجد طلبات</td></tr>'; return; }
+    if (!data.length) { document.getElementById('reqTable').innerHTML='<tr><td colspan="9" class="text-center py-4 text-muted">لا توجد طلبات</td></tr>'; return; }
     document.getElementById('reqTable').innerHTML = data.map(req=>`
         <tr>
             <td><strong>#${req.id}</strong></td>
             <td>${req.customer?.name??'-'}</td>
-            <td>${req.employee?.name??'-'}</td>
+            <td>${req.created_by?.name??req.prepared_by?.name??req.assigned_employee?.name??'-'}</td>
+            <td>${req.reviewer_employee?.name??'-'}</td>
             <td>${req.items_count??req.items?.length??'-'}</td>
             <td class="fw-bold">${req.total_amount?Number(req.total_amount).toLocaleString()+' ج.م':'-'}</td>
             <td>${req.created_at?new Date(req.created_at).toLocaleDateString('ar-EG'):'-'}</td>
@@ -138,12 +140,12 @@ async function loadRequests(page=1) {
             <td>
                 <div class="d-flex gap-1 flex-wrap">
                     <button class="btn btn-sm btn-outline-info"    onclick="viewRequest(${req.id})" title="عرض"><i class="fas fa-eye"></i></button>
-                    ${['draft','pending'].includes(req.status)?`<button class="btn btn-sm btn-outline-warning" onclick="openEditModal(${req.id})" title="تعديل"><i class="fas fa-edit"></i></button>`:''}
-                    ${req.status==='pending'?`
+                    ${['draft','under_review'].includes(req.status)?`<button class="btn btn-sm btn-outline-warning" onclick="openEditModal(${req.id})" title="تعديل"><i class="fas fa-edit"></i></button>`:''}
+                    ${req.status==='under_review'?`
                         <button class="btn btn-sm btn-success" onclick="approveReq(${req.id})"><i class="fas fa-check"></i></button>
                         <button class="btn btn-sm btn-outline-danger" onclick="rejectReq(${req.id})"><i class="fas fa-times"></i></button>
                     `:''}
-                    ${['draft','pending','rejected'].includes(req.status)?`<button class="btn btn-sm btn-outline-danger" onclick="confirmDelete(${req.id})"><i class="fas fa-trash"></i></button>`:''}
+                    ${['draft','under_review','rejected'].includes(req.status)?`<button class="btn btn-sm btn-outline-danger" onclick="confirmDelete(${req.id})"><i class="fas fa-trash"></i></button>`:''}
                 </div>
             </td>
         </tr>`).join('');
@@ -158,15 +160,17 @@ function addItemRow(item=null) {
     const row = document.createElement('div');
     row.className='row g-2 mb-2 item-row'; row.id=`irow_${n}`;
     row.innerHTML=`
-        <div class="col-md-5"><input type="number" name="items[${n}][item_id]" class="form-control" placeholder="ID الصنف" value="${item?.item_id??''}" required></div>
+        <div class="col-md-5"><select name="items[${n}][item_id]" class="form-select" data-lookup="items" data-placeholder="اختر الصنف" data-selected="${item?.item_id??''}" required></select></div>
         <div class="col-md-3"><div class="input-group"><input type="number" name="items[${n}][quantity]" class="form-control" placeholder="الكمية" value="${item?.quantity??1}" required><span class="input-group-text">وحدة</span></div></div>
         <div class="col-md-3"><div class="input-group"><input type="number" name="items[${n}][unit_price]" class="form-control" placeholder="السعر" value="${item?.unit_price??''}" step="0.01"><span class="input-group-text">ج.م</span></div></div>
         <div class="col-md-1"><button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="document.getElementById('irow_${n}').remove()"><i class="fas fa-times"></i></button></div>`;
     document.getElementById('itemsContainer').appendChild(row);
+    hydrateLookupSelects(row);
 }
 
 function openAddModal() {
     document.getElementById('reqId').value=''; document.getElementById('reqForm').reset();
+    renderReviewerOptions();
     document.getElementById('reqModalTitle').innerHTML='<i class="fas fa-plus me-2"></i> إضافة طلب جديد';
     document.getElementById('itemsContainer').innerHTML=''; itemRowCount=0;
     addItemRow();
@@ -178,8 +182,10 @@ async function openEditModal(id) {
     const r=await apiFetch('/requests/'+id); if(!r.success) return; const req=r.data;
     document.getElementById('reqId').value=req.id;
     document.getElementById('rqf_customer').value=req.customer_id;
-    document.getElementById('rqf_emp').value=req.employee_id??'';
-    document.getElementById('rqf_delivery_date').value=req.delivery_date?req.delivery_date.substring(0,10):'';
+    document.getElementById('rqf_emp').value=req.assigned_employee_id??req.employee_id??'';
+    renderReviewerOptions();
+    document.getElementById('rqf_reviewer').value=req.reviewer_employee_id??'';
+    document.getElementById('rqf_delivery_date').value=req.estimated_delivery_date?req.estimated_delivery_date.substring(0,10):(req.delivery_date?req.delivery_date.substring(0,10):'');
     document.getElementById('rqf_notes').value=req.notes??'';
     document.getElementById('itemsContainer').innerHTML=''; itemRowCount=0;
     (req.items||[]).forEach(it=>addItemRow(it));
@@ -191,6 +197,7 @@ async function saveRequest(status) {
     const base={
         customer_id:parseInt(fd.get('customer_id')),
         employee_id:fd.get('employee_id')?parseInt(fd.get('employee_id')):null,
+        reviewer_employee_id:fd.get('reviewer_employee_id')?parseInt(fd.get('reviewer_employee_id')):null,
         delivery_date:fd.get('delivery_date')||null,
         notes:fd.get('notes')||null, status,
     };
@@ -203,6 +210,22 @@ async function saveRequest(status) {
     const r=await apiFetch(id?`/requests/${id}`:'/requests',{method:id?'PUT':'POST',body:JSON.stringify(base)});
     if(r.success){bootstrap.Modal.getInstance(document.getElementById('reqModal')).hide();showAlert(id?'تم تحديث الطلب':'تم إضافة الطلب');loadRequests(reqPage);}
     else showAlert(r.message||'فشل الحفظ','danger');
+}
+
+async function loadRequestEmployees() {
+    const r = await apiFetch('/employees?per_page=1000');
+    requestEmployees = r.success ? (r.data?.data ?? []) : [];
+    renderReviewerOptions();
+}
+
+function renderReviewerOptions() {
+    const select = document.getElementById('rqf_reviewer');
+    if (!select) return;
+    const currentValue = select.value;
+    select.innerHTML = '<option value="">اختر موظف المراجعة</option>' + requestEmployees
+        .map(e => `<option value="${e.id}">${e.name} - ${e.position ?? ''}</option>`)
+        .join('');
+    if (currentValue) select.value = currentValue;
 }
 
 async function viewRequest(id) {
@@ -218,9 +241,11 @@ async function viewRequest(id) {
                 <p class="mb-1"><strong>رقم:</strong> #${req.id}</p>
                 <p class="mb-1"><strong>العميل:</strong> ${req.customer?.name??'-'}</p>
                 <p class="mb-1"><strong>الهاتف:</strong> ${req.customer?.phone??'-'}</p>
-                <p class="mb-1"><strong>المندوب:</strong> ${req.employee?.name??'-'}</p>
+                <p class="mb-1"><strong>صاحب الطلب:</strong> ${req.created_by?.name??req.prepared_by?.name??req.assigned_employee?.name??'-'}</p>
+                <p class="mb-1"><strong>المراجع:</strong> ${req.reviewer_employee?.name??'-'}</p>
+                <p class="mb-1"><strong>المدير:</strong> ${req.created_by?.manager?.name??'-'}</p>
                 <p class="mb-1"><strong>تاريخ الطلب:</strong> ${req.created_at?new Date(req.created_at).toLocaleDateString('ar-EG'):'-'}</p>
-                <p class="mb-1"><strong>تاريخ التسليم:</strong> ${req.delivery_date?new Date(req.delivery_date).toLocaleDateString('ar-EG'):'-'}</p>
+                <p class="mb-1"><strong>تاريخ التسليم:</strong> ${req.estimated_delivery_date?new Date(req.estimated_delivery_date).toLocaleDateString('ar-EG'):(req.delivery_date?new Date(req.delivery_date).toLocaleDateString('ar-EG'):'-')}</p>
                 <p class="mb-1"><strong>الحالة:</strong> <span class="badge-status ${reqStatusBadge[req.status]||'badge-draft'}">${reqStatusLabels[req.status]||req.status}</span></p>
                 ${req.notes?`<p class="mb-0"><strong>ملاحظات:</strong> ${req.notes}</p>`:''}
             </div>
@@ -244,7 +269,7 @@ async function viewRequest(id) {
                     </table>
                 </div>
             </div>
-            ${['pending','draft'].includes(req.status)?`
+            ${['under_review','draft'].includes(req.status)?`
             <div class="d-flex gap-2 mt-3">
                 <button class="btn btn-success" onclick="bootstrap.Modal.getInstance(document.getElementById('reqViewModal')).hide();setTimeout(()=>approveReq(${req.id}),300)"><i class="fas fa-check me-1"></i>اعتماد</button>
                 <button class="btn btn-danger"  onclick="bootstrap.Modal.getInstance(document.getElementById('reqViewModal')).hide();setTimeout(()=>rejectReq(${req.id}),300)"><i class="fas fa-times me-1"></i>رفض</button>
@@ -273,6 +298,9 @@ document.getElementById('reqDeleteBtn').addEventListener('click', async()=>{
 });
 function resetReqFilter() { ['reqSearch','reqDate'].forEach(id=>document.getElementById(id).value=''); currentStatus=''; filterStatus(''); }
 document.getElementById('reqSearch').addEventListener('keypress', e=>{ if(e.key==='Enter') loadRequests(); });
-document.addEventListener('DOMContentLoaded', loadRequests);
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadRequestEmployees();
+    loadRequests();
+});
 </script>
 @endpush

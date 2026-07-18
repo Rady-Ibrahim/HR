@@ -13,10 +13,28 @@ class ApprovalController
 {
     public function pending(Request $request): JsonResponse
     {
-        $pendingRequests = RequestModel::where('status', 'under_review')
-            ->with('customer', 'createdBy', 'items')
+        $pendingApprovals = Approval::where('status', 'pending')
+            ->where('approvable_type', RequestModel::class)
+            ->whereIn('approval_type', ['reviewer_request_review', 'manager_request_review'])
+            ->with('approver')
             ->orderByDesc('created_at')
             ->get();
+
+        $requestIds = $pendingApprovals->pluck('approvable_id')->unique();
+        $requestsById = RequestModel::whereIn('id', $requestIds)
+            ->with(['customer', 'createdBy.manager', 'preparedBy', 'reviewerEmployee', 'items'])
+            ->get()
+            ->keyBy('id');
+
+        $pendingRequests = $pendingApprovals->map(function ($approval) use ($requestsById) {
+            $request = $requestsById->get($approval->approvable_id);
+            if ($request) {
+                $request->setAttribute('pending_approval_id', $approval->id);
+                $request->setAttribute('pending_approval_type', $approval->approval_type);
+                $request->setAttribute('pending_approver', $approval->approver);
+            }
+            return $request;
+        })->filter()->values();
 
         $pendingCollections = Collection::where('collection_status', 'pending')
             ->with('delivery.request.customer', 'driver')
@@ -31,6 +49,8 @@ class ApprovalController
         $summary = [
             'total_pending'      => $pendingRequests->count() + $pendingCollections->count() + $pendingSalaries->count(),
             'pending_requests'   => $pendingRequests->count(),
+            'pending_reviewer_requests' => $pendingRequests->where('pending_approval_type', 'reviewer_request_review')->count(),
+            'pending_manager_requests' => $pendingRequests->where('pending_approval_type', 'manager_request_review')->count(),
             'pending_collections'=> $pendingCollections->count(),
             'pending_salaries'   => $pendingSalaries->count(),
         ];

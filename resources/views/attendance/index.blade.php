@@ -22,6 +22,47 @@
     <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-icon mx-auto" style="background:#e3f2fd;color:#1565c0"><i class="fas fa-umbrella-beach"></i></div><div class="stat-value" id="attLeave">-</div><div class="stat-label">إجازة</div></div></div>
 </div>
 
+<!-- DEDUCTION POLICY -->
+<div class="section-card mb-4">
+    <div class="section-body">
+        <div class="row g-3 align-items-center">
+            <div class="col-md-4">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="stat-icon mb-0" style="width:46px;height:46px;background:#fff3e0;color:#e65100"><i class="fas fa-business-time"></i></div>
+                    <div>
+                        <div class="fw-bold text-primary">خصم التأخير التلقائي</div>
+                        <div class="text-muted" style="font-size:.82rem">يتم تطبيقه عند حساب المرتب</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label mb-1">بداية العمل</label>
+                <input type="time" class="form-control" value="{{ config('hr.working_hours.check_in_time', '08:00') }}" disabled>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label mb-1">سماح التأخير</label>
+                <div class="input-group">
+                    <input type="number" class="form-control" value="{{ config('hr.working_hours.late_threshold_minutes', 15) }}" disabled>
+                    <span class="input-group-text">دقيقة</span>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label mb-1">خصم نصف يوم بعد</label>
+                <div class="input-group">
+                    <input type="number" class="form-control" value="{{ config('hr.working_hours.half_day_deduction_after_minutes', 120) }}" disabled>
+                    <span class="input-group-text">دقيقة</span>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="badge-status badge-pending d-inline-flex align-items-center gap-2">
+                    <i class="fas fa-coins"></i>
+                    ينخصم من المرتب
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- FILTERS -->
 <div class="section-card mb-4">
     <div class="section-body">
@@ -72,7 +113,7 @@
                     <tr><th>الموظف</th><th>التاريخ</th><th>وقت الحضور</th><th>وقت الانصراف</th><th>دقائق التأخير</th><th>الحالة</th><th>الموقع</th><th>إجراءات</th></tr>
                 </thead>
                 <tbody id="attTable">
-                    <tr><td colspan="7" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>
+                    <tr><td colspan="8" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>
                 </tbody>
             </table>
         </div>
@@ -107,7 +148,7 @@
                 <form id="attForm">
                     <input type="hidden" id="attId">
                     <div class="row g-3">
-                        <div class="col-12"><label class="form-label">الموظف (ID) *</label><input type="number" name="employee_id" id="atf_emp" class="form-control" required></div>
+                        <div class="col-12"><label class="form-label">الموظف *</label><select name="employee_id" id="atf_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select></div>
                         <div class="col-md-6"><label class="form-label">التاريخ *</label><input type="date" name="date" id="atf_date" class="form-control" required value="{{ date('Y-m-d') }}"></div>
                         <div class="col-md-6"><label class="form-label">الحالة *</label>
                             <select name="status" id="atf_status" class="form-select" required>
@@ -117,7 +158,13 @@
                         </div>
                         <div class="col-md-6"><label class="form-label">وقت الحضور</label><input type="time" name="check_in_time" id="atf_in" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">وقت الانصراف</label><input type="time" name="check_out_time" id="atf_out" class="form-control"></div>
-                        <div class="col-md-6"><label class="form-label">دقائق التأخير</label><input type="number" name="late_minutes" id="atf_late" class="form-control" min="0" value="0"></div>
+                        <div class="col-md-6"><label class="form-label">دقائق التأخير</label><input type="number" name="late_minutes" id="atf_late" class="form-control" min="0" placeholder="تلقائي من وقت الحضور"></div>
+                        <div class="col-md-6"><label class="form-label">نوع الخصم المتوقع</label><input type="text" id="atf_deduction_preview" class="form-control" value="لا يوجد خصم" disabled></div>
+                        <div class="col-12">
+                            <div class="alert alert-info py-2 mb-0" style="font-size:.82rem">
+                                بداية العمل {{ config('hr.working_hours.check_in_time', '08:00') }}، وبعد {{ config('hr.working_hours.half_day_deduction_after_minutes', 120) }} دقيقة تأخير يتم خصم نصف يوم تلقائياً من المرتب.
+                            </div>
+                        </div>
                         <div class="col-12"><label class="form-label">ملاحظات</label><textarea name="notes" id="atf_notes" class="form-control" rows="2"></textarea></div>
                     </div>
                 </form>
@@ -138,7 +185,7 @@
             <div class="modal-body">
                 <form id="leaveForm">
                     <div class="row g-3">
-                        <div class="col-12"><label class="form-label">الموظف (ID) *</label><input type="number" name="employee_id" id="lf_emp" class="form-control" required></div>
+                        <div class="col-12"><label class="form-label">الموظف *</label><select name="employee_id" id="lf_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select></div>
                         <div class="col-md-6"><label class="form-label">نوع الإجازة *</label>
                             <select name="leave_type" id="lf_type" class="form-select" required>
                                 <option value="annual">سنوية</option><option value="sick">مرضية</option>
@@ -175,7 +222,9 @@
 @push('scripts')
 <script>
 const attBadge = { present:'badge-active', absent:'badge-rejected', late:'badge-pending', on_leave:'badge-approved' };
-const attLabel = { present:'حاضر', absent:'غائب', late:'متأخر', on_leave:'إجازة' };
+const attLabel = { present:'حاضر', absent:'غائب', late:'متأخر', early_leave:'انصراف مبكر', on_leave:'إجازة', excused:'معذور' };
+const workStartTime = '{{ config("hr.working_hours.check_in_time", "08:00") }}';
+const halfDayAfterMinutes = {{ (int) config('hr.working_hours.half_day_deduction_after_minutes', 120) }};
 
 async function loadTodaySummary() {
     const r = await apiFetch('/attendance/today-summary');
@@ -204,16 +253,16 @@ async function loadAttendance(page = 1) {
     document.getElementById('attPagInfo').textContent = `إجمالي: ${data.total}`;
     const all = data.data;
     if (!all.length) {
-        document.getElementById('attTable').innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">لا توجد سجلات</td></tr>';
+        document.getElementById('attTable').innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">لا توجد سجلات</td></tr>';
         return;
     }
     document.getElementById('attTable').innerHTML = all.map(a => `
         <tr>
             <td>${a.employee?.name ?? '-'}</td>
-            <td>${a.date}</td>
+            <td>${a.attendance_date ? a.attendance_date.substring(0,10) : '-'}</td>
             <td>${a.check_in_time ?? '-'}</td>
             <td>${a.check_out_time ?? '-'}</td>
-            <td>${a.late_minutes ?? 0} دقيقة</td>
+            <td>${lateText(a.late_minutes ?? 0)}</td>
             <td><span class="badge-status ${attBadge[a.status] || 'badge-draft'}">${attLabel[a.status] || a.status}</span></td>
             <td>${a.check_in_latitude ? `<span class="badge bg-info"><i class="fas fa-map-marker-alt"></i> GPS</span>` : '-'}</td>
             <td>
@@ -276,7 +325,8 @@ function openAddAttModal() {
     document.getElementById('attAddTitle').innerHTML='<i class="fas fa-fingerprint me-2"></i> إدخال حضور يدوي';
     document.getElementById('atf_date').value='{{ date("Y-m-d") }}';
     document.getElementById('atf_status').value='present';
-    document.getElementById('atf_late').value='0';
+    document.getElementById('atf_late').value='';
+    updateDeductionPreview();
     new bootstrap.Modal(document.getElementById('attAddModal')).show();
 }
 
@@ -286,19 +336,21 @@ async function openEditAttModal(id) {
     const r=await apiFetch('/attendance/'+id); if(!r.success) return; const a=r.data;
     document.getElementById('attId').value=a.id;
     document.getElementById('atf_emp').value=a.employee_id;
-    document.getElementById('atf_date').value=a.date?a.date.substring(0,10):'';
+    document.getElementById('atf_date').value=a.attendance_date?a.attendance_date.substring(0,10):'';
     document.getElementById('atf_status').value=a.status;
-    document.getElementById('atf_in').value=a.check_in_time??'';
-    document.getElementById('atf_out').value=a.check_out_time??'';
+    document.getElementById('atf_in').value=timeOnly(a.check_in_time);
+    document.getElementById('atf_out').value=timeOnly(a.check_out_time);
     document.getElementById('atf_late').value=a.late_minutes??0;
     document.getElementById('atf_notes').value=a.notes??'';
+    updateDeductionPreview();
 }
 
 async function saveAttendance() {
     const id=document.getElementById('attId').value;
     const data=Object.fromEntries(new FormData(document.getElementById('attForm')));
     data.employee_id=parseInt(data.employee_id);
-    data.late_minutes=parseInt(data.late_minutes||0);
+    if(data.late_minutes === '') delete data.late_minutes;
+    else data.late_minutes=parseInt(data.late_minutes||0);
     if(!data.check_in_time) delete data.check_in_time;
     if(!data.check_out_time) delete data.check_out_time;
     if(!data.notes) delete data.notes;
@@ -344,6 +396,55 @@ function resetAttFilters() {
     loadAttendance();
 }
 
-document.addEventListener('DOMContentLoaded', () => { loadTodaySummary(); loadAttendance(); });
+function timeOnly(value) {
+    if (!value) return '';
+    if (value.includes('T')) return new Date(value).toTimeString().slice(0,5);
+    return value.substring(0,5);
+}
+
+function minutesBetween(start, actual) {
+    if (!actual) return 0;
+    const [sh, sm] = start.split(':').map(Number);
+    const [ah, am] = actual.split(':').map(Number);
+    return Math.max(0, (ah * 60 + am) - (sh * 60 + sm));
+}
+
+function lateText(minutes) {
+    const value = Number(minutes || 0);
+    return value >= halfDayAfterMinutes ? `${value} دقيقة - خصم نصف يوم` : `${value} دقيقة`;
+}
+
+function updateDeductionPreview() {
+    const late = Number(document.getElementById('atf_late').value || 0);
+    const preview = document.getElementById('atf_deduction_preview');
+    if (!preview) return;
+    if (late >= halfDayAfterMinutes) {
+        preview.value = 'خصم نصف يوم من المرتب';
+        preview.classList.add('text-danger', 'fw-bold');
+    } else if (late > 0) {
+        preview.value = `خصم ${late} دقيقة من المرتب`;
+        preview.classList.remove('text-danger');
+        preview.classList.add('fw-bold');
+    } else {
+        preview.value = 'لا يوجد خصم';
+        preview.classList.remove('text-danger', 'fw-bold');
+    }
+}
+
+function updateLateFromTime() {
+    const checkIn = document.getElementById('atf_in').value;
+    if (!checkIn) return;
+    const late = minutesBetween(workStartTime, checkIn);
+    document.getElementById('atf_late').value = late;
+    if (late > 0) document.getElementById('atf_status').value = 'late';
+    updateDeductionPreview();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('atf_in').addEventListener('change', updateLateFromTime);
+    document.getElementById('atf_late').addEventListener('input', updateDeductionPreview);
+    loadTodaySummary();
+    loadAttendance();
+});
 </script>
 @endpush

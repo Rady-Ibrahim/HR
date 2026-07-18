@@ -50,7 +50,7 @@
                 <form id="incForm">
                     <input type="hidden" id="incId">
                     <div class="row g-3">
-                        <div class="col-12"><label class="form-label">الموظف (ID) *</label><input type="number" name="employee_id" id="if2_emp" class="form-control" required></div>
+                        <div class="col-12"><label class="form-label">الموظف *</label><select name="employee_id" id="if2_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select></div>
                         <div class="col-md-6"><label class="form-label">نوع الحافز *</label>
                             <select name="incentive_type" id="if2_type" class="form-select" required>
                                 <option value="performance">أداء</option><option value="attendance">حضور</option>

@@ -39,6 +39,7 @@ class CollectionController
         $validated = $request->validate([
             'delivery_id'    => 'required|exists:deliveries,id',
             'total_amount'   => 'required|numeric|min:0',
+            'driver_id'      => 'nullable|exists:employees,id',
             'payment_method' => 'required|in:cash,bank_transfer,check,instapay,fawry',
             'collected_date' => 'required|date',
             'notes'          => 'nullable|string',
@@ -53,7 +54,7 @@ class CollectionController
         try {
             $validated['collection_number'] = 'COL-' . now()->format('YmdHis');
             $validated['collection_status'] = 'pending';
-            $validated['driver_id']         = $request->get('driver_id', auth()->user()->employee_id ?? 1);
+            $validated['driver_id']         = $validated['driver_id'] ?? $request->get('driver_id', auth()->user()->employee_id ?? 1);
 
             $collection = Collection::create($validated);
 
@@ -90,6 +91,36 @@ class CollectionController
         ])->findOrFail($id);
 
         return response()->json(['success' => true, 'data' => $collection]);
+    }
+
+    public function update(Request $request, $id): JsonResponse
+    {
+        $collection = Collection::findOrFail($id);
+        $validated = $request->validate([
+            'delivery_id'    => 'sometimes|exists:deliveries,id',
+            'total_amount'   => 'sometimes|numeric|min:0',
+            'driver_id'      => 'nullable|exists:employees,id',
+            'payment_method' => 'sometimes|in:cash,bank_transfer,check,instapay,fawry',
+            'collected_date' => 'sometimes|date',
+            'notes'          => 'nullable|string',
+            'check_number'   => 'nullable|string|required_if:payment_method,check',
+            'check_due_date' => 'nullable|date|required_if:payment_method,check',
+        ]);
+
+        $collection->update($validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم تحديث التحصيل بنجاح',
+            'data' => $collection->fresh(['delivery.request.customer', 'driver']),
+        ]);
+    }
+
+    public function destroy($id): JsonResponse
+    {
+        Collection::findOrFail($id)->delete();
+
+        return response()->json(['success' => true, 'message' => 'تم حذف التحصيل بنجاح']);
     }
 
     public function approve(Request $request, $id): JsonResponse

@@ -61,6 +61,7 @@ Route::middleware('auth')->group(function () {
 
     // Operations
     Route::get('/requests',     fn() => view('requests.index'));
+    Route::get('/prepaid-requests', fn() => view('prepaid-requests.index'));
     Route::get('/routes',       fn() => view('routes.index'));
     Route::get('/deliveries',   fn() => view('deliveries.index'));
     Route::get('/collections',  fn() => view('collections.index'));
@@ -74,4 +75,5 @@ Route::middleware('auth')->group(function () {
     Route::get('/approvals',    fn() => view('approvals.index'));
     Route::get('/reports',      fn() => view('reports.index'));
     Route::get('/notifications', fn() => view('notifications.index'));
+    Route::get('/locations',    fn() => view('locations.index'));
 });
