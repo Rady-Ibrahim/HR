@@ -200,8 +200,12 @@ async function saveCollection() {
     else showAlert(r.message||'فشل الحفظ','danger');
 }
 async function approveCol(id) {
-    const r=await apiFetch(`/collections/${id}/approve`,{method:'POST'});
-    if(r.success){showAlert('تم الاعتماد');loadCollections(colPage);loadDailySummary();}else showAlert(r.message,'danger');
+    const actual = prompt('المبلغ الفعلي (اتركه فارغ لاعتماد المبلغ المسجل):');
+    const body = {};
+    if (actual !== null && actual !== '') body.actual_amount = parseFloat(actual);
+    const r = await apiFetch(`/collections/${id}/approve`, { method: 'POST', body: JSON.stringify(body) });
+    if (r.success) { showAlert('تم الاعتماد'); loadCollections(colPage); loadDailySummary(); }
+    else showAlert(r.message, 'danger');
 }
 async function rejectCol(id) {
     const reason=prompt('سبب الرفض:'); if(!reason) return;

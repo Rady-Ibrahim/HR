@@ -265,7 +265,7 @@ class DeliveryController
                     'driver_id' => $delivery->driver_id,
                     'total_amount' => $amount,
                     'payment_method' => $validated['payment_method'] ?? 'cash',
-                    'collection_status' => 'collected',
+                    'collection_status' => 'pending',
                     'collected_date' => $validated['collected_date'] ?? today()->toDateString(),
                     'notes' => $validated['notes'] ?? 'تحصيل تلقائي من التسليم',
                     'check_number' => $validated['check_number'] ?? null,
@@ -281,8 +281,9 @@ class DeliveryController
                     ]);
                 }
 
+                // Request stays delivered until the direct manager approves the collection
                 if ($delivery->request) {
-                    $delivery->request->update(['status' => 'collected']);
+                    $delivery->request->update(['status' => 'delivered']);
                 }
             }
 

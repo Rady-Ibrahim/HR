@@ -39,4 +39,25 @@ class Collection extends Model
     {
         return $this->hasMany(CollectionDetail::class);
     }
+
+    /**
+     * Direct manager of the driver/representative may approve.
+     * HR / super_admin may also approve (dashboard).
+     */
+    public function canBeApprovedBy(?Employee $employee, $user = null): bool
+    {
+        if ($user && method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['super_admin', 'hr_manager'])) {
+            return true;
+        }
+
+        if (!$employee || !$this->driver_id) {
+            return false;
+        }
+
+        $driver = $this->relationLoaded('driver')
+            ? $this->driver
+            : $this->driver()->first();
+
+        return $driver && (int) $driver->reporting_manager_id === (int) $employee->id;
+    }
 }

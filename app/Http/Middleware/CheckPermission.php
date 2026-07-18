@@ -28,7 +28,7 @@ class CheckPermission
             }
         }
 
-        // Collections: HR and driver/representatives can create
+        // Collections: HR and driver/representatives can create; managers can approve
         if (in_array('create_collections', $permissions, true)) {
             if ($user->hasAnyRole(['hr_manager', 'driver'])) {
                 return $next($request);
@@ -36,6 +36,17 @@ class CheckPermission
 
             $employee = Employee::where('user_id', $user->id)->first();
             if ($employee && $employee->employee_type === EmployeeTypeEnum::DRIVER_REPRESENTATIVE) {
+                return $next($request);
+            }
+        }
+
+        if (in_array('approve_collections', $permissions, true)) {
+            if ($user->hasAnyRole(['hr_manager', 'manager'])) {
+                return $next($request);
+            }
+
+            $employee = Employee::where('user_id', $user->id)->first();
+            if ($employee && $employee->employee_type === EmployeeTypeEnum::MANAGER) {
                 return $next($request);
             }
         }

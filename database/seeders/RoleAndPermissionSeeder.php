@@ -105,7 +105,17 @@ class RoleAndPermissionSeeder extends Seeder
             }
         }
 
-        // HR can also approve collections
+        // Direct managers approve collections from mobile; HR can too (dashboard)
+        $managerApprovePermissions = Permission::whereIn('name', [
+            'view_collections',
+            'approve_collections',
+        ])->pluck('id');
+
+        $managerRole = Role::where('name', 'manager')->first();
+        if ($managerRole && $managerApprovePermissions->isNotEmpty()) {
+            $managerRole->permissions()->syncWithoutDetaching($managerApprovePermissions);
+        }
+
         $hrRole = Role::where('name', 'hr_manager')->first();
         $approveCollection = Permission::where('name', 'approve_collections')->first();
         if ($hrRole && $approveCollection) {

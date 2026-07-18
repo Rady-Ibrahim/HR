@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Approval;
 use App\Models\Collection;
+use App\Models\Employee;
 use App\Models\Request as RequestModel;
 use App\Models\Salary;
 use Illuminate\Http\JsonResponse;
@@ -36,10 +37,25 @@ class ApprovalController
             return $request;
         })->filter()->values();
 
-        $pendingCollections = Collection::where('collection_status', 'pending')
-            ->with('delivery.request.customer', 'driver')
-            ->orderByDesc('created_at')
-            ->get();
+        $pendingCollectionsQuery = Collection::where('collection_status', 'pending')
+            ->with('delivery.request.customer', 'driver.manager')
+            ->orderByDesc('created_at');
+
+        $employee = Employee::where('user_id', auth()->id())->first();
+        $user = $request->user();
+
+        // Direct manager sees only subordinates' collections; HR/super_admin see all
+        if ($user && !$user->hasAnyRole(['super_admin', 'hr_manager'])) {
+            if ($employee) {
+                $pendingCollectionsQuery->whereHas('driver', function ($q) use ($employee) {
+                    $q->where('reporting_manager_id', $employee->id);
+                });
+            } else {
+                $pendingCollectionsQuery->whereRaw('1 = 0');
+            }
+        }
+
+        $pendingCollections = $pendingCollectionsQuery->get();
 
         $pendingSalaries = Salary::where('status', 'pending_approval')
             ->with('employee')

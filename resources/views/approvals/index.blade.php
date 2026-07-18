@@ -152,7 +152,12 @@ async function approveItem(type, id) {
     const notes = prompt('ملاحظات (اختياري):') ?? '';
     let url, body;
     if (type === 'request')    { url = `/requests/${id}/approve`;    body = { notes }; }
-    if (type === 'collection') { url = `/collections/${id}/approve`; body = { notes }; }
+    if (type === 'collection') {
+        const actual = prompt('المبلغ الفعلي (اتركه فارغ لاعتماد المبلغ المسجل):');
+        url = `/collections/${id}/approve`;
+        body = { notes };
+        if (actual !== null && actual !== '') body.actual_amount = parseFloat(actual);
+    }
     const r = await apiFetch(url, { method: 'POST', body: JSON.stringify(body) });
     if (r.success) { showAlert('تم الاعتماد'); loadPending(); }
     else showAlert(r.message, 'danger');

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Collection;
 use App\Models\CollectionDetail;
+use App\Models\Employee;
+use App\Models\Request as RequestModel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -12,7 +14,7 @@ class CollectionController
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Collection::with(['delivery.request.customer', 'driver']);
+        $query = Collection::with(['delivery.request.customer', 'driver.manager']);
 
         if ($request->filled('status'))          $query->where('collection_status', $request->status);
         if ($request->filled('driver_id'))       $query->where('driver_id', $request->driver_id);
@@ -23,9 +25,11 @@ class CollectionController
                   ->whereYear('collected_date', $request->year);
         }
 
+        $this->scopeForApprover($query);
+
         $collections = $query->orderByDesc('created_at')->paginate($request->get('per_page', 15));
 
-        $totalAmount = $query->sum('total_amount');
+        $totalAmount = (clone $query)->sum('total_amount');
 
         return response()->json([
             'success'      => true,
@@ -125,42 +129,87 @@ class CollectionController
 
     public function approve(Request $request, $id): JsonResponse
     {
-        $collection = Collection::findOrFail($id);
-        $validated  = $request->validate([
-            'actual_amount' => 'required|numeric|min:0',
+        $collection = Collection::with(['driver', 'delivery.request', 'details'])->findOrFail($id);
+        $employee = $this->currentEmployee();
+        $user = $request->user();
+
+        if (!$collection->canBeApprovedBy($employee, $user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'فقط المدير المباشر للسائق/المندوب يمكنه اعتماد هذا التحصيل',
+            ], 403);
+        }
+
+        if ($collection->collection_status !== 'pending') {
+            return response()->json([
+                'success' => false,
+                'message' => 'هذا التحصيل ليس في انتظار الموافقة',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'actual_amount' => 'nullable|numeric|min:0',
             'notes'         => 'nullable|string',
         ]);
 
-        $difference = $validated['actual_amount'] - $collection->total_amount;
-        $matched    = abs($difference) < 0.01;
+        $actualAmount = $validated['actual_amount'] ?? $collection->total_amount;
+        $difference = (float) $actualAmount - (float) $collection->total_amount;
+        $matched = abs($difference) < 0.01;
 
         $collection->update([
             'collection_status' => 'deposited',
-            'deposited_date'    => now(),
+            'deposited_date' => now(),
+            'notes' => $validated['notes'] ?? $collection->notes,
         ]);
 
+        if ($collection->delivery?->request) {
+            $collection->delivery->request->update(['status' => 'collected']);
+        } elseif ($collection->details()->whereNotNull('request_id')->exists()) {
+            $requestIds = $collection->details()->whereNotNull('request_id')->pluck('request_id');
+            RequestModel::whereIn('id', $requestIds)->update(['status' => 'collected']);
+        }
+
         return response()->json([
-            'success'    => true,
-            'message'    => 'تم اعتماد التحصيل بنجاح',
-            'data'       => $collection,
+            'success' => true,
+            'message' => 'تم اعتماد التحصيل بنجاح',
+            'data' => $collection->fresh(['delivery.request.customer', 'driver.manager']),
             'difference' => $difference,
-            'matched'    => $matched,
+            'matched' => $matched,
+            'approved_by' => $employee?->only(['id', 'name', 'employee_code']),
         ]);
     }
 
     public function reject(Request $request, $id): JsonResponse
     {
-        $collection = Collection::findOrFail($id);
-        $validated  = $request->validate(['reason' => 'required|string']);
+        $collection = Collection::with(['driver', 'delivery.request', 'details'])->findOrFail($id);
+        $employee = $this->currentEmployee();
+        $user = $request->user();
+
+        if (!$collection->canBeApprovedBy($employee, $user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'فقط المدير المباشر للسائق/المندوب يمكنه رفض هذا التحصيل',
+            ], 403);
+        }
+
+        if ($collection->collection_status !== 'pending') {
+            return response()->json([
+                'success' => false,
+                'message' => 'هذا التحصيل ليس في انتظار الموافقة',
+            ], 422);
+        }
+
+        $validated = $request->validate(['reason' => 'required|string']);
 
         $collection->update([
             'collection_status' => 'rejected',
+            'notes' => trim(($collection->notes ? $collection->notes . "\n" : '') . 'رفض: ' . $validated['reason']),
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'تم رفض التحصيل',
-            'data'    => $collection,
+            'data' => $collection->fresh(['delivery.request.customer', 'driver.manager']),
         ]);
     }
 
@@ -203,5 +252,41 @@ class CollectionController
         ];
 
         return response()->json(['success' => true, 'data' => $collections, 'summary' => $summary]);
+    }
+
+    /**
+     * Managers only see collections of their drivers/representatives.
+     * Drivers see their own. HR / super_admin see all.
+     */
+    private function scopeForApprover($query): void
+    {
+        $user = auth()->user();
+        if (!$user || $user->hasAnyRole(['super_admin', 'hr_manager'])) {
+            return;
+        }
+
+        $employee = $this->currentEmployee();
+        if (!$employee) {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+
+        if ($user->hasRole('manager') || $employee->is_manager) {
+            $query->whereHas('driver', function ($q) use ($employee) {
+                $q->where('reporting_manager_id', $employee->id);
+            });
+            return;
+        }
+
+        $query->where('driver_id', $employee->id);
+    }
+
+    private function currentEmployee(): ?Employee
+    {
+        if (!auth()->id()) {
+            return null;
+        }
+
+        return Employee::where('user_id', auth()->id())->first();
     }
 }
