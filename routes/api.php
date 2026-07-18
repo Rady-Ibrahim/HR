@@ -236,6 +236,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/monthly-summary', [CommissionController::class, 'monthlySummary']);
         Route::get('/',              [CommissionController::class, 'index']);
         Route::post('/',             [CommissionController::class, 'store']);
+        Route::post('/bulk-approve', [CommissionController::class, 'bulkApprove']);
         Route::get('/{id}',          [CommissionController::class, 'show']);
         Route::put('/{id}',          [CommissionController::class, 'update']);
         Route::delete('/{id}',       [CommissionController::class, 'destroy']);
@@ -298,6 +299,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('notifications')->group(function () {
         Route::get('/unread-count',    [NotificationController::class, 'unreadCount']);
         Route::post('/read-all',       [NotificationController::class, 'markAllRead']);
+        Route::post('/send',           [NotificationController::class, 'send']);
         Route::get('/',                [NotificationController::class, 'index']);
         Route::post('/{id}/read',      [NotificationController::class, 'markRead']);
         Route::delete('/{id}',         [NotificationController::class, 'destroy']);

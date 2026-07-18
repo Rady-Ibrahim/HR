@@ -17,7 +17,8 @@ class Employee extends Model
     protected $fillable = [
         'user_id', 'employee_code', 'name', 'email', 'phone', 'phone_alternative',
         'national_id', 'date_of_birth', 'joining_date', 'position', 'department',
-        'employee_type', 'salary_type', 'base_salary', 'status', 'car_license', 'car_number',
+        'employee_type', 'salary_type', 'base_salary', 'collection_commission_rate',
+        'status', 'car_license', 'car_number',
         'gps_device_id', 'reporting_manager_id', 'notes'
     ];
 
@@ -27,6 +28,7 @@ class Employee extends Model
         'joining_date' => 'date',
         'date_of_birth' => 'date',
         'base_salary' => 'decimal:2',
+        'collection_commission_rate' => 'decimal:2',
         'employee_type' => EmployeeTypeEnum::class,
     ];
 

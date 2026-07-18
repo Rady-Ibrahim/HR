@@ -6,6 +6,7 @@ use App\Models\Collection;
 use App\Models\CollectionDetail;
 use App\Models\Employee;
 use App\Models\Request as RequestModel;
+use App\Services\CollectionCommissionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -73,12 +74,16 @@ class CollectionController
                 }
             }
 
+            $commission = app(CollectionCommissionService::class)
+                ->createFromCollection($collection->load('driver'));
+
             DB::commit();
 
             return response()->json([
                 'success' => true,
                 'message' => 'تم تسجيل التحصيل بنجاح',
-                'data'    => $collection->load(['delivery.request.customer', 'details']),
+                'data'    => $collection->load(['delivery.request.customer', 'details', 'commission']),
+                'commission' => $commission,
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -205,6 +210,8 @@ class CollectionController
             'collection_status' => 'rejected',
             'notes' => trim(($collection->notes ? $collection->notes . "\n" : '') . 'رفض: ' . $validated['reason']),
         ]);
+
+        app(CollectionCommissionService::class)->syncOnCollectionRejected($collection);
 
         return response()->json([
             'success' => true,

@@ -8,8 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Commission extends Model
 {
     protected $fillable = [
-        'employee_id', 'month', 'year', 'amount', 'commission_rate',
-        'total_sales', 'description', 'status', 'approved_by_id'
+        'employee_id', 'collection_id', 'month', 'year', 'amount', 'commission_rate',
+        'total_sales', 'description', 'source', 'status', 'approved_by_id'
     ];
 
     protected $casts = [
@@ -21,6 +21,11 @@ class Commission extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    public function collection(): BelongsTo
+    {
+        return $this->belongsTo(Collection::class);
     }
 
     public function approver(): BelongsTo

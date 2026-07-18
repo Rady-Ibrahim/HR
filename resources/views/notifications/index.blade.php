@@ -4,14 +4,24 @@
 
 @section('content')
 <div class="page-header">
-    <div><h1><i class="fas fa-bell me-2 text-primary"></i> الإشعارات</h1></div>
-    <button class="btn btn-outline-secondary" onclick="markAllRead()"><i class="fas fa-check-double me-1"></i> تحديد الكل كمقروء</button>
+    <div>
+        <h1><i class="fas fa-bell me-2 text-primary"></i> الإشعارات</h1>
+        <div class="breadcrumb">إرسال وعرض الإشعارات</div>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn-primary-custom" onclick="openSendModal()">
+            <i class="fas fa-paper-plane me-1"></i> إرسال إشعار
+        </button>
+        <button class="btn btn-outline-secondary" onclick="markAllRead()">
+            <i class="fas fa-check-double me-1"></i> تحديد الكل كمقروء
+        </button>
+    </div>
 </div>
 
 <div class="section-card">
     <div class="section-header">
         <i class="fas fa-bell text-primary"></i>
-        <h5 class="section-title">الإشعارات</h5>
+        <h5 class="section-title">صندوق الوارد</h5>
         <span class="ms-2 badge bg-danger" id="notifCountBadge" style="display:none">0</span>
     </div>
     <div id="notifList">
@@ -19,22 +29,67 @@
     </div>
     <div class="section-body d-flex justify-content-center" id="notifPagination"></div>
 </div>
+
+<!-- SEND MODAL -->
+<div class="modal fade" id="sendNotifModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-paper-plane me-2"></i> إرسال إشعار للموظفين</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="sendNotifForm">
+                    <div class="mb-3">
+                        <label class="form-label">العنوان *</label>
+                        <input type="text" id="nf_title" class="form-control" required placeholder="مثال: تنفيذ مهمة عاجلة">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">الرسالة *</label>
+                        <textarea id="nf_message" class="form-control" rows="4" required placeholder="نص الإشعار..."></textarea>
+                    </div>
+                    <div class="mb-2 d-flex justify-content-between align-items-center">
+                        <label class="form-label mb-0">المستلمون *</label>
+                        <div class="d-flex gap-2">
+                            <input type="text" id="nf_search" class="form-control form-control-sm" placeholder="بحث..." style="width:180px" oninput="filterEmployeeChecks()">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleAllEmployees(true)">تحديد الكل</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllEmployees(false)">إلغاء</button>
+                        </div>
+                    </div>
+                    <div id="nf_employees" class="border rounded p-2" style="max-height:260px;overflow:auto">
+                        <div class="text-center text-muted py-3">جاري تحميل الموظفين...</div>
+                    </div>
+                    <small class="text-muted" id="nf_selectedCount">0 محدد</small>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <button type="button" class="btn-primary-custom" onclick="sendNotification()"><i class="fas fa-paper-plane me-1"></i> إرسال</button>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
 <script>
+let allEmployeesForNotif = [];
+
 async function loadNotifications(page = 1) {
     const r = await apiFetch(`/notifications?per_page=20&page=${page}`);
     if (!r.success) return;
     const data = r.data;
     const unread = r.unread_count;
 
+    const badge = document.getElementById('notifCountBadge');
     if (unread > 0) {
-        document.getElementById('notifCountBadge').textContent = unread;
-        document.getElementById('notifCountBadge').style.display = '';
+        badge.textContent = unread;
+        badge.style.display = '';
+    } else {
+        badge.style.display = 'none';
     }
 
-    const all = data.data;
+    const all = data.data ?? [];
     if (!all.length) {
         document.getElementById('notifList').innerHTML = '<div class="text-center py-5 text-muted"><i class="fas fa-bell-slash fa-3x mb-3"></i><br>لا توجد إشعارات</div>';
         return;
@@ -48,7 +103,10 @@ async function loadNotifications(page = 1) {
             <div class="flex-grow-1">
                 <div class="fw-bold ${!n.is_read ? 'text-primary' : 'text-muted'}">${n.title ?? 'إشعار'}</div>
                 <div style="font-size:.875rem">${n.body ?? n.message ?? ''}</div>
-                <div style="font-size:.75rem;color:#a0aec0;margin-top:4px">${n.created_at ? new Date(n.created_at).toLocaleString('ar-EG') : ''}</div>
+                <div style="font-size:.75rem;color:#a0aec0;margin-top:4px">
+                    ${n.notification_type === 'hr_direct' ? '<span class="badge bg-primary me-1">من HR</span>' : ''}
+                    ${n.created_at ? new Date(n.created_at).toLocaleString('ar-EG') : ''}
+                </div>
             </div>
             <div class="d-flex gap-1 me-2">
                 ${!n.is_read ? `<button class="btn btn-sm btn-outline-primary" onclick="markRead(${n.id})"><i class="fas fa-check"></i></button>` : ''}
@@ -62,6 +120,84 @@ async function loadNotifications(page = 1) {
         pages.push(`<button class="btn btn-sm ${i === data.current_page ? 'btn-primary' : 'btn-outline-primary'} mx-1" onclick="loadNotifications(${i})">${i}</button>`);
     }
     document.getElementById('notifPagination').innerHTML = pages.join('');
+}
+
+async function openSendModal() {
+    document.getElementById('sendNotifForm').reset();
+    document.getElementById('nf_selectedCount').textContent = '0 محدد';
+    new bootstrap.Modal(document.getElementById('sendNotifModal')).show();
+    await loadEmployeesForNotif();
+}
+
+async function loadEmployeesForNotif() {
+    const box = document.getElementById('nf_employees');
+    box.innerHTML = '<div class="text-center text-muted py-3">جاري التحميل...</div>';
+    const r = await apiFetch('/employees?per_page=1000&status=active');
+    if (!r.success) {
+        box.innerHTML = '<div class="text-danger p-2">فشل تحميل الموظفين</div>';
+        return;
+    }
+    allEmployeesForNotif = r.data?.data ?? r.data ?? [];
+    renderEmployeeChecks(allEmployeesForNotif);
+}
+
+function renderEmployeeChecks(list) {
+    const box = document.getElementById('nf_employees');
+    if (!list.length) {
+        box.innerHTML = '<div class="text-muted p-2">لا يوجد موظفون</div>';
+        return;
+    }
+    box.innerHTML = list.map(e => `
+        <label class="d-flex align-items-center gap-2 py-1 px-1 emp-check-row" data-name="${(e.name || '').toLowerCase()}" style="cursor:pointer;border-bottom:1px solid #f0f0f0">
+            <input type="checkbox" class="nf-emp-check" value="${e.id}" onchange="updateSelectedCount()">
+            <span class="fw-semibold">${e.name}</span>
+            <small class="text-muted ms-auto">${e.employee_code ?? ''} · ${e.employee_type_label || e.employee_type || ''}</small>
+        </label>
+    `).join('');
+    updateSelectedCount();
+}
+
+function filterEmployeeChecks() {
+    const q = (document.getElementById('nf_search').value || '').toLowerCase().trim();
+    document.querySelectorAll('.emp-check-row').forEach(row => {
+        row.style.display = !q || row.dataset.name.includes(q) ? '' : 'none';
+    });
+}
+
+function toggleAllEmployees(checked) {
+    document.querySelectorAll('.emp-check-row').forEach(row => {
+        if (row.style.display === 'none') return;
+        const cb = row.querySelector('.nf-emp-check');
+        if (cb) cb.checked = checked;
+    });
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const n = document.querySelectorAll('.nf-emp-check:checked').length;
+    document.getElementById('nf_selectedCount').textContent = n + ' محدد';
+}
+
+async function sendNotification() {
+    const title = document.getElementById('nf_title').value.trim();
+    const message = document.getElementById('nf_message').value.trim();
+    const employee_ids = [...document.querySelectorAll('.nf-emp-check:checked')].map(cb => parseInt(cb.value));
+
+    if (!title || !message) { showAlert('العنوان والرسالة مطلوبان', 'danger'); return; }
+    if (!employee_ids.length) { showAlert('اختر موظف واحد على الأقل', 'warning'); return; }
+
+    const r = await apiFetch('/notifications/send', {
+        method: 'POST',
+        body: JSON.stringify({ title, message, employee_ids, notification_type: 'hr_direct' }),
+    });
+
+    if (r.success) {
+        bootstrap.Modal.getInstance(document.getElementById('sendNotifModal')).hide();
+        showAlert(r.message || 'تم الإرسال');
+        loadNotifications();
+    } else {
+        showAlert(r.message || 'فشل الإرسال', 'danger');
+    }
 }
 
 async function markRead(id) {

@@ -106,6 +106,14 @@
                         <div class="col-md-6"><label class="form-label">الراتب الأساسي *</label>
                             <div class="input-group"><input type="number" name="base_salary" id="ef_base_salary" class="form-control" required><span class="input-group-text">ج.م</span></div>
                         </div>
+                        <div class="col-md-6" id="commissionRateGroup">
+                            <label class="form-label">نسبة عمولة التحصيل %</label>
+                            <div class="input-group">
+                                <input type="number" name="collection_commission_rate" id="ef_commission_rate" class="form-control" min="0" max="100" step="0.01" placeholder="مثال: 1 أو 0.5">
+                                <span class="input-group-text">%</span>
+                            </div>
+                            <small class="text-muted">للسائق / المندوب — تُحسب تلقائيًا عند كل تحصيل</small>
+                        </div>
                         <div class="col-md-6"><label class="form-label">الحالة *</label>
                             <select name="status" id="ef_status" class="form-select" required>
                                 <option value="active">نشط</option><option value="inactive">غير نشط</option>
@@ -261,6 +269,8 @@ function openAddModal() {
     document.getElementById('empModalTitle').innerHTML = '<i class="fas fa-user-plus me-2"></i> إضافة موظف جديد';
     document.getElementById('ef_status').value = 'active';
     document.getElementById('ef_employee_type').value = 'employee';
+    document.getElementById('ef_commission_rate').value = '';
+    toggleCommissionRateField();
     document.getElementById('ef_password').required = true;
     document.getElementById('ef_password_confirmation').required = true;
     document.getElementById('passwordRequired').style.display = '';
@@ -286,7 +296,9 @@ async function openEditModal(id) {
     document.getElementById('ef_employee_type').value = e.employee_type ?? 'employee';
     document.getElementById('ef_joining_date').value = e.joining_date ? e.joining_date.substring(0,10) : '';
     document.getElementById('ef_base_salary').value = e.base_salary ?? '';
+    document.getElementById('ef_commission_rate').value = e.collection_commission_rate ?? '';
     document.getElementById('ef_status').value      = e.status ?? 'active';
+    toggleCommissionRateField();
     document.getElementById('ef_car_number').value  = e.car_number ?? '';
     document.getElementById('ef_car_license').value = e.car_license ?? '';
     document.getElementById('ef_national_id').value = e.national_id ?? '';
@@ -306,6 +318,11 @@ async function saveEmployee() {
     const id   = document.getElementById('empId').value;
     const data = Object.fromEntries(new FormData(document.getElementById('employeeForm')));
     data.base_salary = parseFloat(data.base_salary);
+    if (data.collection_commission_rate !== undefined && data.collection_commission_rate !== '') {
+        data.collection_commission_rate = parseFloat(data.collection_commission_rate);
+    } else {
+        data.collection_commission_rate = null;
+    }
     if (data.manager_id) data.manager_id = parseInt(data.manager_id); else delete data.manager_id;
     delete data.is_manager;
 
@@ -514,8 +531,21 @@ async function changeStatus(id, status) {
 }
 
 function resetFilters() { ['searchInput','statusFilter','typeFilter','deptFilter'].forEach(id=>document.getElementById(id).value=''); loadEmployees(); }
+
+function toggleCommissionRateField() {
+    const type = document.getElementById('ef_employee_type').value;
+    const group = document.getElementById('commissionRateGroup');
+    if (!group) return;
+    group.style.display = type === 'driver_representative' ? '' : 'none';
+    if (type !== 'driver_representative') {
+        // keep value if switching back, but optional clear is nicer for non-drivers
+    }
+}
+
+document.getElementById('ef_employee_type').addEventListener('change', toggleCommissionRateField);
 document.getElementById('searchInput').addEventListener('keypress', e => { if(e.key==='Enter') loadEmployees(); });
 document.addEventListener('DOMContentLoaded', async () => {
+    toggleCommissionRateField();
     await loadEmployeeLookups();
     loadEmployees();
 });

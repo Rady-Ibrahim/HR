@@ -10,6 +10,7 @@ use App\Models\Notification;
 use App\Models\Request as RequestModel;
 use App\Models\Route as RouteModel;
 use App\Models\VehicleTracking;
+use App\Services\CollectionCommissionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -285,6 +286,9 @@ class DeliveryController
                 if ($delivery->request) {
                     $delivery->request->update(['status' => 'delivered']);
                 }
+
+                app(CollectionCommissionService::class)
+                    ->createFromCollection($collection->load('driver'));
             }
 
             $notifyEmployeeId = $validated['notify_employee_id'] ?? $delivery->collection_notify_employee_id;

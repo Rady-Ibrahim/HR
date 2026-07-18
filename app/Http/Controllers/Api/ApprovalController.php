@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Approval;
 use App\Models\Collection;
+use App\Models\Commission;
 use App\Models\Employee;
 use App\Models\Request as RequestModel;
 use App\Models\Salary;
@@ -62,13 +63,20 @@ class ApprovalController
             ->orderByDesc('created_at')
             ->get();
 
+        $pendingCommissions = Commission::where('status', 'pending')
+            ->with(['employee', 'collection'])
+            ->orderByDesc('created_at')
+            ->get();
+
         $summary = [
-            'total_pending'      => $pendingRequests->count() + $pendingCollections->count() + $pendingSalaries->count(),
+            'total_pending'      => $pendingRequests->count() + $pendingCollections->count() + $pendingSalaries->count() + $pendingCommissions->count(),
             'pending_requests'   => $pendingRequests->count(),
             'pending_reviewer_requests' => $pendingRequests->where('pending_approval_type', 'reviewer_request_review')->count(),
             'pending_manager_requests' => $pendingRequests->where('pending_approval_type', 'manager_request_review')->count(),
             'pending_collections'=> $pendingCollections->count(),
             'pending_salaries'   => $pendingSalaries->count(),
+            'pending_commissions'=> $pendingCommissions->count(),
+            'pending_commissions_amount' => (float) $pendingCommissions->sum('amount'),
         ];
 
         return response()->json([
@@ -78,6 +86,7 @@ class ApprovalController
                 'requests'    => $pendingRequests,
                 'collections' => $pendingCollections,
                 'salaries'    => $pendingSalaries,
+                'commissions' => $pendingCommissions,
             ],
         ]);
     }

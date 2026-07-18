@@ -634,6 +634,9 @@
             <span class="icon"><i class="fas fa-check-double"></i></span> الموافقات
             <span class="badge-count" id="pendingCount">-</span>
         </a>
+        <a href="/notifications" class="nav-link {{ request()->is('notifications*') ? 'active' : '' }}">
+            <span class="icon"><i class="fas fa-bell"></i></span> الإشعارات
+        </a>
         <a href="/reports" class="nav-link {{ request()->is('reports*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-chart-bar"></i></span> التقارير
         </a>

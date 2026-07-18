@@ -246,22 +246,37 @@ class AttendanceController
 
     public function myRecords(Request $request): JsonResponse
     {
-        $employeeId = auth()->user()->employee_id ?? 1;
-        $month      = $request->get('month', now()->month);
-        $year       = $request->get('year', now()->year);
+        $employee = $this->currentEmployee();
+        if (!$employee) {
+            return response()->json([
+                'success'    => true,
+                'data'       => [],
+                'statistics' => [
+                    'present'            => 0,
+                    'absent'             => 0,
+                    'late'               => 0,
+                    'on_leave'           => 0,
+                    'total_hours'        => 0,
+                    'total_late_minutes' => 0,
+                ],
+            ]);
+        }
 
-        $records = Attendance::where('employee_id', $employeeId)
+        $month = $request->get('month', now()->month);
+        $year  = $request->get('year', now()->year);
+
+        $records = Attendance::where('employee_id', $employee->id)
             ->whereMonth('attendance_date', $month)
             ->whereYear('attendance_date', $year)
             ->orderBy('attendance_date')
             ->get();
 
         $stats = [
-            'present'     => $records->where('status', 'present')->count(),
-            'absent'      => $records->where('status', 'absent')->count(),
-            'late'        => $records->where('status', 'late')->count(),
-            'on_leave'    => $records->where('status', 'on_leave')->count(),
-            'total_hours' => $records->sum('working_hours'),
+            'present'            => $records->where('status', 'present')->count(),
+            'absent'             => $records->where('status', 'absent')->count(),
+            'late'               => $records->where('status', 'late')->count(),
+            'on_leave'           => $records->where('status', 'on_leave')->count(),
+            'total_hours'        => $records->sum('working_hours'),
             'total_late_minutes' => $records->sum('late_minutes'),
         ];
 
@@ -321,7 +336,7 @@ class AttendanceController
 
         $leaveRequest->update([
             'approval_status' => $validated['status'],
-            'approved_by_id'  => auth()->user()->employee_id ?? 1,
+            'approved_by_id'  => $this->currentEmployee()?->id ?? 1,
             'approval_notes'  => $validated['notes'] ?? null,
         ]);
 
@@ -460,5 +475,14 @@ class AttendanceController
             'half_day_after_minutes' => $halfDayAfterMinutes,
             'deduction_type' => $lateMinutes >= $halfDayAfterMinutes ? 'half_day' : 'minutes',
         ];
+    }
+
+    private function currentEmployee(): ?Employee
+    {
+        if (!auth()->id()) {
+            return null;
+        }
+
+        return Employee::where('user_id', auth()->id())->first();
     }
 }

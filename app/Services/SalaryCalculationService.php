@@ -55,13 +55,14 @@ class SalaryCalculationService
                 $components[] = ['type' => 'allowance', 'name' => $all->allowance_type, 'id' => $all->id, 'amount' => $all->amount];
             }
 
-            // 3. Commissions
+            // 3. Commissions (approved only — pending wait for الاعتماد الكلي)
             $commissions = Commission::where('employee_id', $employee->id)
                 ->where('month', $month)->where('year', $year)
-                ->whereIn('status', ['pending', 'approved'])->get();
+                ->where('status', 'approved')->get();
             $totalCommissions = $commissions->sum('amount');
             foreach ($commissions as $com) {
-                $components[] = ['type' => 'commission', 'name' => 'عمولة مبيعات', 'id' => $com->id, 'amount' => $com->amount];
+                $label = $com->source === 'collection' ? 'عمولة تحصيل' : 'عمولة مبيعات';
+                $components[] = ['type' => 'commission', 'name' => $label, 'id' => $com->id, 'amount' => $com->amount];
             }
 
             // Gross salary

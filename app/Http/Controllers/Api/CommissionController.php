@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\Commission;
+use App\Models\Employee;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -88,17 +89,43 @@ class CommissionController
 
     public function approve($id): JsonResponse
     {
-        Commission::findOrFail($id)->update([
-            'status'         => 'approved',
-            'approved_by_id' => auth()->user()->employee_id ?? 1,
+        $commission = Commission::findOrFail($id);
+        $approverId = Employee::where('user_id', auth()->id())->value('id');
+
+        $commission->update([
+            'status' => 'approved',
+            'approved_by_id' => $approverId,
         ]);
-        return response()->json(['success' => true, 'message' => 'تم اعتماد العمولة بنجاح']);
+
+        return response()->json(['success' => true, 'message' => 'تم اعتماد العمولة بنجاح', 'data' => $commission]);
     }
 
     public function reject($id): JsonResponse
     {
         Commission::findOrFail($id)->update(['status' => 'rejected']);
         return response()->json(['success' => true, 'message' => 'تم رفض العمولة']);
+    }
+
+    public function bulkApprove(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'commission_ids' => 'required|array|min:1',
+            'commission_ids.*' => 'exists:commissions,id',
+        ]);
+
+        $approverId = Employee::where('user_id', auth()->id())->value('id');
+        $count = Commission::whereIn('id', $validated['commission_ids'])
+            ->where('status', 'pending')
+            ->update([
+                'status' => 'approved',
+                'approved_by_id' => $approverId,
+            ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "تم اعتماد {$count} عمولة بنجاح",
+            'count' => $count,
+        ]);
     }
 
     public function destroy($id): JsonResponse
