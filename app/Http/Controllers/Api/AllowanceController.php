@@ -14,7 +14,20 @@ class AllowanceController
 
         if ($request->filled('employee_id'))    $query->where('employee_id', $request->employee_id);
         if ($request->filled('status'))         $query->where('status', $request->status);
-        if ($request->filled('allowance_type')) $query->where('allowance_type', $request->allowance_type);
+        if ($request->filled('allowance_type')) {
+            $query->where('allowance_type', 'like', '%' . $request->allowance_type . '%');
+        }
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->whereHas('employee', function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('employee_code', 'like', "%{$search}%");
+            });
+        }
+        if ($request->filled('month') && $request->filled('year')) {
+            $query->whereMonth('start_date', $request->month)
+                ->whereYear('start_date', $request->year);
+        }
 
         $allowances = $query->orderByDesc('start_date')->paginate($request->get('per_page', 15));
         $allowances->getCollection()->transform(function ($allowance) {
@@ -44,6 +57,7 @@ class AllowanceController
 
         $month = $validated['month'] ?? now()->month;
         $year = $validated['year'] ?? now()->year;
+        $validated['allowance_type'] = trim($validated['allowance_type']);
         $validated['start_date'] = $validated['start_date'] ?? sprintf('%04d-%02d-01', $year, $month);
         $validated['recurring'] = $validated['recurring'] ?? $validated['is_recurring'] ?? false;
         unset($validated['month'], $validated['year'], $validated['is_recurring']);
@@ -104,6 +118,19 @@ class AllowanceController
     {
         Allowance::findOrFail($id)->delete();
         return response()->json(['success' => true, 'message' => 'تم حذف البدل بنجاح']);
+    }
+
+    public function types(): JsonResponse
+    {
+        $types = Allowance::query()
+            ->whereNotNull('allowance_type')
+            ->where('allowance_type', '!=', '')
+            ->distinct()
+            ->orderBy('allowance_type')
+            ->pluck('allowance_type')
+            ->values();
+
+        return response()->json(['success' => true, 'data' => $types]);
     }
 
     public function employeeAllowances($employeeId): JsonResponse

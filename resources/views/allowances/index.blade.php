@@ -14,7 +14,7 @@
         <div class="row g-2 align-items-end">
             <div class="col-md-3"><label class="form-label">الموظف</label><input type="text" id="allEmp" class="form-control" placeholder="اسم الموظف..."></div>
             <div class="col-md-2"><label class="form-label">النوع</label>
-                <select id="allType" class="form-select"><option value="">الكل</option><option value="transportation">مواصلات</option><option value="housing">سكن</option><option value="meal">وجبات</option><option value="phone">هاتف</option><option value="other">أخرى</option></select>
+                <input type="text" id="allType" class="form-control" list="allowanceTypeSuggestions" placeholder="الكل / ابحث بنوع">
             </div>
             <div class="col-md-2"><label class="form-label">الشهر</label><input type="number" id="allMonth" class="form-control" min="1" max="12" value="{{ date('n') }}"></div>
             <div class="col-md-2"><label class="form-label">السنة</label><input type="number" id="allYear" class="form-control" value="{{ date('Y') }}"></div>
@@ -51,12 +51,11 @@
                     <input type="hidden" id="allId">
                     <div class="row g-3">
                         <div class="col-12"><label class="form-label">الموظف *</label><select name="employee_id" id="alf_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select></div>
-                        <div class="col-md-6"><label class="form-label">نوع البدل *</label>
-                            <select name="allowance_type" id="alf_type" class="form-select" required>
-                                <option value="transportation">مواصلات</option><option value="housing">سكن</option>
-                                <option value="meal">وجبات</option><option value="phone">هاتف</option><option value="other">أخرى</option>
-                            </select>
+                        <div class="col-md-6"><label class="form-label">نوع البدل / اسم الخدمة *</label>
+                            <input type="text" name="allowance_type" id="alf_type" class="form-control" list="allowanceTypeSuggestions" required placeholder="مثال: بدل إجازات، ساعات إضافية، مواصلات">
+                            <small class="text-muted">اكتب نوعًا جديدًا أو اختر من المقترحات</small>
                         </div>
+                        <datalist id="allowanceTypeSuggestions"></datalist>
                         <div class="col-md-6"><label class="form-label">المبلغ *</label><div class="input-group"><input type="number" name="amount" id="alf_amount" class="form-control" required><span class="input-group-text">ج.م</span></div></div>
                         <div class="col-md-6"><label class="form-label">الشهر *</label><input type="number" name="month" id="alf_month" class="form-control" min="1" max="12" required value="{{ date('n') }}"></div>
                         <div class="col-md-6"><label class="form-label">السنة *</label><input type="number" name="year" id="alf_year" class="form-control" required value="{{ date('Y') }}"></div>
@@ -94,12 +93,24 @@
 @push('scripts')
 <script>
 let allDeleteId=null, allPage=1;
-const allTypes = { transportation:'مواصلات', housing:'سكن', meal:'وجبات', phone:'هاتف', other:'أخرى' };
+const defaultAllowanceTypes = ['مواصلات', 'سكن', 'وجبات', 'هاتف', 'بدل إجازات', 'ساعات إضافية', 'بدل انتقال', 'أخرى'];
+
+async function loadAllowanceTypeSuggestions() {
+    const list = document.getElementById('allowanceTypeSuggestions');
+    const types = new Set(defaultAllowanceTypes);
+    try {
+        const r = await apiFetch('/allowances/types');
+        if (r.success && Array.isArray(r.data)) {
+            r.data.forEach(t => { if (t) types.add(t); });
+        }
+    } catch (_) {}
+    list.innerHTML = [...types].map(t => `<option value="${t}"></option>`).join('');
+}
 
 async function loadAllowances(page=1) {
     allPage=page;
     const params = new URLSearchParams({ per_page:15, page });
-    const t=document.getElementById('allType').value; if(t) params.append('allowance_type',t);
+    const t=document.getElementById('allType').value.trim(); if(t) params.append('allowance_type',t);
     const m=document.getElementById('allMonth').value; if(m) params.append('month',m);
     const y=document.getElementById('allYear').value; if(y) params.append('year',y);
     const e=document.getElementById('allEmp').value; if(e) params.append('search',e);
@@ -112,12 +123,12 @@ async function loadAllowances(page=1) {
     document.getElementById('allowancesTable').innerHTML = data.map(a=>`
         <tr>
             <td>${a.employee?.name??'-'}</td>
-            <td>${allTypes[a.allowance_type]||a.allowance_type}</td>
+            <td><span class="badge-status badge-approved">${a.allowance_type||'-'}</span></td>
             <td class="fw-bold text-success">${Number(a.amount).toLocaleString()} ج.م</td>
             <td>${a.month}/${a.year}</td>
             <td>${a.is_recurring?'<i class="fas fa-check text-success"></i>':'-'}</td>
             <td>${a.notes??'-'}</td>
-            <td><span class="badge-status ${a.status==='approved'?'badge-active':a.status==='rejected'?'badge-rejected':'badge-pending'}">${a.status==='approved'?'معتمد':a.status==='rejected'?'مرفوض':'معلق'}</span></td>
+            <td><span class="badge-status ${a.status==='active'?'badge-active':a.status==='inactive'?'badge-inactive':'badge-pending'}">${a.status==='active'?'نشط':a.status==='inactive'?'غير نشط':(a.status??'-')}</span></td>
             <td>
                 <div class="d-flex gap-1 flex-wrap">
                     <button class="btn btn-sm btn-outline-warning" onclick="openEditModal(${a.id})"><i class="fas fa-edit"></i></button>
@@ -135,15 +146,18 @@ function openAddModal() {
     document.getElementById('allModalTitle').innerHTML='<i class="fas fa-plus-circle me-2 text-success"></i> إضافة بدل جديد';
     document.getElementById('alf_month').value='{{ date("n") }}';
     document.getElementById('alf_year').value='{{ date("Y") }}';
+    document.getElementById('alf_type').value='';
+    loadAllowanceTypeSuggestions();
     new bootstrap.Modal(document.getElementById('allModal')).show();
 }
 async function openEditModal(id) {
     document.getElementById('allModalTitle').innerHTML='<i class="fas fa-edit me-2"></i> تعديل البدل';
+    await loadAllowanceTypeSuggestions();
     new bootstrap.Modal(document.getElementById('allModal')).show();
     const r=await apiFetch('/allowances/'+id); if(!r.success) return; const a=r.data;
     document.getElementById('allId').value=a.id;
     document.getElementById('alf_emp').value=a.employee_id;
-    document.getElementById('alf_type').value=a.allowance_type;
+    document.getElementById('alf_type').value=a.allowance_type??'';
     document.getElementById('alf_amount').value=a.amount;
     document.getElementById('alf_month').value=a.month;
     document.getElementById('alf_year').value=a.year;
@@ -154,10 +168,12 @@ async function saveAllowance() {
     const id=document.getElementById('allId').value;
     const fd=new FormData(document.getElementById('allForm'));
     const data=Object.fromEntries(fd);
+    data.allowance_type=(data.allowance_type||'').trim();
+    if(!data.allowance_type){ showAlert('اكتب نوع البدل / اسم الخدمة','danger'); return; }
     data.amount=parseFloat(data.amount); data.month=parseInt(data.month); data.year=parseInt(data.year); data.employee_id=parseInt(data.employee_id);
     data.is_recurring=document.getElementById('alf_recurring').checked;
     const r=await apiFetch(id?`/allowances/${id}`:'/allowances',{method:id?'PUT':'POST',body:JSON.stringify(data)});
-    if(r.success){bootstrap.Modal.getInstance(document.getElementById('allModal')).hide();showAlert(id?'تم التحديث':'تم الإضافة');loadAllowances(allPage);}
+    if(r.success){bootstrap.Modal.getInstance(document.getElementById('allModal')).hide();showAlert(id?'تم التحديث':'تم الإضافة');loadAllowanceTypeSuggestions();loadAllowances(allPage);}
     else showAlert(r.message||'فشل الحفظ','danger');
 }
 function confirmDelete(id) { allDeleteId=id; new bootstrap.Modal(document.getElementById('allDeleteModal')).show(); }
@@ -173,6 +189,6 @@ function resetAllFilter() {
     document.getElementById('allMonth').value='{{ date("n") }}'; document.getElementById('allYear').value='{{ date("Y") }}';
     loadAllowances();
 }
-document.addEventListener('DOMContentLoaded', loadAllowances);
+document.addEventListener('DOMContentLoaded', () => { loadAllowanceTypeSuggestions(); loadAllowances(); });
 </script>
 @endpush

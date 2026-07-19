@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\ApprovalController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\WorkLocationController;
+use App\Http\Controllers\Api\FinancialController;
 
 // Public
 Route::post('/auth/login', [AuthController::class, 'login']);
@@ -35,6 +36,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout',           [AuthController::class, 'logout']);
     Route::get('/auth/me',                [AuthController::class, 'me']);
     Route::post('/auth/change-password',  [AuthController::class, 'changePassword']);
+
+    // Mobile: my financial transactions
+    Route::get('/me/financials', [FinancialController::class, 'myFinancials']);
 
     // Dashboard
     Route::prefix('dashboard')->group(function () {
@@ -223,6 +227,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Allowances
     Route::prefix('allowances')->group(function () {
+        Route::get('/types',             [AllowanceController::class, 'types']);
         Route::get('/employee/{empId}', [AllowanceController::class, 'employeeAllowances']);
         Route::get('/',              [AllowanceController::class, 'index']);
         Route::post('/',             [AllowanceController::class, 'store']);
