@@ -377,16 +377,27 @@ class DeliveryController
 
     public function driverDeliveries(Request $request): JsonResponse
     {
-        $employeeId = auth()->user()->employee_id ?? 1;
+        $employee = Employee::where('user_id', auth()->id())->first();
+        if (!$employee) {
+            return response()->json([
+                'success' => false,
+                'message' => 'لا يوجد ملف موظف مرتبط بهذا الحساب',
+                'data' => [],
+            ], 404);
+        }
 
-        $deliveries = Delivery::with(['request.customer'])
-            ->where('driver_id', $employeeId)
-            ->when($request->filled('status'), fn($q) => $q->where('status', $request->status))
-            ->when($request->filled('date'), fn($q) => $q->whereDate('created_at', $request->date))
+        $deliveries = Delivery::with(['request.customer', 'routeStop.customer', 'route'])
+            ->where('driver_id', $employee->id)
+            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->status))
+            ->when($request->filled('date'), fn ($q) => $q->whereDate('created_at', $request->date))
             ->orderByDesc('created_at')
             ->paginate($request->get('per_page', 15));
 
-        return response()->json(['success' => true, 'data' => $deliveries]);
+        return response()->json([
+            'success' => true,
+            'data' => $deliveries,
+            'employee' => $employee->only(['id', 'name', 'employee_code']),
+        ]);
     }
 
     private function notifyEmployee(int $employeeId, string $title, string $message, object $related): void

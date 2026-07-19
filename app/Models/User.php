@@ -38,6 +38,12 @@ class User extends Authenticatable
         return $this->hasOne(Employee::class);
     }
 
+    /** Linked employee id via employees.user_id (users table has no employee_id column). */
+    public function getEmployeeIdAttribute(): ?int
+    {
+        return $this->employee?->id;
+    }
+
     public function roles(): BelongsToMany
     {
         return $this->belongsToMany(Role::class, 'role_user')->withTimestamps();
