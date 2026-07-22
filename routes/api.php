@@ -44,7 +44,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me/financials', [FinancialController::class, 'myFinancials']);
 
     // Departments
-\    Route::get('/departments', [DepartmentController::class, 'index']);
+    Route::get('/departments', [DepartmentController::class, 'index']);
 
     // Mobile: my allowed tabs
     Route::get('/me/tabs', [EmployeeTabPermissionController::class, 'myTabs']);
