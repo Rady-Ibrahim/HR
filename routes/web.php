@@ -76,4 +76,5 @@ Route::middleware('auth')->group(function () {
     Route::get('/reports',      fn() => view('reports.index'));
     Route::get('/notifications', fn() => view('notifications.index'));
     Route::get('/locations',    fn() => view('locations.index'));
+    Route::get('/employee-tab-permissions', fn() => view('employee-tab-permissions.index'));
 });

@@ -25,6 +25,8 @@ use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\WorkLocationController;
 use App\Http\Controllers\Api\FinancialController;
+use App\Http\Controllers\Api\EmployeeTabPermissionController;
+use App\Http\Controllers\Api\EmployeeMessageController;
 
 // Public
 Route::post('/auth/login', [AuthController::class, 'login']);
@@ -39,6 +41,28 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Mobile: my financial transactions
     Route::get('/me/financials', [FinancialController::class, 'myFinancials']);
+
+    // Mobile: my allowed tabs
+    Route::get('/me/tabs', [EmployeeTabPermissionController::class, 'myTabs']);
+
+    // ── Employee Messaging ──────────────────────────────────────────────────
+    Route::prefix('messages')->group(function () {
+        Route::get('/unread-count',        [EmployeeMessageController::class, 'unreadCount']);
+        Route::get('/',                    [EmployeeMessageController::class, 'conversations']);
+        Route::post('/',                   [EmployeeMessageController::class, 'send']);
+        Route::get('/{employeeId}',        [EmployeeMessageController::class, 'conversation']);
+        Route::put('/{employeeId}/read',   [EmployeeMessageController::class, 'markRead']);
+        Route::delete('/{messageId}',      [EmployeeMessageController::class, 'destroy']);
+    });
+
+    // Admin: Employee Tab Permissions
+    Route::prefix('employee-tabs')->group(function () {
+        Route::get('/',           [EmployeeTabPermissionController::class, 'index']);
+        Route::get('/available',  [EmployeeTabPermissionController::class, 'availableTabs']);
+        Route::get('/{id}',       [EmployeeTabPermissionController::class, 'show']);
+        Route::post('/{id}',      [EmployeeTabPermissionController::class, 'save']);
+        Route::delete('/{id}',    [EmployeeTabPermissionController::class, 'destroy']);
+    });
 
     // Dashboard
     Route::prefix('dashboard')->group(function () {

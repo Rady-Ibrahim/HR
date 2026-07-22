@@ -643,6 +643,9 @@
         <a href="/locations" class="nav-link {{ request()->is('locations*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-map-marker-alt"></i></span> مواقع العمل
         </a>
+        <a href="/employee-tab-permissions" class="nav-link {{ request()->is('employee-tab-permissions*') ? 'active' : '' }}">
+            <span class="icon"><i class="fas fa-layer-group"></i></span> صلاحيات التابات
+        </a>
     </div>
 </nav>
 

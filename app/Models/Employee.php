@@ -149,4 +149,19 @@ class Employee extends Model
     {
         return $this->hasMany(Approval::class, 'approved_by_id');
     }
+
+    public function tabPermissions(): HasMany
+    {
+        return $this->hasMany(EmployeeTabPermission::class)->orderBy('sort_order');
+    }
+
+    public function sentMessages(): HasMany
+    {
+        return $this->hasMany(EmployeeMessage::class, 'sender_id');
+    }
+
+    public function receivedMessages(): HasMany
+    {
+        return $this->hasMany(EmployeeMessage::class, 'receiver_id');
+    }
 }
