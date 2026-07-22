@@ -465,4 +465,66 @@ class EmployeeController
 
         return Employee::find(1);
     }
+
+
+    public function mobileList(Request $request)
+    {
+        $query = Employee::query();
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        } else {
+            $query->where('status', 'active');
+        }
+
+        if ($request->filled('employee_type')) {
+            $query->where('employee_type', $request->employee_type);
+        }
+
+        if ($request->filled('department')) {
+            $query->where('department', $request->department);
+        }
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('employee_code', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%")
+                    ->orWhere('department', 'like', "%{$search}%");
+            });
+        }
+
+        $employees = $query->orderBy('name')->get([
+            'id',
+            'user_id',
+            'name',
+            'phone',
+            'email',
+            'employee_code',
+            'department',
+            'employee_type'
+
+        ]);
+
+        $data = $employees->map(function ($emp) {
+            return [
+                'id'                  => $emp->id,
+                'user_id'             => $emp->user_id,
+                'name'                => $emp->name,
+                'phone'               => $emp->phone,
+                'email'               => $emp->email,
+                'employee_code'       => $emp->employee_code,
+                'department'          => $emp->department,
+                'employee_type'       => $emp->employee_type instanceof EmployeeTypeEnum ? $emp->employee_type->value : (string)$emp->employee_type,
+                'employee_type_label' => $emp->employee_type_label,
+
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'data'    => $data,
+        ]);
+    }
 }

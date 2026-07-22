@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\WorkLocationController;
 use App\Http\Controllers\Api\FinancialController;
 use App\Http\Controllers\Api\EmployeeTabPermissionController;
 use App\Http\Controllers\Api\EmployeeMessageController;
+use App\Http\Controllers\Api\DepartmentController;
 
 // Public
 Route::post('/auth/login', [AuthController::class, 'login']);
@@ -41,6 +42,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Mobile: my financial transactions
     Route::get('/me/financials', [FinancialController::class, 'myFinancials']);
+
+    // Departments
+\    Route::get('/departments', [DepartmentController::class, 'index']);
 
     // Mobile: my allowed tabs
     Route::get('/me/tabs', [EmployeeTabPermissionController::class, 'myTabs']);
@@ -76,6 +80,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Employees
     Route::prefix('employees')->group(function () {
+        Route::get('/mobile-list',          [EmployeeController::class, 'mobileList']);
         Route::get('/',                    [EmployeeController::class, 'index']);
         Route::post('/',                   [EmployeeController::class, 'store']);
         Route::get('/managers',            [EmployeeController::class, 'managers']);
