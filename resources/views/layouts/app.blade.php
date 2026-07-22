@@ -592,6 +592,9 @@
         <a href="/allowances" class="nav-link {{ request()->is('allowances*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-gift"></i></span> البدلات
         </a>
+        <a href="/employee-points" class="nav-link {{ request()->is('employee-points*') ? 'active' : '' }}">
+            <span class="icon"><i class="fas fa-star"></i></span> نقاط الموظفين
+        </a>
     </div>
 
     <div class="nav-section">

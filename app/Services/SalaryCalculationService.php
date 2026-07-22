@@ -9,6 +9,7 @@ use App\Models\CarViolation;
 use App\Models\Commission;
 use App\Models\Deduction;
 use App\Models\Employee;
+use App\Models\EmployeePoint;
 use App\Models\Incentive;
 use App\Models\Salary;
 use App\Models\SalaryComponentLog;
@@ -65,6 +66,15 @@ class SalaryCalculationService
                 $components[] = ['type' => 'commission', 'name' => $label, 'id' => $com->id, 'amount' => $com->amount];
             }
 
+            // 3.5 Employee Points (Credit: له)
+            $pointsCredit = (float) EmployeePoint::where('employee_id', $employee->id)
+                ->where('month', $month)->where('year', $year)
+                ->where('type', 'credit')->sum('total_amount');
+            if ($pointsCredit > 0) {
+                $totalIncentives += $pointsCredit;
+                $components[]     = ['type' => 'points_credit', 'name' => 'مكافأة نقاط (له)', 'id' => null, 'amount' => $pointsCredit];
+            }
+
             // Gross salary
             $grossSalary = $baseSalary + $totalIncentives + $totalAllowances + $totalCommissions;
 
@@ -75,6 +85,15 @@ class SalaryCalculationService
             $totalDeductions = $deductions->sum('amount');
             foreach ($deductions as $ded) {
                 $components[] = ['type' => 'deduction', 'name' => $ded->deduction_type, 'id' => $ded->id, 'amount' => -$ded->amount];
+            }
+
+            // 4.5 Employee Points (Debit: عليه)
+            $pointsDebit = (float) EmployeePoint::where('employee_id', $employee->id)
+                ->where('month', $month)->where('year', $year)
+                ->where('type', 'debit')->sum('total_amount');
+            if ($pointsDebit > 0) {
+                $totalDeductions += $pointsDebit;
+                $components[]     = ['type' => 'points_debit', 'name' => 'خصم نقاط (عليه)', 'id' => null, 'amount' => -$pointsDebit];
             }
 
             // 5. Attendance deductions (late, half-day late & absence)

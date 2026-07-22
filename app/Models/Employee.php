@@ -164,4 +164,9 @@ class Employee extends Model
     {
         return $this->hasMany(EmployeeMessage::class, 'receiver_id');
     }
+
+    public function points(): HasMany
+    {
+        return $this->hasMany(EmployeePoint::class);
+    }
 }

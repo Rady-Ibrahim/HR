@@ -58,6 +58,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/deductions',   fn() => view('deductions.index'));
     Route::get('/advances',     fn() => view('advances.index'));
     Route::get('/allowances',   fn() => view('allowances.index'));
+    Route::get('/employee-points', fn() => view('employee-points.index'));
 
     // Operations
     Route::get('/requests',     fn() => view('requests.index'));

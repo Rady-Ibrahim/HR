@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\FinancialController;
 use App\Http\Controllers\Api\EmployeeTabPermissionController;
 use App\Http\Controllers\Api\EmployeeMessageController;
 use App\Http\Controllers\Api\DepartmentController;
+use App\Http\Controllers\Api\EmployeePointController;
 
 // Public
 Route::post('/auth/login', [AuthController::class, 'login']);
@@ -48,6 +49,17 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Mobile: my allowed tabs
     Route::get('/me/tabs', [EmployeeTabPermissionController::class, 'myTabs']);
+
+    // Mobile: my points history
+    Route::get('/me/points', [EmployeePointController::class, 'myPoints']);
+
+    // Admin: Employee Points
+    Route::prefix('employee-points')->group(function () {
+        Route::get('/',        [EmployeePointController::class, 'index']);
+        Route::post('/',       [EmployeePointController::class, 'store']);
+        Route::get('/{id}',    [EmployeePointController::class, 'show']);
+        Route::delete('/{id}', [EmployeePointController::class, 'destroy']);
+    });
 
     // ── Employee Messaging ──────────────────────────────────────────────────
     Route::prefix('messages')->group(function () {
