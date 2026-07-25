@@ -636,7 +636,7 @@
         @endif
         @if($hasP('view_prepaid_requests'))
         <a href="/prepaid-requests" class="nav-link {{ request()->is('prepaid-requests*') ? 'active' : '' }}">
-            <span class="icon"><i class="fas fa-receipt"></i></span> المسبق الدفع
+            <span class="icon"><i class="fas fa-receipt"></i></span>تحضير الطلبيه 
         </a>
         @endif
         @if($hasP('view_routes'))

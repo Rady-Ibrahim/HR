@@ -296,13 +296,25 @@ function addStopRow(stop = null) {
                     <label class="form-label">الطلبيات المرتبطة</label>
                     <select class="form-select stop-requests" multiple size="3"></select>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label">عدد الطرود</label>
-                    <input type="number" class="form-control stop-packages" min="0" value="${stop?.packages_count ?? 0}">
-                </div>
-                <div class="col-md-2">
+                <div class="col-md-4">
                     <label class="form-label">المبلغ المفروض</label>
                     <input type="number" class="form-control stop-amount" min="0" step="0.01" value="${stop?.expected_amount ?? ''}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">صناديق</label>
+                    <input type="number" class="form-control stop-boxes" min="0" value="${stop?.boxes_count ?? 0}" oninput="calcPackages(this)">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">كراتين</label>
+                    <input type="number" class="form-control stop-cartons" min="0" value="${stop?.cartons_count ?? 0}" oninput="calcPackages(this)">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">أشرطة</label>
+                    <input type="number" class="form-control stop-bundles" min="0" value="${stop?.bundles_count ?? 0}" oninput="calcPackages(this)">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">عدد الطرود</label>
+                    <input type="number" class="form-control stop-packages" min="0" readonly value="${stop?.packages_count ?? 0}">
                 </div>
                 <div class="col-md-8">
                     <label class="form-label">البضاعة / ملاحظات اختيارية</label>
@@ -377,6 +389,14 @@ function removeStop(button) {
     refreshStopOrders();
 }
 
+function calcPackages(input) {
+    const row = input.closest('.route-stop-row');
+    const boxes = Number(row.querySelector('.stop-boxes').value || 0);
+    const cartons = Number(row.querySelector('.stop-cartons').value || 0);
+    const bundles = Number(row.querySelector('.stop-bundles').value || 0);
+    row.querySelector('.stop-packages').value = boxes + cartons + bundles;
+}
+
 function refreshStopOrders() {
     document.querySelectorAll('.route-stop-row').forEach((row, index) => {
         row.querySelector('.stop-order').textContent = `عميل ${index + 1}`;
@@ -423,6 +443,9 @@ function collectStops() {
         stops.push({
             customer_id: Number(customerId),
             request_ids: requestIds,
+            boxes_count: Number(row.querySelector('.stop-boxes').value || 0),
+            cartons_count: Number(row.querySelector('.stop-cartons').value || 0),
+            bundles_count: Number(row.querySelector('.stop-bundles').value || 0),
             packages_count: Number(row.querySelector('.stop-packages').value || 0),
             expected_amount: row.querySelector('.stop-amount').value ? Number(row.querySelector('.stop-amount').value) : null,
             goods_notes: row.querySelector('.stop-goods').value || null,
@@ -451,13 +474,16 @@ async function viewStops(id) {
         </div>
         <div class="table-responsive">
             <table class="data-table">
-                <thead><tr><th>الترتيب</th><th>العميل</th><th>الطلبيات</th><th>الطرود</th><th>المبلغ</th><th>البضاعة</th><th>الحالة</th></tr></thead>
+                <thead><tr><th>الترتيب</th><th>العميل</th><th>الطلبيات</th><th>صناديق</th><th>كراتين</th><th>أشرطة</th><th>الطرود</th><th>المبلغ</th><th>البضاعة</th><th>الحالة</th></tr></thead>
                 <tbody>
                     ${stops.map(stop => `
                         <tr>
                             <td>${stop.stop_order}</td>
                             <td>${escapeHtml(stop.customer?.name ?? '-')}</td>
                             <td>${(stop.request_ids || []).length || '-'}</td>
+                            <td>${stop.boxes_count ?? 0}</td>
+                            <td>${stop.cartons_count ?? 0}</td>
+                            <td>${stop.bundles_count ?? 0}</td>
                             <td>${stop.packages_count ?? 0}</td>
                             <td>${stop.expected_amount ? Number(stop.expected_amount).toLocaleString() + ' ج.م' : '-'}</td>
                             <td>${escapeHtml(stop.goods_notes ?? '-')}</td>

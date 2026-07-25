@@ -10,6 +10,7 @@ class RouteStop extends Model
 {
     protected $fillable = [
         'route_id', 'customer_id', 'stop_order', 'request_ids', 'packages_count',
+        'boxes_count', 'cartons_count', 'bundles_count',
         'expected_amount', 'goods_notes', 'delivery_status', 'notes',
     ];
 
