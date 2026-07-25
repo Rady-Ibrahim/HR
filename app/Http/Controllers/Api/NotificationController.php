@@ -11,14 +11,34 @@ class NotificationController
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Notification::where('user_id', auth()->id());
+        $tab = $request->get('tab', 'inbox');
+        $userId = auth()->id();
+
+        if ($tab === 'sent') {
+            $query = Notification::with('recipientEmployee:id,name,employee_code')
+                ->where('sender_id', $userId);
+
+            if ($request->filled('is_read')) {
+                $query->where('is_read', filter_var($request->is_read, FILTER_VALIDATE_BOOLEAN));
+            }
+
+            $notifications = $query->orderByDesc('created_at')->paginate($request->get('per_page', 20));
+
+            return response()->json([
+                'success' => true,
+                'data' => $notifications,
+            ]);
+        }
+
+        $query = Notification::with('sender:id,name')
+            ->where('user_id', $userId);
 
         if ($request->filled('is_read')) {
             $query->where('is_read', filter_var($request->is_read, FILTER_VALIDATE_BOOLEAN));
         }
 
         $notifications = $query->orderByDesc('created_at')->paginate($request->get('per_page', 20));
-        $unreadCount = Notification::where('user_id', auth()->id())->where('is_read', false)->count();
+        $unreadCount = Notification::where('user_id', $userId)->where('is_read', false)->count();
 
         return response()->json([
             'success' => true,
@@ -27,9 +47,6 @@ class NotificationController
         ]);
     }
 
-    /**
-     * HR / dashboard: send a notification to one or more employees.
-     */
     public function send(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -54,6 +71,7 @@ class NotificationController
         $created = [];
         foreach ($employees as $employee) {
             $created[] = Notification::create([
+                'sender_id' => auth()->id(),
                 'user_id' => $employee->user_id,
                 'title' => $validated['title'],
                 'message' => $validated['message'],
@@ -97,7 +115,9 @@ class NotificationController
 
     public function destroy($id): JsonResponse
     {
-        Notification::where('user_id', auth()->id())->findOrFail($id)->delete();
+        Notification::where(function ($q) {
+            $q->where('user_id', auth()->id())->orWhere('sender_id', auth()->id());
+        })->findOrFail($id)->delete();
 
         return response()->json(['success' => true, 'message' => 'تم حذف الإشعار']);
     }

@@ -21,13 +21,25 @@
 <div class="section-card">
     <div class="section-header">
         <i class="fas fa-bell text-primary"></i>
-        <h5 class="section-title">صندوق الوارد</h5>
+        <h5 class="section-title">
+            <span class="cursor-pointer" onclick="switchTab('inbox')" id="tabInboxBtn" style="border-bottom:2px solid var(--primary);padding-bottom:2px">صندوق الوارد</span>
+            <span class="text-muted mx-2">|</span>
+            <span class="cursor-pointer text-muted" onclick="switchTab('sent')" id="tabSentBtn">الإشعارات المرسلة</span>
+        </h5>
         <span class="ms-2 badge bg-danger" id="notifCountBadge" style="display:none">0</span>
     </div>
-    <div id="notifList">
-        <div class="text-center py-5"><div class="spinner mx-auto"></div></div>
+    <div id="inboxTab">
+        <div id="notifList">
+            <div class="text-center py-5"><div class="spinner mx-auto"></div></div>
+        </div>
+        <div class="section-body d-flex justify-content-center" id="notifPagination"></div>
     </div>
-    <div class="section-body d-flex justify-content-center" id="notifPagination"></div>
+    <div id="sentTab" style="display:none">
+        <div id="sentNotifList">
+            <div class="text-center py-5"><div class="spinner mx-auto"></div></div>
+        </div>
+        <div class="section-body d-flex justify-content-center" id="sentPagination"></div>
+    </div>
 </div>
 
 <!-- SEND MODAL -->
@@ -74,9 +86,34 @@
 @push('scripts')
 <script>
 let allEmployeesForNotif = [];
+let currentTab = 'inbox';
+
+function switchTab(tab) {
+    currentTab = tab;
+    document.getElementById('inboxTab').style.display = tab === 'inbox' ? '' : 'none';
+    document.getElementById('sentTab').style.display = tab === 'sent' ? '' : 'none';
+
+    const inboxBtn = document.getElementById('tabInboxBtn');
+    const sentBtn = document.getElementById('tabSentBtn');
+    if (tab === 'inbox') {
+        inboxBtn.style.borderBottom = '2px solid var(--primary)';
+        inboxBtn.style.paddingBottom = '2px';
+        inboxBtn.classList.remove('text-muted');
+        sentBtn.style.borderBottom = 'none';
+        sentBtn.classList.add('text-muted');
+        if (!document.getElementById('notifList').querySelector('.spinner')) loadNotifications();
+    } else {
+        sentBtn.style.borderBottom = '2px solid var(--primary)';
+        sentBtn.style.paddingBottom = '2px';
+        sentBtn.classList.remove('text-muted');
+        inboxBtn.style.borderBottom = 'none';
+        inboxBtn.classList.add('text-muted');
+        loadSentNotifications();
+    }
+}
 
 async function loadNotifications(page = 1) {
-    const r = await apiFetch(`/notifications?per_page=20&page=${page}`);
+    const r = await apiFetch(`/notifications?tab=inbox&per_page=20&page=${page}`);
     if (!r.success) return;
     const data = r.data;
     const unread = r.unread_count;
@@ -96,16 +133,20 @@ async function loadNotifications(page = 1) {
     }
 
     document.getElementById('notifList').innerHTML = all.map(n => `
-        <div class="d-flex align-items-start p-3 ${!n.is_read ? 'bg-light' : ''}" style="border-bottom:1px solid #f4f6fb">
+        <div class="d-flex align-items-start p-3" style="border-right:4px solid ${!n.is_read ? '#1565c0' : 'transparent'};border-bottom:1px solid #f4f6fb;background:${!n.is_read ? '#f0f4ff' : '#fff'}">
             <div class="me-3" style="width:42px;height:42px;border-radius:12px;background:${!n.is_read ? '#e3f2fd' : '#f4f6fb'};display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                <i class="fas fa-bell" style="color:${!n.is_read ? '#1565c0' : '#a0aec0'}"></i>
+                <i class="fas ${!n.is_read ? 'fa-envelope' : 'fa-envelope-open'}" style="color:${!n.is_read ? '#1565c0' : '#a0aec0'}"></i>
             </div>
             <div class="flex-grow-1">
-                <div class="fw-bold ${!n.is_read ? 'text-primary' : 'text-muted'}">${n.title ?? 'إشعار'}</div>
-                <div style="font-size:.875rem">${n.body ?? n.message ?? ''}</div>
+                <div class="fw-bold ${!n.is_read ? 'text-primary' : 'text-muted'}">
+                    ${n.title ?? 'إشعار'}
+                    ${!n.is_read ? '<span class="badge bg-warning text-dark ms-2" style="font-size:.65rem">جديد</span>' : '<span class="badge bg-secondary ms-2" style="font-size:.65rem">مقروء</span>'}
+                </div>
+                <div style="font-size:.875rem">${n.message || ''}</div>
                 <div style="font-size:.75rem;color:#a0aec0;margin-top:4px">
-                    ${n.notification_type === 'hr_direct' ? '<span class="badge bg-primary me-1">من HR</span>' : ''}
+                    ${n.sender ? '<span class="badge bg-primary me-1">من ' + n.sender.name + '</span>' : ''}
                     ${n.created_at ? new Date(n.created_at).toLocaleString('ar-EG') : ''}
+                    ${n.read_at ? '<span class="me-2">· قرئ في ' + new Date(n.read_at).toLocaleString('ar-EG') + '</span>' : ''}
                 </div>
             </div>
             <div class="d-flex gap-1 me-2">
@@ -120,6 +161,53 @@ async function loadNotifications(page = 1) {
         pages.push(`<button class="btn btn-sm ${i === data.current_page ? 'btn-primary' : 'btn-outline-primary'} mx-1" onclick="loadNotifications(${i})">${i}</button>`);
     }
     document.getElementById('notifPagination').innerHTML = pages.join('');
+}
+
+async function loadSentNotifications(page = 1) {
+    const r = await apiFetch(`/notifications?tab=sent&per_page=20&page=${page}`);
+    if (!r.success) return;
+    const data = r.data;
+    const all = data.data ?? [];
+
+    if (!all.length) {
+        document.getElementById('sentNotifList').innerHTML = '<div class="text-center py-5 text-muted"><i class="fas fa-paper-plane fa-3x mb-3"></i><br>لا توجد إشعارات مرسلة</div>';
+        return;
+    }
+
+    document.getElementById('sentNotifList').innerHTML = `<table class="table table-hover mb-0">
+        <thead class="table-light">
+            <tr>
+                <th>المستلم</th>
+                <th>العنوان</th>
+                <th>الرسالة</th>
+                <th>تاريخ الإرسال</th>
+                <th>حالة القراءة</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        ${all.map(n => {
+            const recipient = n.recipient_employee ?? {};
+            const readStatus = n.is_read
+                ? '<span class="badge bg-success">قُرئت</span>' + (n.read_at ? '<br><small style="font-size:.7rem">' + new Date(n.read_at).toLocaleString('ar-EG') + '</small>' : '')
+                : '<span class="badge bg-danger">غير مقروءة</span>';
+            return `<tr>
+                <td class="align-middle">${recipient.name || '#' + n.related_id}</td>
+                <td class="align-middle fw-semibold">${n.title ?? ''}</td>
+                <td class="align-middle" style="max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${n.message || ''}</td>
+                <td class="align-middle" style="white-space:nowrap">${n.created_at ? new Date(n.created_at).toLocaleString('ar-EG') : ''}</td>
+                <td class="align-middle" style="white-space:nowrap">${readStatus}</td>
+                <td class="align-middle"><button class="btn btn-sm btn-outline-danger" onclick="deleteNotif(${n.id})"><i class="fas fa-trash"></i></button></td>
+            </tr>`;
+        }).join('')}
+        </tbody>
+    </table>`;
+
+    const pages = [];
+    for (let i = 1; i <= Math.min(data.last_page, 10); i++) {
+        pages.push(`<button class="btn btn-sm ${i === data.current_page ? 'btn-primary' : 'btn-outline-primary'} mx-1" onclick="loadSentNotifications(${i})">${i}</button>`);
+    }
+    document.getElementById('sentPagination').innerHTML = pages.join('');
 }
 
 async function openSendModal() {
@@ -194,7 +282,7 @@ async function sendNotification() {
     if (r.success) {
         bootstrap.Modal.getInstance(document.getElementById('sendNotifModal')).hide();
         showAlert(r.message || 'تم الإرسال');
-        loadNotifications();
+        if (currentTab === 'inbox') loadNotifications(); else loadSentNotifications();
     } else {
         showAlert(r.message || 'فشل الإرسال', 'danger');
     }
@@ -202,17 +290,18 @@ async function sendNotification() {
 
 async function markRead(id) {
     await apiFetch(`/notifications/${id}/read`, { method: 'POST' });
-    loadNotifications();
+    if (currentTab === 'inbox') loadNotifications();
 }
 
 async function markAllRead() {
     const r = await apiFetch('/notifications/read-all', { method: 'POST' });
-    if (r.success) { showAlert('تم تحديد الكل كمقروء'); loadNotifications(); }
+    if (r.success) { showAlert('تم تحديد الكل كمقروء'); if (currentTab === 'inbox') loadNotifications(); }
 }
 
 async function deleteNotif(id) {
     await apiFetch(`/notifications/${id}`, { method: 'DELETE' });
-    loadNotifications();
+    if (currentTab === 'inbox') loadNotifications();
+    else loadSentNotifications();
 }
 
 document.addEventListener('DOMContentLoaded', () => loadNotifications());
