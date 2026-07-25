@@ -620,6 +620,11 @@
             <span class="icon"><i class="fas fa-star"></i></span> نقاط الموظفين
         </a>
         @endif
+        @if($hasP('view_salaries'))
+        <a href="/financial-statement" class="nav-link {{ request()->is('financial-statement*') ? 'active' : '' }}">
+            <span class="icon"><i class="fas fa-file-invoice"></i></span> كشف حساب
+        </a>
+        @endif
     </div>
 
     <div class="nav-section">

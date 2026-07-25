@@ -65,6 +65,7 @@
                                 <label class="form-check-label" for="alf_recurring">بدل متكرر شهرياً</label>
                             </div>
                         </div>
+                        <div class="col-12"><label class="form-label">السبب</label><textarea name="reason" id="alf_reason" class="form-control" rows="2"></textarea></div>
                         <div class="col-12"><label class="form-label">ملاحظات</label><textarea name="notes" id="alf_notes" class="form-control" rows="2"></textarea></div>
                     </div>
                 </form>
@@ -163,6 +164,7 @@ async function openEditModal(id) {
     document.getElementById('alf_year').value=a.year;
     document.getElementById('alf_recurring').checked=!!a.is_recurring;
     document.getElementById('alf_notes').value=a.notes??'';
+    document.getElementById('alf_reason').value=a.reason??'';
 }
 async function saveAllowance() {
     const id=document.getElementById('allId').value;

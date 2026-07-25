@@ -9,7 +9,7 @@ class CarViolation extends Model
 {
     protected $fillable = [
         'employee_id', 'vehicle_number', 'violation_type', 'violation_date',
-        'violation_code', 'fine_amount', 'status', 'notes'
+        'violation_code', 'fine_amount', 'status', 'reason'
     ];
 
     protected $casts = [

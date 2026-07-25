@@ -31,7 +31,7 @@ class IncentiveController
             'year'           => 'required|integer|min:2020',
             'amount'         => 'required|numeric|min:0',
             'incentive_type' => 'required|string|max:100',
-            'description'    => 'nullable|string',
+            'reason'         => 'nullable|string',
         ]);
 
         $incentive = Incentive::create(array_merge($validated, ['status' => 'pending']));
@@ -60,7 +60,7 @@ class IncentiveController
         $validated = $request->validate([
             'amount'         => 'sometimes|numeric|min:0',
             'incentive_type' => 'sometimes|string|max:100',
-            'description'    => 'nullable|string',
+            'reason'         => 'nullable|string',
         ]);
 
         $incentive->update($validated);

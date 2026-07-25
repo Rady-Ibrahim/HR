@@ -42,7 +42,7 @@ class SalaryCalculationService
                 ->where('status', 'approved')->get();
             $totalIncentives = $incentives->sum('amount');
             foreach ($incentives as $inc) {
-                $components[] = ['type' => 'incentive', 'name' => $inc->incentive_type, 'id' => $inc->id, 'amount' => $inc->amount];
+                $components[] = ['type' => 'incentive', 'name' => $inc->incentive_type, 'id' => $inc->id, 'amount' => $inc->amount, 'reason' => $inc->reason ?? $inc->description];
             }
 
             // 2. Allowances
@@ -55,7 +55,7 @@ class SalaryCalculationService
                 })->get();
             $totalAllowances = $allowances->sum('amount');
             foreach ($allowances as $all) {
-                $components[] = ['type' => 'allowance', 'name' => $all->allowance_type, 'id' => $all->id, 'amount' => $all->amount];
+                $components[] = ['type' => 'allowance', 'name' => $all->allowance_type, 'id' => $all->id, 'amount' => $all->amount, 'reason' => $all->reason];
             }
 
             // 3. Commissions (approved only — pending wait for الاعتماد الكلي)
@@ -65,7 +65,7 @@ class SalaryCalculationService
             $totalCommissions = $commissions->sum('amount');
             foreach ($commissions as $com) {
                 $label = $com->source === 'collection' ? 'عمولة تحصيل' : 'عمولة مبيعات';
-                $components[] = ['type' => 'commission', 'name' => $label, 'id' => $com->id, 'amount' => $com->amount];
+                $components[] = ['type' => 'commission', 'name' => $label, 'id' => $com->id, 'amount' => $com->amount, 'reason' => $com->reason];
             }
 
             // 3.5 Employee Points (Credit: له)
@@ -87,7 +87,7 @@ class SalaryCalculationService
                 ->where('status', 'approved')->get();
             $totalDeductions = $deductions->sum('amount');
             foreach ($deductions as $ded) {
-                $components[] = ['type' => 'deduction', 'name' => $ded->deduction_type, 'id' => $ded->id, 'amount' => -$ded->amount];
+                $components[] = ['type' => 'deduction', 'name' => $ded->deduction_type, 'id' => $ded->id, 'amount' => -$ded->amount, 'reason' => $ded->reason];
             }
 
             // 4.5 Employee Points (Debit: عليه)
@@ -119,7 +119,7 @@ class SalaryCalculationService
                 ->where('remaining_installments', '>', 0)->get();
             $totalAdvances = $activeAdvances->sum('installment_amount');
             foreach ($activeAdvances as $adv) {
-                $components[] = ['type' => 'advance', 'name' => 'قسط سلفة', 'id' => $adv->id, 'amount' => -$adv->installment_amount];
+                $components[] = ['type' => 'advance', 'name' => 'قسط سلفة', 'id' => $adv->id, 'amount' => -$adv->installment_amount, 'reason' => $adv->reason];
             }
 
             // 7. Car violations
@@ -129,7 +129,7 @@ class SalaryCalculationService
                 ->whereYear('violation_date', $year)->get();
             $totalViolations = $violations->sum('fine_amount');
             foreach ($violations as $vio) {
-                $components[] = ['type' => 'violation', 'name' => $vio->violation_type, 'id' => $vio->id, 'amount' => -$vio->fine_amount];
+                $components[] = ['type' => 'violation', 'name' => $vio->violation_type, 'id' => $vio->id, 'amount' => -$vio->fine_amount, 'reason' => $vio->reason];
             }
 
             $netSalary = $grossSalary - $totalDeductions - $totalAdvances - $totalViolations;
@@ -162,6 +162,7 @@ class SalaryCalculationService
                     'component_name' => $comp['name'],
                     'component_id'   => $comp['id'],
                     'amount'         => $comp['amount'],
+                    'reason'         => $comp['reason'] ?? null,
                 ]);
             }
 

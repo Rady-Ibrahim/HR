@@ -10,7 +10,7 @@ class Advance extends Model
     protected $fillable = [
         'employee_id', 'amount', 'advance_date', 'installments_count',
         'installment_amount', 'paid_installments', 'remaining_installments',
-        'remaining_amount', 'status', 'notes'
+        'remaining_amount', 'status', 'reason'
     ];
 
     protected $casts = [

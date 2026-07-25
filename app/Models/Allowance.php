@@ -9,7 +9,7 @@ class Allowance extends Model
 {
     protected $fillable = [
         'employee_id', 'allowance_type', 'amount', 'start_date',
-        'end_date', 'recurring', 'status', 'notes'
+        'end_date', 'recurring', 'status', 'notes', 'reason'
     ];
 
     protected $casts = [

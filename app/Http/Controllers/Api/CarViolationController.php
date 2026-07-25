@@ -30,7 +30,7 @@ class CarViolationController
             'violation_date' => 'required|date',
             'violation_code' => 'nullable|string|max:50',
             'fine_amount'    => 'required|numeric|min:0',
-            'notes'          => 'nullable|string',
+            'reason'         => 'nullable|string',
         ]);
 
         $validated['status'] = 'pending';
@@ -54,7 +54,7 @@ class CarViolationController
         $validated = $request->validate([
             'status'      => 'sometimes|in:pending,paid,waived,disputed',
             'fine_amount' => 'sometimes|numeric|min:0',
-            'notes'       => 'nullable|string',
+            'reason'      => 'nullable|string',
         ]);
 
         $violation->update($validated);

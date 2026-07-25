@@ -62,7 +62,7 @@
                         <div class="col-md-6"><label class="form-label">مبلغ المخالفة *</label><div class="input-group"><input type="number" name="amount" id="cvf_amount" class="form-control" required><span class="input-group-text">ج.م</span></div></div>
                         <div class="col-md-6"><label class="form-label">تاريخ المخالفة *</label><input type="date" name="violation_date" id="cvf_date" class="form-control" required value="{{ date('Y-m-d') }}"></div>
                         <div class="col-md-6"><label class="form-label">موقع المخالفة</label><input type="text" name="location" id="cvf_location" class="form-control"></div>
-                        <div class="col-12"><label class="form-label">وصف المخالفة</label><textarea name="description" id="cvf_description" class="form-control" rows="2"></textarea></div>
+                        <div class="col-12"><label class="form-label">السبب</label><textarea name="reason" id="cvf_reason" class="form-control" rows="2"></textarea></div>
                     </div>
                 </form>
             </div>
@@ -113,7 +113,7 @@ async function loadViolations(page=1) {
             <td>${cvTypes[v.violation_type]||v.violation_type}</td>
             <td class="fw-bold text-danger">${Number(v.amount).toLocaleString()} ج.م</td>
             <td>${v.violation_date?new Date(v.violation_date).toLocaleDateString('ar-EG'):'-'}</td>
-            <td>${v.description?v.description.substring(0,40)+(v.description.length>40?'…':''):'-'}</td>
+            <td>${v.reason?v.reason.substring(0,40)+(v.reason.length>40?'…':''):'-'}</td>
             <td><span class="badge-status ${cvBadges[v.status]||'badge-pending'}">${cvStatuses[v.status]||v.status}</span></td>
             <td>
                 <div class="d-flex gap-1 flex-wrap">
@@ -148,7 +148,7 @@ async function openEditModal(id) {
     document.getElementById('cvf_amount').value=v.amount;
     document.getElementById('cvf_date').value=v.violation_date?v.violation_date.substring(0,10):'';
     document.getElementById('cvf_location').value=v.location??'';
-    document.getElementById('cvf_description').value=v.description??'';
+    document.getElementById('cvf_reason').value=v.reason??'';
 }
 async function saveViolation() {
     const id=document.getElementById('cvId').value;

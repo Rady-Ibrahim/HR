@@ -102,7 +102,7 @@ async function loadAdvances(page=1) {
             <td class="text-warning">${Number(a.remaining_amount??a.amount).toLocaleString()} ج.م</td>
             <td>${a.installments_count??1} شهر</td>
             <td>${a.advance_date?new Date(a.advance_date).toLocaleDateString('ar-EG'):'-'}</td>
-            <td>${a.notes??'-'}</td>
+            <td>${a.reason??'-'}</td>
             <td><span class="badge-status ${advBadges[a.status]||'badge-pending'}">${advStatuses[a.status]||a.status}</span></td>
             <td>
                 <div class="d-flex gap-1 flex-wrap">
@@ -136,7 +136,7 @@ async function openEditModal(id) {
     document.getElementById('af_amount').value=a.amount;
     document.getElementById('af_installments').value=a.installments_count??1;
     document.getElementById('af_request_date').value=a.advance_date?a.advance_date.substring(0,10):'';
-    document.getElementById('af_reason').value=a.notes??'';
+    document.getElementById('af_reason').value=a.reason??'';
 }
 async function saveAdvance() {
     const id=document.getElementById('advId').value;
@@ -144,11 +144,9 @@ async function saveAdvance() {
     data.amount=parseFloat(data.amount);
     data.installments_count=parseInt(data.installments||1);
     data.advance_date=data.request_date;
-    data.notes=data.reason || '';
     data.employee_id=parseInt(data.employee_id);
     delete data.installments;
     delete data.request_date;
-    delete data.reason;
     if (!data.start_month) delete data.start_month;
     const r=await apiFetch(id?`/advances/${id}`:'/advances',{method:id?'PUT':'POST',body:JSON.stringify(data)});
     if(r.success){bootstrap.Modal.getInstance(document.getElementById('advModal')).hide();showAlert(id?'تم التحديث':'تم الإضافة');loadAdvances(advPage);}

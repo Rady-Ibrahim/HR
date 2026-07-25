@@ -53,6 +53,7 @@ class AllowanceController
             'recurring'      => 'boolean',
             'is_recurring'   => 'boolean',
             'notes'          => 'nullable|string',
+            'reason'         => 'nullable|string',
         ]);
 
         $month = $validated['month'] ?? now()->month;
@@ -97,6 +98,7 @@ class AllowanceController
             'is_recurring'   => 'boolean',
             'status'         => 'sometimes|in:active,inactive,paused',
             'notes'          => 'nullable|string',
+            'reason'         => 'nullable|string',
         ]);
 
         if (!empty($validated['month']) || !empty($validated['year'])) {

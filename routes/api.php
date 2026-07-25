@@ -33,6 +33,7 @@ use App\Http\Controllers\Api\ShiftController;
 use App\Http\Controllers\Api\EmployeeShiftController;
 use App\Http\Controllers\Api\UserController;
 
+
 // Public
 Route::post('/auth/login', [AuthController::class, 'login']);
 
@@ -112,6 +113,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{id}/reset-password', [EmployeeController::class, 'resetPassword']);
         Route::get('/{id}/salary-history', [EmployeeController::class, 'getSalaryHistory']);
         Route::get('/{id}/attendance',     [EmployeeController::class, 'getAttendanceRecords']);
+        Route::get('/{id}/financial-statement', [FinancialController::class, 'employeeFinancials']);
     });
 
     // Customers

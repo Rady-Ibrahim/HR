@@ -42,7 +42,7 @@ class AdvanceController
             'amount'             => 'required|numeric|min:0',
             'advance_date'       => 'required|date',
             'installments_count' => 'required|integer|min:1',
-            'notes'              => 'nullable|string',
+            'reason'             => 'nullable|string',
         ])->validate();
 
         $installmentAmount = round($validated['amount'] / $validated['installments_count'], 2);
@@ -80,7 +80,7 @@ class AdvanceController
             'amount'             => 'sometimes|numeric|min:0',
             'advance_date'       => 'sometimes|date',
             'installments_count' => 'sometimes|integer|min:1',
-            'notes'              => 'nullable|string',
+            'reason'             => 'nullable|string',
         ])->validate();
 
         if (array_key_exists('amount', $validated) || array_key_exists('installments_count', $validated)) {
@@ -146,11 +146,8 @@ class AdvanceController
         if (!array_key_exists('installments_count', $input) && array_key_exists('installments', $input)) {
             $input['installments_count'] = $input['installments'];
         }
-        if (!array_key_exists('notes', $input) && array_key_exists('reason', $input)) {
-            $input['notes'] = $input['reason'];
-        }
 
-        unset($input['request_date'], $input['installments'], $input['reason'], $input['start_month']);
+        unset($input['request_date'], $input['installments'], $input['start_month']);
 
         return $input;
     }

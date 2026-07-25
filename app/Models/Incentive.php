@@ -9,7 +9,7 @@ class Incentive extends Model
 {
     protected $fillable = [
         'employee_id', 'month', 'year', 'amount', 'incentive_type',
-        'description', 'approved_by_id', 'status'
+        'description', 'reason', 'approved_by_id', 'status'
     ];
 
     protected $casts = [

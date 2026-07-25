@@ -28,8 +28,8 @@
     </div>
     <div class="table-responsive">
         <table class="data-table">
-            <thead><tr><th>الموظف</th><th>إجمالي المبيعات</th><th>نسبة العمولة</th><th>مبلغ العمولة</th><th>الشهر/السنة</th><th>الحالة</th><th>إجراءات</th></tr></thead>
-            <tbody id="commissionsTable"><tr><td colspan="7" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr></tbody>
+            <thead><tr><th>الموظف</th><th>إجمالي المبيعات</th><th>نسبة العمولة</th><th>مبلغ العمولة</th><th>الشهر/السنة</th><th>السبب</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+            <tbody id="commissionsTable">                <tr><td colspan="8" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr></tbody>
         </table>
     </div>
     <div class="section-body d-flex justify-content-between">
@@ -58,6 +58,7 @@
                         </div>
                         <div class="col-md-6"><label class="form-label">الشهر *</label><input type="number" name="month" id="cf2_month" class="form-control" min="1" max="12" required value="{{ date('n') }}"></div>
                         <div class="col-md-6"><label class="form-label">السنة *</label><input type="number" name="year" id="cf2_year" class="form-control" required value="{{ date('Y') }}"></div>
+                        <div class="col-12"><label class="form-label">السبب</label><textarea name="reason" id="cf2_reason" class="form-control" rows="2"></textarea></div>
                         <div class="col-12"><label class="form-label">ملاحظات</label><textarea name="notes" id="cf2_notes" class="form-control" rows="2"></textarea></div>
                     </div>
                 </form>
@@ -98,7 +99,7 @@ async function loadCommissions(page=1) {
     const { data, total, current_page, last_page } = r.data;
     document.getElementById('comCount').textContent=`إجمالي: ${total}`;
     document.getElementById('comPagInfo').textContent=`صفحة ${current_page} من ${last_page}`;
-    if (!data.length) { document.getElementById('commissionsTable').innerHTML='<tr><td colspan="7" class="text-center py-4 text-muted">لا توجد عمولات</td></tr>'; return; }
+    if (!data.length) { document.getElementById('commissionsTable').innerHTML='<tr><td colspan="8" class="text-center py-4 text-muted">لا توجد عمولات</td></tr>'; return; }
     document.getElementById('commissionsTable').innerHTML = data.map(c=>`
         <tr>
             <td>${c.employee?.name??'-'}</td>
@@ -106,6 +107,7 @@ async function loadCommissions(page=1) {
             <td>${c.commission_rate??0}%</td>
             <td class="fw-bold text-success">${Number(c.amount ?? 0).toLocaleString()} ج.م</td>
             <td>${c.month}/${c.year}</td>
+            <td>${c.reason??'-'}</td>
             <td><span class="badge-status ${c.status==='approved'?'badge-active':c.status==='rejected'?'badge-rejected':'badge-pending'}">${c.status==='approved'?'معتمد':c.status==='rejected'?'مرفوض':'معلق'}</span></td>
             <td>
                 <div class="d-flex gap-1 flex-wrap">
@@ -122,7 +124,7 @@ async function loadCommissions(page=1) {
 function openAddModal() {
     document.getElementById('comId').value=''; document.getElementById('comForm').reset();
     document.getElementById('comModalTitle').innerHTML='<i class="fas fa-percentage me-2"></i> إضافة عمولة جديدة';
-    document.getElementById('cf2_month').value='{{ date("n") }}'; document.getElementById('cf2_year').value='{{ date("Y") }}';
+    document.getElementById('cf2_month').value='{{ date("n") }}';     document.getElementById('cf2_year').value='{{ date("Y") }}';
     new bootstrap.Modal(document.getElementById('comModal')).show();
 }
 async function openEditModal(id) {
@@ -138,6 +140,7 @@ async function openEditModal(id) {
     document.getElementById('cf2_month').value=c.month;
     document.getElementById('cf2_year').value=c.year;
     document.getElementById('cf2_notes').value=c.notes??'';
+    document.getElementById('cf2_reason').value=c.reason??'';
 }
 async function saveCommission() {
     const id=document.getElementById('comId').value;

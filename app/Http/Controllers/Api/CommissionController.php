@@ -42,7 +42,7 @@ class CommissionController
             'amount'          => 'required|numeric|min:0',
             'commission_rate' => 'nullable|numeric|min:0|max:100',
             'total_sales'     => 'nullable|numeric|min:0',
-            'description'     => 'nullable|string',
+            'reason'          => 'nullable|string',
         ])->validate();
 
         $validated['status'] = 'pending';
@@ -75,7 +75,7 @@ class CommissionController
             'amount'          => 'sometimes|numeric|min:0',
             'commission_rate' => 'nullable|numeric|min:0|max:100',
             'total_sales'     => 'nullable|numeric|min:0',
-            'description'     => 'nullable|string',
+            'reason'          => 'nullable|string',
         ])->validate();
 
         $commission->update($validated);
@@ -142,11 +142,8 @@ class CommissionController
         if (($input['amount'] ?? '') === '' && ($input['total_sales'] ?? '') !== '' && ($input['commission_rate'] ?? '') !== '') {
             $input['amount'] = round(((float) $input['total_sales'] * (float) $input['commission_rate']) / 100, 2);
         }
-        if (!array_key_exists('description', $input) && array_key_exists('notes', $input)) {
-            $input['description'] = $input['notes'];
-        }
 
-        unset($input['commission_amount'], $input['calculation_method'], $input['notes']);
+        unset($input['commission_amount'], $input['calculation_method']);
 
         return $input;
     }

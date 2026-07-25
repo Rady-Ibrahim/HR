@@ -9,7 +9,8 @@ class Commission extends Model
 {
     protected $fillable = [
         'employee_id', 'collection_id', 'month', 'year', 'amount', 'commission_rate',
-        'total_sales', 'description', 'source', 'status', 'approved_by_id'
+        'total_sales', 'description', 'source', 'status', 'approved_by_id',
+        'reason'
     ];
 
     protected $casts = [
