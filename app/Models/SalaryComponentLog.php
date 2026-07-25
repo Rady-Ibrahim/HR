@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SalaryComponentLog extends Model
 {
+    protected $table = 'salary_components_log';
+
     protected $fillable = [
         'salary_id', 'component_type', 'component_name', 'component_id', 'amount', 'notes'
     ];

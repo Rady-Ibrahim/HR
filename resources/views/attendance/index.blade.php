@@ -9,6 +9,7 @@
         <div class="breadcrumb">تتبع حضور الموظفين</div>
     </div>
     <div class="d-flex gap-2">
+        <a href="/shifts" class="btn btn-outline-primary"><i class="fas fa-clock me-1"></i> إدارة الورديات</a>
         <button class="btn btn-outline-primary" onclick="openLeaveModal()"><i class="fas fa-calendar-plus me-1"></i> طلب إجازة</button>
         <button class="btn-primary-custom" onclick="openAddAttModal()"><i class="fas fa-plus me-1"></i> إدخال حضور</button>
     </div>
@@ -22,7 +23,7 @@
     <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-icon mx-auto" style="background:#e3f2fd;color:#1565c0"><i class="fas fa-umbrella-beach"></i></div><div class="stat-value" id="attLeave">-</div><div class="stat-label">إجازة</div></div></div>
 </div>
 
-<!-- DEDUCTION POLICY -->
+<!-- DEDUCTION POLICY (DYNAMIC) -->
 <div class="section-card mb-4">
     <div class="section-body">
         <div class="row g-3 align-items-center">
@@ -30,31 +31,30 @@
                 <div class="d-flex align-items-center gap-3">
                     <div class="stat-icon mb-0" style="width:46px;height:46px;background:#fff3e0;color:#e65100"><i class="fas fa-business-time"></i></div>
                     <div>
-                        <div class="fw-bold text-primary">خصم التأخير التلقائي</div>
-                        <div class="text-muted" style="font-size:.82rem">يتم تطبيقه عند حساب المرتب</div>
+                        <div class="fw-bold text-primary">نظام خصم التأخير</div>
+                        <div class="text-muted" style="font-size:.82rem">حسب وردية الموظف - يتم تطبيقه عند حساب المرتب</div>
                     </div>
                 </div>
             </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label mb-1">الوردية النشطة</label>
+                <select id="activeShiftSelect" class="form-select form-select-sm" onchange="loadShiftInfo()">
+                    <option value="">تحميل...</option>
+                </select>
+            </div>
             <div class="col-6 col-md-2">
                 <label class="form-label mb-1">بداية العمل</label>
-                <input type="time" class="form-control" value="{{ config('hr.working_hours.check_in_time', '08:00') }}" disabled>
+                <input type="time" id="shiftStartDisplay" class="form-control" value="{{ config('hr.working_hours.check_in_time', '08:00') }}" disabled>
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label mb-1">سماح التأخير</label>
                 <div class="input-group">
-                    <input type="number" class="form-control" value="{{ config('hr.working_hours.late_threshold_minutes', 15) }}" disabled>
+                    <input type="number" id="shiftGraceDisplay" class="form-control" value="{{ config('hr.working_hours.late_threshold_minutes', 15) }}" disabled>
                     <span class="input-group-text">دقيقة</span>
                 </div>
             </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label mb-1">خصم نصف يوم بعد</label>
-                <div class="input-group">
-                    <input type="number" class="form-control" value="{{ config('hr.working_hours.half_day_deduction_after_minutes', 120) }}" disabled>
-                    <span class="input-group-text">دقيقة</span>
-                </div>
-            </div>
-            <div class="col-6 col-md-2">
-                <div class="badge-status badge-pending d-inline-flex align-items-center gap-2">
+            <div class="col-6 col-md-1">
+                <div class="badge-status badge-pending d-inline-flex align-items-center gap-2 mt-4">
                     <i class="fas fa-coins"></i>
                     ينخصم من المرتب
                 </div>
@@ -110,10 +110,22 @@
         <div class="table-responsive">
             <table class="data-table">
                 <thead>
-                    <tr><th>الموظف</th><th>التاريخ</th><th>وقت الحضور</th><th>وقت الانصراف</th><th>دقائق التأخير</th><th>الحالة</th><th>الموقع</th><th>إجراءات</th></tr>
+                    <tr>
+                        <th>الموظف</th>
+                        <th>التاريخ</th>
+                        <th>الوردية</th>
+                        <th>الحضور</th>
+                        <th>الانصراف</th>
+                        <th>تأخير</th>
+                        <th>انصراف مبكر</th>
+                        <th>ساعات العمل</th>
+                        <th>الحالة</th>
+                        <th>الموقع</th>
+                        <th>إجراءات</th>
+                    </tr>
                 </thead>
                 <tbody id="attTable">
-                    <tr><td colspan="8" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>
+                    <tr><td colspan="11" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>
                 </tbody>
             </table>
         </div>
@@ -156,13 +168,18 @@
                                 <option value="late">متأخر</option><option value="on_leave">إجازة</option>
                             </select>
                         </div>
+                        <div class="col-md-6"><label class="form-label">الوردية</label>
+                            <select name="shift_id" id="atf_shift" class="form-select">
+                                <option value="">الوردية الافتراضية</option>
+                            </select>
+                        </div>
                         <div class="col-md-6"><label class="form-label">وقت الحضور</label><input type="time" name="check_in_time" id="atf_in" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">وقت الانصراف</label><input type="time" name="check_out_time" id="atf_out" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">دقائق التأخير</label><input type="number" name="late_minutes" id="atf_late" class="form-control" min="0" placeholder="تلقائي من وقت الحضور"></div>
                         <div class="col-md-6"><label class="form-label">نوع الخصم المتوقع</label><input type="text" id="atf_deduction_preview" class="form-control" value="لا يوجد خصم" disabled></div>
                         <div class="col-12">
-                            <div class="alert alert-info py-2 mb-0" style="font-size:.82rem">
-                                بداية العمل {{ config('hr.working_hours.check_in_time', '08:00') }}، وبعد {{ config('hr.working_hours.half_day_deduction_after_minutes', 120) }} دقيقة تأخير يتم خصم نصف يوم تلقائياً من المرتب.
+                            <div class="alert alert-info py-2 mb-0" style="font-size:.82rem" id="shiftInfoAlert">
+                                بداية العمل {{ config('hr.working_hours.check_in_time', '08:00') }}، سماح {{ config('hr.working_hours.late_threshold_minutes', 15) }} دقيقة.
                             </div>
                         </div>
                         <div class="col-12"><label class="form-label">ملاحظات</label><textarea name="notes" id="atf_notes" class="form-control" rows="2"></textarea></div>
@@ -223,8 +240,36 @@
 <script>
 const attBadge = { present:'badge-active', absent:'badge-rejected', late:'badge-pending', on_leave:'badge-approved' };
 const attLabel = { present:'حاضر', absent:'غائب', late:'متأخر', early_leave:'انصراف مبكر', on_leave:'إجازة', excused:'معذور' };
+const deductionLabels = {
+    minutes: 'دقائق', quarter_day: 'ربع يوم', half_day: 'نصف يوم',
+    full_day: 'يوم كامل', percentage: 'نسبة مئوية', fixed_amount: 'مبلغ ثابت'
+};
 const workStartTime = '{{ config("hr.working_hours.check_in_time", "08:00") }}';
-const halfDayAfterMinutes = {{ (int) config('hr.working_hours.half_day_deduction_after_minutes', 120) }};
+
+async function loadShiftInfo() {
+    const sel = document.getElementById('activeShiftSelect');
+    const val = sel.value;
+    if (!val) return;
+    const r = await apiFetch('/shifts/' + val);
+    if (!r.success) return;
+    const s = r.data;
+    document.getElementById('shiftStartDisplay').value = s.start_time?.substring(0,5) || workStartTime;
+    document.getElementById('shiftGraceDisplay').value = s.grace_period_minutes || 0;
+}
+
+async function loadShiftSelect() {
+    const r = await apiFetch('/shifts');
+    if (!r.success) return;
+    const all = r.data?.data ?? r.data ?? [];
+    const sel = document.getElementById('activeShiftSelect');
+    const sel2 = document.getElementById('atf_shift');
+    const opts = '<option value="">اختر الوردية</option>' + all.filter(s => s.is_active).map(s =>
+        `<option value="${s.id}">${s.name} (${s.start_time?.substring(0,5)} - ${s.end_time?.substring(0,5)})</option>`
+    ).join('');
+    sel.innerHTML = '<option value="">عرض الوردية</option>' + opts.substring(22);
+    sel2.innerHTML = '<option value="">الوردية الافتراضية</option>' + opts.substring(22);
+    if (all.length) { sel.value = all[0].id; loadShiftInfo(); }
+}
 
 async function loadTodaySummary() {
     const r = await apiFetch('/attendance/today-summary');
@@ -253,16 +298,19 @@ async function loadAttendance(page = 1) {
     document.getElementById('attPagInfo').textContent = `إجمالي: ${data.total}`;
     const all = data.data;
     if (!all.length) {
-        document.getElementById('attTable').innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">لا توجد سجلات</td></tr>';
+        document.getElementById('attTable').innerHTML = '<tr><td colspan="11" class="text-center py-4 text-muted">لا توجد سجلات</td></tr>';
         return;
     }
     document.getElementById('attTable').innerHTML = all.map(a => `
         <tr>
             <td>${a.employee?.name ?? '-'}</td>
             <td>${a.attendance_date ? a.attendance_date.substring(0,10) : '-'}</td>
+            <td>${a.shift_id ? `<span class="badge bg-light text-dark">${a.shift?.name || 'وردية'}</span>` : '-'}</td>
             <td>${a.check_in_time ?? '-'}</td>
             <td>${a.check_out_time ?? '-'}</td>
-            <td>${lateText(a.late_minutes ?? 0)}</td>
+            <td>${lateText(a.late_minutes ?? 0, a.applied_late_deduction_type)}</td>
+            <td>${a.early_exit_minutes ? `${a.early_exit_minutes} د` : '-'}</td>
+            <td>${a.actual_worked_hours ? Number(a.actual_worked_hours).toFixed(2) : (a.working_hours ?? '-')}</td>
             <td><span class="badge-status ${attBadge[a.status] || 'badge-draft'}">${attLabel[a.status] || a.status}</span></td>
             <td>${a.check_in_latitude ? `<span class="badge bg-info"><i class="fas fa-map-marker-alt"></i> GPS</span>` : '-'}</td>
             <td>
@@ -327,6 +375,7 @@ function openAddAttModal() {
     document.getElementById('atf_status').value='present';
     document.getElementById('atf_late').value='';
     updateDeductionPreview();
+    updateShiftAlert();
     new bootstrap.Modal(document.getElementById('attAddModal')).show();
 }
 
@@ -338,11 +387,13 @@ async function openEditAttModal(id) {
     document.getElementById('atf_emp').value=a.employee_id;
     document.getElementById('atf_date').value=a.attendance_date?a.attendance_date.substring(0,10):'';
     document.getElementById('atf_status').value=a.status;
+    document.getElementById('atf_shift').value=a.shift_id||'';
     document.getElementById('atf_in').value=timeOnly(a.check_in_time);
     document.getElementById('atf_out').value=timeOnly(a.check_out_time);
     document.getElementById('atf_late').value=a.late_minutes??0;
     document.getElementById('atf_notes').value=a.notes??'';
     updateDeductionPreview();
+    updateShiftAlert();
 }
 
 async function saveAttendance() {
@@ -354,6 +405,8 @@ async function saveAttendance() {
     if(!data.check_in_time) delete data.check_in_time;
     if(!data.check_out_time) delete data.check_out_time;
     if(!data.notes) delete data.notes;
+    if(!data.shift_id) delete data.shift_id;
+    else data.shift_id=parseInt(data.shift_id);
     const r=await apiFetch(id?`/attendance/${id}`:'/attendance',{method:id?'PUT':'POST',body:JSON.stringify(data)});
     if(r.success){bootstrap.Modal.getInstance(document.getElementById('attAddModal')).hide();showAlert(id?'تم التحديث':'تم الإضافة');loadAttendance();}
     else showAlert(r.message||'فشل الحفظ','danger');
@@ -409,22 +462,31 @@ function minutesBetween(start, actual) {
     return Math.max(0, (ah * 60 + am) - (sh * 60 + sm));
 }
 
-function lateText(minutes) {
+function lateText(minutes, deductionType) {
     const value = Number(minutes || 0);
-    return value >= halfDayAfterMinutes ? `${value} دقيقة - خصم نصف يوم` : `${value} دقيقة`;
+    if (deductionType && deductionType !== 'minutes') {
+        return `${value} د - ${deductionLabels[deductionType] || deductionType}`;
+    }
+    return `${value} دقيقة`;
 }
 
 function updateDeductionPreview() {
     const late = Number(document.getElementById('atf_late').value || 0);
     const preview = document.getElementById('atf_deduction_preview');
     if (!preview) return;
-    if (late >= halfDayAfterMinutes) {
-        preview.value = 'خصم نصف يوم من المرتب';
-        preview.classList.add('text-danger', 'fw-bold');
-    } else if (late > 0) {
-        preview.value = `خصم ${late} دقيقة من المرتب`;
-        preview.classList.remove('text-danger');
-        preview.classList.add('fw-bold');
+    if (late > 0) {
+        const halfDayAfterMinutes = 120;
+        if (late >= halfDayAfterMinutes) {
+            preview.value = 'خصم نصف يوم من المرتب';
+            preview.classList.add('text-danger', 'fw-bold');
+        } else if (late >= 30) {
+            preview.value = 'خصم ربع يوم من المرتب';
+            preview.classList.add('text-danger', 'fw-bold');
+        } else {
+            preview.value = `خصم ${late} دقيقة من المرتب`;
+            preview.classList.remove('text-danger');
+            preview.classList.add('fw-bold');
+        }
     } else {
         preview.value = 'لا يوجد خصم';
         preview.classList.remove('text-danger', 'fw-bold');
@@ -440,11 +502,28 @@ function updateLateFromTime() {
     updateDeductionPreview();
 }
 
+function updateShiftAlert() {
+    const shiftId = document.getElementById('atf_shift').value;
+    const alertEl = document.getElementById('shiftInfoAlert');
+    if (shiftId) {
+        apiFetch('/shifts/' + shiftId).then(r => {
+            if (r.success) {
+                const s = r.data;
+                alertEl.innerHTML = `الوردية: ${s.name} | بداية ${s.start_time?.substring(0,5)} | نهاية ${s.end_time?.substring(0,5)} | سماح ${s.grace_period_minutes} دقيقة`;
+            }
+        });
+    } else {
+        alertEl.innerHTML = `بداية العمل ${workStartTime}، سماح {{ (int) config('hr.working_hours.late_threshold_minutes', 15) }} دقيقة.`;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('atf_in').addEventListener('change', updateLateFromTime);
     document.getElementById('atf_late').addEventListener('input', updateDeductionPreview);
+    document.getElementById('atf_shift').addEventListener('change', updateShiftAlert);
     loadTodaySummary();
     loadAttendance();
+    loadShiftSelect();
 });
 </script>
 @endpush

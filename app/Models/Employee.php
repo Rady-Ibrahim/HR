@@ -169,4 +169,18 @@ class Employee extends Model
     {
         return $this->hasMany(EmployeePoint::class);
     }
+
+    public function shiftAssignments(): HasMany
+    {
+        return $this->hasMany(EmployeeShift::class);
+    }
+
+    public function currentShift(): ?Shift
+    {
+        $assignment = EmployeeShift::where('employee_id', $this->id)
+            ->active(now())
+            ->first();
+
+        return $assignment?->shift;
+    }
 }

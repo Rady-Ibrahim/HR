@@ -15,6 +15,7 @@ class Salary extends Model
         'employee_id', 'month', 'year', 'base_salary', 'gross_salary',
         'total_incentives', 'total_allowances', 'total_commissions',
         'total_deductions', 'total_advances', 'total_violations', 'net_salary',
+        'total_points_credit', 'total_points_debit',
         'status', 'approved_by_id', 'payment_method', 'payment_date', 'approval_notes'
     ];
 

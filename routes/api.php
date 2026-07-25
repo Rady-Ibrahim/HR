@@ -29,6 +29,8 @@ use App\Http\Controllers\Api\EmployeeTabPermissionController;
 use App\Http\Controllers\Api\EmployeeMessageController;
 use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\EmployeePointController;
+use App\Http\Controllers\Api\ShiftController;
+use App\Http\Controllers\Api\EmployeeShiftController;
 
 // Public
 Route::post('/auth/login', [AuthController::class, 'login']);
@@ -216,6 +218,24 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('permission:approve_collections');
     });
 
+    // Shifts
+    Route::prefix('shifts')->group(function () {
+        Route::get('/',                    [ShiftController::class, 'index']);
+        Route::post('/',                   [ShiftController::class, 'store']);
+        Route::get('/{id}',                [ShiftController::class, 'show']);
+        Route::put('/{id}',                [ShiftController::class, 'update']);
+        Route::delete('/{id}',             [ShiftController::class, 'destroy']);
+    });
+
+    // Employee Shift Assignments
+    Route::prefix('employee-shifts')->group(function () {
+        Route::get('/',                    [EmployeeShiftController::class, 'index']);
+        Route::post('/',                   [EmployeeShiftController::class, 'store']);
+        Route::post('/bulk',               [EmployeeShiftController::class, 'bulkStore']);
+        Route::get('/current/{employeeId}', [EmployeeShiftController::class, 'current']);
+        Route::delete('/{id}',             [EmployeeShiftController::class, 'destroy']);
+    });
+
     // Attendance
     Route::prefix('attendance')->group(function () {
         Route::get('/today-summary',              [AttendanceController::class, 'todaySummary']);
@@ -225,6 +245,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/',                           [AttendanceController::class, 'index']);
         Route::post('/',                          [AttendanceController::class, 'store']);
         Route::get('/{id}',                       [AttendanceController::class, 'show']);
+        Route::get('/{id}/penalty-details',       [AttendanceController::class, 'penaltyDetails']);
         Route::put('/{id}',                       [AttendanceController::class, 'update']);
         Route::delete('/{id}',                    [AttendanceController::class, 'destroy']);
         Route::post('/check-in',                  [AttendanceController::class, 'checkIn']);

@@ -53,6 +53,7 @@ Route::middleware('auth')->group(function () {
 
     // HR
     Route::get('/attendance',   fn() => view('attendance.index'));
+    Route::get('/shifts',       fn() => view('shifts.index'));
     Route::get('/salaries',     fn() => view('salaries.index'));
     Route::get('/incentives',   fn() => view('incentives.index'));
     Route::get('/deductions',   fn() => view('deductions.index'));

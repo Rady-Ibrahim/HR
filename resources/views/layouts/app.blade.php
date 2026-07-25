@@ -577,6 +577,9 @@
         <a href="/attendance" class="nav-link {{ request()->is('attendance*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-fingerprint"></i></span> الحضور والانصراف
         </a>
+        <a href="/shifts" class="nav-link {{ request()->is('shifts*') ? 'active' : '' }}">
+            <span class="icon"><i class="fas fa-clock"></i></span> الورديات
+        </a>
         <a href="/salaries" class="nav-link {{ request()->is('salaries*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-money-bill-wave"></i></span> الرواتب
         </a>

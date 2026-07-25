@@ -136,6 +136,8 @@ return [
     ],
 
     // Working Hours Settings
+    // DEPRECATED: Use dynamic shifts system instead (see /shifts management UI).
+    // These values serve as fallback defaults when no shift is assigned to an employee.
     'working_hours' => [
         'daily_hours' => 8,
         'check_in_time' => '08:00',

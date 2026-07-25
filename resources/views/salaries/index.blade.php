@@ -73,6 +73,8 @@
                     <th>الحوافز</th>
                     <th>البدلات</th>
                     <th>العمولات</th>
+                    <th>نقاط (له)</th>
+                    <th>نقاط (عليه)</th>
                     <th>خصومات</th>
                     <th>سلف</th>
                     <th>صافي</th>
@@ -81,7 +83,7 @@
                 </tr>
             </thead>
             <tbody id="salariesTable">
-                <tr><td colspan="11" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>
+                <tr><td colspan="13" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>
             </tbody>
         </table>
     </div>
@@ -112,6 +114,12 @@
 let selectedSalaries = new Set();
 const salBadge = { draft:'badge-draft', approved:'badge-approved', paid:'badge-active' };
 const salLabel = { draft:'مسودة', approved:'معتمدة', paid:'مدفوعة' };
+const attBadge = { present:'badge-active', absent:'badge-rejected', late:'badge-pending', on_leave:'badge-approved' };
+const attLabel = { present:'حاضر', absent:'غائب', late:'متأخر', early_leave:'انصراف مبكر', on_leave:'إجازة', excused:'معذور' };
+const deductionLabels = {
+    minutes: 'دقائق', quarter_day: 'ربع يوم', half_day: 'نصف يوم',
+    full_day: 'يوم كامل', percentage: 'نسبة مئوية', fixed_amount: 'مبلغ ثابت'
+};
 
 async function loadSummary() {
     const month = document.getElementById('salMonth').value;
@@ -143,15 +151,23 @@ async function loadSalaries(page = 1) {
         document.getElementById('salariesTable').innerHTML = '<tr><td colspan="11" class="text-center py-4 text-muted"><i class="fas fa-inbox fa-2x mb-2"></i><br>لا توجد رواتب محسوبة لهذا الشهر</td></tr>';
         return;
     }
-    document.getElementById('salariesTable').innerHTML = all.map(s => `
-        <tr>
+    document.getElementById('salariesTable').innerHTML = all.map(s => {
+        const incentives = Number(s.total_incentives ?? 0);
+        const deductions = Number(s.total_deductions ?? 0);
+        const ptsCredit  = Number(s.total_points_credit ?? 0);
+        const ptsDebit   = Number(s.total_points_debit ?? 0);
+        const realIncentives = incentives - ptsCredit;
+        const realDeductions = deductions - ptsDebit;
+        return `<tr>
             <td><input type="checkbox" class="salary-check" value="${s.id}" ${selectedSalaries.has(s.id) ? 'checked' : ''} onchange="toggleSalary(${s.id})"></td>
             <td><strong>${s.employee?.name ?? '-'}</strong><br><small class="text-muted">${s.employee?.employee_code ?? '-'}</small></td>
             <td>${Number(s.base_salary).toLocaleString()}</td>
-            <td class="text-success">+${Number(s.total_incentives ?? 0).toLocaleString()}</td>
+            <td class="text-success">+${realIncentives.toLocaleString()}</td>
             <td class="text-success">+${Number(s.total_allowances ?? 0).toLocaleString()}</td>
             <td class="text-success">+${Number(s.total_commissions ?? 0).toLocaleString()}</td>
-            <td class="text-danger">-${Number(s.total_deductions ?? 0).toLocaleString()}</td>
+            <td class="text-success">${ptsCredit > 0 ? '+'+ptsCredit.toLocaleString() : '-'}</td>
+            <td class="text-danger">${ptsDebit > 0 ? '-'+ptsDebit.toLocaleString() : '-'}</td>
+            <td class="text-danger">-${realDeductions.toLocaleString()}</td>
             <td class="text-danger">-${Number(s.total_advances ?? 0).toLocaleString()}</td>
             <td class="fw-bold text-primary fs-6">${Number(s.net_salary).toLocaleString()} ج.م</td>
             <td><span class="badge-status ${salBadge[s.status] || 'badge-draft'}">${salLabel[s.status] || s.status}</span></td>
@@ -162,8 +178,8 @@ async function loadSalaries(page = 1) {
                     ${s.status === 'approved' ? `<button class="btn btn-sm btn-outline-primary" onclick="paySalary(${s.id})" title="صرف"><i class="fas fa-money-bill"></i></button>` : ''}
                 </div>
             </td>
-        </tr>
-    `).join('');
+        </tr>`;
+    }).join('');
     const pages = [];
     for (let i = 1; i <= Math.min(data.last_page, 10); i++) {
         pages.push(`<button class="btn btn-sm ${i === data.current_page ? 'btn-primary' : 'btn-outline-primary'} mx-1" onclick="loadSalaries(${i})">${i}</button>`);
@@ -213,6 +229,52 @@ async function viewSalary(id) {
     const s = r.data;
     const components = s.components || [];
     const attendanceComponents = components.filter(c => c.component_type === 'attendance_deduction');
+    const attendanceAmount = attendanceComponents.reduce((sum, c) => sum + Math.abs(Number(c.amount || 0)), 0);
+
+    let attendanceDetailHtml = '';
+    if (attendanceAmount > 0 && s.employee?.id) {
+        const attR = await apiFetch(`/attendance/monthly-report/${s.employee.id}?month=${s.month}&year=${s.year}`);
+        if (attR.success && attR.data?.length) {
+            const attRecords = attR.data;
+            const attStats = attR.statistics || {};
+            attendanceDetailHtml = `
+                <div class="mt-3 mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-muted mb-0"><i class="fas fa-business-time me-1"></i> تفاصيل خصم الحضور</h6>
+                        <span class="text-muted" style="font-size:.8rem">إجمالي الخصم: <strong class="text-danger">${attendanceAmount.toLocaleString()} ج.م</strong></span>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-4"><div class="p-1 bg-light rounded text-center"><small class="text-muted">غياب</small><div class="fw-bold">${attStats.absent || 0}</div></div></div>
+                        <div class="col-4"><div class="p-1 bg-light rounded text-center"><small class="text-muted">تأخير (دقائق)</small><div class="fw-bold">${attStats.total_late_minutes || 0}</div></div></div>
+                        <div class="col-4"><div class="p-1 bg-light rounded text-center"><small class="text-muted">انصراف مبكر (د)</small><div class="fw-bold">${attStats.total_early_exit_minutes || 0}</div></div></div>
+                    </div>
+                    <div style="max-height:150px;overflow-y:auto">
+                        <table class="data-table" style="font-size:.78rem">
+                            <thead><tr><th>اليوم</th><th>الحالة</th><th>تأخير</th><th>مبكر</th><th>ساعات</th><th>نوع الخصم</th></tr></thead>
+                            <tbody>
+                                ${attRecords.slice(0, 31).map(a => `
+                                    <tr>
+                                        <td>${a.attendance_date?.substring(0,10)}</td>
+                                        <td><span class="badge-status ${attBadge[a.status] || 'badge-draft'}" style="font-size:.65rem">${attLabel[a.status] || a.status}</span></td>
+                                        <td>${a.late_minutes ? a.late_minutes + ' د' : '-'}</td>
+                                        <td>${a.early_exit_minutes ? a.early_exit_minutes + ' د' : '-'}</td>
+                                        <td>${a.actual_worked_hours ? a.actual_worked_hours.toFixed(1) : (a.working_hours ?? '-')}</td>
+                                        <td>${a.applied_late_deduction_type ? (deductionLabels[a.applied_late_deduction_type] || a.applied_late_deduction_type) : '-'}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    const ptsCredit  = Number(s.total_points_credit ?? 0);
+    const ptsDebit   = Number(s.total_points_debit ?? 0);
+    const realIncentives = Number(s.total_incentives ?? 0) - ptsCredit;
+    const realDeductions = Number(s.total_deductions ?? 0) - ptsDebit;
+
     document.getElementById('salaryDetailBody').innerHTML = `
     <h6 class="fw-bold text-primary">${s.employee?.name ?? '-'} - ${s.month}/${s.year}</h6>
     <hr>
@@ -224,16 +286,19 @@ async function viewSalary(id) {
     ` : ''}
     <div class="row g-2 mb-3">
         <div class="col-12"><h6 class="text-muted mb-2">المستحقات</h6></div>
-        <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">أساسي</small><div class="fw-bold">${Number(s.base_salary).toLocaleString()} ج.م</div></div></div>
-        <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">حوافز</small><div class="fw-bold text-success">+${Number(s.total_incentives ?? 0).toLocaleString()} ج.م</div></div></div>
-        <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">بدلات</small><div class="fw-bold text-success">+${Number(s.total_allowances ?? 0).toLocaleString()} ج.م</div></div></div>
-        <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">عمولات</small><div class="fw-bold text-success">+${Number(s.total_commissions ?? 0).toLocaleString()} ج.م</div></div></div>
+        <div class="col-6 col-md-2"><div class="p-2 bg-light rounded text-center"><small class="text-muted">أساسي</small><div class="fw-bold">${Number(s.base_salary).toLocaleString()} ج.م</div></div></div>
+        <div class="col-6 col-md-2"><div class="p-2 bg-light rounded text-center"><small class="text-muted">حوافز</small><div class="fw-bold text-success">+${realIncentives.toLocaleString()} ج.م</div></div></div>
+        <div class="col-6 col-md-2"><div class="p-2 bg-light rounded text-center"><small class="text-muted">بدلات</small><div class="fw-bold text-success">+${Number(s.total_allowances ?? 0).toLocaleString()} ج.م</div></div></div>
+        <div class="col-6 col-md-2"><div class="p-2 bg-light rounded text-center"><small class="text-muted">عمولات</small><div class="fw-bold text-success">+${Number(s.total_commissions ?? 0).toLocaleString()} ج.م</div></div></div>
+        <div class="col-6 col-md-2"><div class="p-2 bg-light rounded text-center"><small class="text-muted">نقاط (له)</small><div class="fw-bold text-success">${ptsCredit > 0 ? '+'+ptsCredit.toLocaleString() : '0'} ج.م</div></div></div>
+        <div class="col-6 col-md-2"><div class="p-2 bg-light rounded text-center"><small class="text-muted">نقاط (عليه)</small><div class="fw-bold text-danger">${ptsDebit > 0 ? '-'+ptsDebit.toLocaleString() : '0'} ج.م</div></div></div>
         <div class="col-12 mt-2"><h6 class="text-muted mb-2">الخصومات</h6></div>
-        <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">خصومات</small><div class="fw-bold text-danger">-${Number(s.total_deductions ?? 0).toLocaleString()} ج.م</div></div></div>
+        <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">خصومات</small><div class="fw-bold text-danger">-${realDeductions.toLocaleString()} ج.م</div></div></div>
         <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">سلف</small><div class="fw-bold text-danger">-${Number(s.total_advances ?? 0).toLocaleString()} ج.م</div></div></div>
         <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">مخالفات</small><div class="fw-bold text-danger">-${Number(s.total_violations ?? 0).toLocaleString()} ج.م</div></div></div>
-        <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">خصم حضور</small><div class="fw-bold text-danger">-${attendanceComponents.reduce((sum, c) => sum + Math.abs(Number(c.amount || 0)), 0).toLocaleString()} ج.م</div></div></div>
+        <div class="col-6 col-md-3"><div class="p-2 bg-light rounded text-center"><small class="text-muted">خصم حضور</small><div class="fw-bold text-danger">-${attendanceAmount.toLocaleString()} ج.م</div></div></div>
     </div>
+    ${attendanceDetailHtml}
     ${components.length ? `
         <h6 class="text-muted mb-2">تفاصيل المكونات</h6>
         <div class="table-responsive mb-3">
@@ -265,7 +330,9 @@ function componentLabel(type) {
         deduction: 'خصم',
         attendance_deduction: 'خصم حضور',
         advance: 'سلفة',
-        violation: 'مخالفة'
+        violation: 'مخالفة',
+        points_credit: 'نقاط (له)',
+        points_debit: 'نقاط (عليه)'
     }[type] || type;
 }
 

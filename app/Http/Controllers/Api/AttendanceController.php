@@ -6,6 +6,7 @@ use App\Models\Attendance;
 use App\Models\AttendanceRequest;
 use App\Models\Employee;
 use App\Models\WorkLocation;
+use App\Services\AttendancePenaltyService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,6 +14,8 @@ use Illuminate\Support\Facades\Config;
 
 class AttendanceController
 {
+    public function __construct(private AttendancePenaltyService $penaltyService) {}
+
     public function index(Request $request): JsonResponse
     {
         $query = Attendance::with('employee');
@@ -50,33 +53,63 @@ class AttendanceController
             'check_in_time'   => 'nullable|date_format:H:i',
             'check_out_time'  => 'nullable|date_format:H:i',
             'late_minutes'    => 'nullable|integer|min:0',
+            'shift_id'        => 'nullable|exists:shifts,id',
             'notes'           => 'nullable|string',
         ]);
 
         $attendanceDate = $validated['attendance_date'] ?? $validated['date'] ?? today()->toDateString();
-        $lateMinutes = $this->lateMinutesFromInput($attendanceDate, $validated['check_in_time'] ?? null, $validated['late_minutes'] ?? null);
-        $status = $validated['status'];
-        if ($status === 'present' && $lateMinutes > (int) Config::get('hr.working_hours.late_threshold_minutes', 15)) {
-            $status = 'late';
-        }
+        $employee = Employee::findOrFail($validated['employee_id']);
+        $date = Carbon::parse($attendanceDate);
 
         $record = Attendance::updateOrCreate(
             ['employee_id' => $validated['employee_id'], 'attendance_date' => $attendanceDate],
             [
-                'status' => $status,
+                'status' => $validated['status'],
                 'check_in_time' => $validated['check_in_time'] ?? null,
                 'check_out_time' => $validated['check_out_time'] ?? null,
-                'late_minutes' => $lateMinutes,
-                'working_hours' => $this->workingHoursFromInput($attendanceDate, $validated['check_in_time'] ?? null, $validated['check_out_time'] ?? null),
+                'shift_id' => $validated['shift_id'] ?? null,
                 'notes' => $validated['notes'] ?? null,
             ]
         );
+
+        if ($validated['status'] === 'absent') {
+            $record->update([
+                'late_minutes' => 0,
+                'working_hours' => 0,
+                'early_exit_minutes' => 0,
+                'actual_worked_hours' => 0,
+                'applied_late_deduction_type' => 'full_day',
+                'deduction_amount' => 0,
+            ]);
+        } else {
+            $record = $this->penaltyService->processAttendance($record);
+
+            if ($record->check_in_time && $record->check_out_time) {
+                $checkIn = Carbon::parse($attendanceDate . ' ' . $record->check_in_time);
+                $checkOut = Carbon::parse($attendanceDate . ' ' . $record->check_out_time);
+                $record->working_hours = max(0, (int) $checkIn->diffInHours($checkOut));
+                $record->save();
+            }
+
+            // Auto-set status based on late minutes
+            $lateThreshold = (int) Config::get('hr.working_hours.late_threshold_minutes', 15);
+            if ($record->status === 'present' && $record->late_minutes > $lateThreshold) {
+                $record->update(['status' => 'late']);
+            }
+        }
 
         return response()->json([
             'success' => true,
             'message' => 'تم حفظ سجل الحضور وسيتم احتساب الخصم تلقائياً في المرتب',
             'data' => $record->load('employee'),
-            'deduction_policy' => $this->deductionPolicy($lateMinutes),
+            'penalty' => [
+                'late_minutes' => $record->late_minutes,
+                'early_exit_minutes' => $record->early_exit_minutes,
+                'actual_worked_hours' => $record->actual_worked_hours,
+                'applied_late_deduction_type' => $record->applied_late_deduction_type,
+                'applied_early_deduction_type' => $record->applied_early_deduction_type,
+                'deduction_amount' => $record->deduction_amount,
+            ],
         ], 201);
     }
 
@@ -84,7 +117,7 @@ class AttendanceController
     {
         return response()->json([
             'success' => true,
-            'data' => Attendance::with('employee')->findOrFail($id),
+            'data' => Attendance::with(['employee', 'shift'])->findOrFail($id),
         ]);
     }
 
@@ -99,34 +132,53 @@ class AttendanceController
             'check_in_time'   => 'nullable|date_format:H:i',
             'check_out_time'  => 'nullable|date_format:H:i',
             'late_minutes'    => 'nullable|integer|min:0',
+            'shift_id'        => 'nullable|exists:shifts,id',
             'notes'           => 'nullable|string',
         ]);
 
         $attendanceDate = $validated['attendance_date'] ?? $validated['date'] ?? $record->attendance_date->toDateString();
         $checkIn = $validated['check_in_time'] ?? ($record->check_in_time ? Carbon::parse($record->check_in_time)->format('H:i') : null);
         $checkOut = $validated['check_out_time'] ?? ($record->check_out_time ? Carbon::parse($record->check_out_time)->format('H:i') : null);
-        $lateMinutes = $this->lateMinutesFromInput($attendanceDate, $checkIn, $validated['late_minutes'] ?? null);
-        $status = $validated['status'] ?? $record->status;
-        if ($status === 'present' && $lateMinutes > (int) Config::get('hr.working_hours.late_threshold_minutes', 15)) {
-            $status = 'late';
-        }
 
         $record->update([
             'employee_id' => $validated['employee_id'] ?? $record->employee_id,
             'attendance_date' => $attendanceDate,
-            'status' => $status,
+            'status' => $validated['status'] ?? $record->status,
             'check_in_time' => $checkIn,
             'check_out_time' => $checkOut,
-            'late_minutes' => $lateMinutes,
-            'working_hours' => $this->workingHoursFromInput($attendanceDate, $checkIn, $checkOut),
+            'shift_id' => $validated['shift_id'] ?? $record->shift_id,
             'notes' => $validated['notes'] ?? $record->notes,
         ]);
+
+        if ($record->status !== 'absent') {
+            $record = $this->penaltyService->processAttendance($record);
+
+            if ($record->check_in_time && $record->check_out_time) {
+                $date = Carbon::parse($attendanceDate);
+                $ci = Carbon::parse($date->toDateString() . ' ' . $record->check_in_time);
+                $co = Carbon::parse($date->toDateString() . ' ' . $record->check_out_time);
+                $record->working_hours = max(0, (int) $ci->diffInHours($co));
+                $record->save();
+            }
+
+            $lateThreshold = (int) Config::get('hr.working_hours.late_threshold_minutes', 15);
+            if ($record->status === 'present' && $record->late_minutes > $lateThreshold) {
+                $record->update(['status' => 'late']);
+            }
+        }
 
         return response()->json([
             'success' => true,
             'message' => 'تم تحديث سجل الحضور',
-            'data' => $record->load('employee'),
-            'deduction_policy' => $this->deductionPolicy($lateMinutes),
+            'data' => $record->load(['employee', 'shift']),
+            'penalty' => [
+                'late_minutes' => $record->late_minutes,
+                'early_exit_minutes' => $record->early_exit_minutes,
+                'actual_worked_hours' => $record->actual_worked_hours,
+                'applied_late_deduction_type' => $record->applied_late_deduction_type,
+                'applied_early_deduction_type' => $record->applied_early_deduction_type,
+                'deduction_amount' => $record->deduction_amount,
+            ],
         ]);
     }
 
@@ -156,34 +208,45 @@ class AttendanceController
             return response()->json(['success' => false, 'message' => 'تم تسجيل الحضور مسبقاً لهذا اليوم'], 422);
         }
 
-        $now            = now();
-        $workStartTime  = Config::get('hr.working_hours.check_in_time', '08:00');
-        $lateThreshold  = Config::get('hr.working_hours.late_threshold_minutes', 15);
+        $employee = Employee::findOrFail($validated['employee_id']);
+        $now = now();
+        $date = Carbon::parse($today);
 
-        $scheduled  = Carbon::parse(today()->toDateString() . ' ' . $workStartTime);
-        $lateMinutes = max(0, (int) $now->diffInMinutes($scheduled, false) * -1);
-        $status      = $lateMinutes > $lateThreshold ? 'late' : 'present';
+        $shift = $this->penaltyService->resolveShift($employee, $date);
+        $lateResult = ['late_minutes' => 0, 'deduction_type' => null, 'deduction_amount' => 0.0];
+
+        if ($shift) {
+            $lateResult = $this->penaltyService->calculateLatePenalty($shift, $now, $date);
+        } else {
+            $workStartTime = Config::get('hr.working_hours.check_in_time', '08:00');
+            $scheduled = Carbon::parse($today . ' ' . $workStartTime);
+            $lateResult['late_minutes'] = max(0, (int) $now->diffInMinutes($scheduled, false) * -1);
+        }
+
+        $lateThreshold = (int) Config::get('hr.working_hours.late_threshold_minutes', 15);
+        $status = $lateResult['late_minutes'] > $lateThreshold ? 'late' : 'present';
 
         $photoPath = null;
         if ($request->hasFile('photo')) {
             $photoPath = $request->file('photo')->store('attendance/checkin', 'public');
         }
 
-        // Location check
         $locationData = $this->detectLocation($validated['latitude'], $validated['longitude']);
 
         $record = Attendance::updateOrCreate(
             ['employee_id' => $validated['employee_id'], 'attendance_date' => $today],
             [
-                'check_in_time'          => $now->toTimeString(),
-                'check_in_latitude'      => $validated['latitude'],
-                'check_in_longitude'     => $validated['longitude'],
-                'check_in_photo'         => $photoPath,
-                'status'                 => $status,
-                'late_minutes'           => $lateMinutes,
-                'check_in_location_id'   => $locationData['id'],
-                'check_in_location_name' => $locationData['name'],
-                'is_within_location'     => $locationData['within'],
+                'check_in_time'              => $now->toTimeString(),
+                'check_in_latitude'          => $validated['latitude'],
+                'check_in_longitude'         => $validated['longitude'],
+                'check_in_photo'             => $photoPath,
+                'status'                     => $status,
+                'late_minutes'               => $lateResult['late_minutes'],
+                'shift_id'                   => $shift?->id,
+                'applied_late_deduction_type' => $lateResult['deduction_type'],
+                'check_in_location_id'       => $locationData['id'],
+                'check_in_location_name'     => $locationData['name'],
+                'is_within_location'         => $locationData['within'],
             ]
         );
 
@@ -191,9 +254,11 @@ class AttendanceController
             'success'           => true,
             'message'           => 'تم تسجيل الحضور بنجاح',
             'data'              => $record,
-            'late_minutes'      => $lateMinutes,
+            'late_minutes'      => $lateResult['late_minutes'],
             'status'            => $status,
             'location'          => $locationData,
+            'shift'             => $shift ? ['id' => $shift->id, 'name' => $shift->name, 'grace_period_minutes' => $shift->grace_period_minutes] : null,
+            'applied_deduction_type' => $lateResult['deduction_type'],
         ]);
     }
 
@@ -219,9 +284,9 @@ class AttendanceController
             return response()->json(['success' => false, 'message' => 'تم تسجيل الانصراف مسبقاً'], 422);
         }
 
-        $checkIn       = Carbon::parse($today . ' ' . $record->check_in_time);
-        $checkOut      = now();
-        $workingHours  = (int) $checkIn->diffInHours($checkOut);
+        $checkIn = Carbon::parse($today . ' ' . $record->check_in_time);
+        $checkOut = now();
+        $date = Carbon::parse($today);
 
         $photoPath = null;
         if ($request->hasFile('photo')) {
@@ -233,15 +298,67 @@ class AttendanceController
             'check_out_latitude'  => $validated['latitude'],
             'check_out_longitude' => $validated['longitude'],
             'check_out_photo'     => $photoPath,
-            'working_hours'       => $workingHours,
         ]);
+
+        $record = $this->penaltyService->processAttendance($record);
+
+        $workingHours = $record->actual_worked_hours ?? 0;
 
         return response()->json([
             'success'       => true,
             'message'       => 'تم تسجيل الانصراف بنجاح',
             'data'          => $record,
             'working_hours' => $workingHours,
+            'penalty'       => [
+                'late_minutes' => $record->late_minutes,
+                'early_exit_minutes' => $record->early_exit_minutes,
+                'actual_worked_hours' => $record->actual_worked_hours,
+                'applied_late_deduction_type' => $record->applied_late_deduction_type,
+                'applied_early_deduction_type' => $record->applied_early_deduction_type,
+                'deduction_amount' => $record->deduction_amount,
+            ],
         ]);
+    }
+
+    public function penaltyDetails($id): JsonResponse
+    {
+        $record = Attendance::with(['employee', 'shift.lateRules', 'shift.earlyExitRules'])->findOrFail($id);
+
+        $details = [
+            'shift_name' => $record->shift?->name,
+            'shift_start' => $record->shift?->start_time,
+            'shift_end' => $record->shift?->end_time,
+            'grace_period_minutes' => $record->shift?->grace_period_minutes,
+            'check_in_time' => $record->check_in_time,
+            'check_out_time' => $record->check_out_time,
+            'late' => [
+                'minutes' => $record->late_minutes,
+                'effective_delay' => null,
+                'deduction_type' => $record->applied_late_deduction_type,
+            ],
+            'early_exit' => [
+                'minutes' => $record->early_exit_minutes,
+                'deduction_type' => $record->applied_early_deduction_type,
+            ],
+            'actual_worked_hours' => $record->actual_worked_hours,
+            'total_deduction_amount' => $record->deduction_amount,
+            'payroll_pushed' => $record->payroll_pushed,
+        ];
+
+        if ($record->shift && $record->check_in_time) {
+            $date = $record->attendance_date instanceof Carbon
+                ? $record->attendance_date
+                : Carbon::parse($record->attendance_date);
+            $checkIn = Carbon::parse($date->toDateString() . ' ' . $record->check_in_time);
+            $scheduledStart = Carbon::parse($date->toDateString() . ' ' . $record->shift->start_time);
+            $actualDelay = max(0, (int) $scheduledStart->diffInMinutes($checkIn, false));
+            $effectiveDelay = max(0, $actualDelay - $record->shift->grace_period_minutes);
+
+            $details['late']['effective_delay'] = $effectiveDelay;
+            $details['late']['actual_delay'] = $actualDelay;
+        }
+
+        return response()->json(['success' => true, 'data' => $details]);
     }
 
     public function myRecords(Request $request): JsonResponse
@@ -258,6 +375,8 @@ class AttendanceController
                     'on_leave'           => 0,
                     'total_hours'        => 0,
                     'total_late_minutes' => 0,
+                    'total_early_exit_minutes' => 0,
+                    'total_deduction_amount' => 0,
                 ],
             ]);
         }
@@ -265,7 +384,8 @@ class AttendanceController
         $month = $request->get('month', now()->month);
         $year  = $request->get('year', now()->year);
 
-        $records = Attendance::where('employee_id', $employee->id)
+        $records = Attendance::with('shift')
+            ->where('employee_id', $employee->id)
             ->whereMonth('attendance_date', $month)
             ->whereYear('attendance_date', $year)
             ->orderBy('attendance_date')
@@ -276,8 +396,10 @@ class AttendanceController
             'absent'             => $records->where('status', 'absent')->count(),
             'late'               => $records->where('status', 'late')->count(),
             'on_leave'           => $records->where('status', 'on_leave')->count(),
-            'total_hours'        => $records->sum('working_hours'),
+            'total_hours'        => $records->sum('actual_worked_hours'),
             'total_late_minutes' => $records->sum('late_minutes'),
+            'total_early_exit_minutes' => $records->sum('early_exit_minutes'),
+            'total_deduction_amount'   => $records->sum('deduction_amount'),
         ];
 
         return response()->json([
@@ -305,6 +427,7 @@ class AttendanceController
 
     public function requestLeave(Request $request): JsonResponse
     {
+
         $validated = $request->validate([
             'employee_id'  => 'required|exists:employees,id',
             'request_type' => 'required|in:sick,leave,late,early,excuse',
@@ -376,7 +499,8 @@ class AttendanceController
         $month = $request->get('month', now()->month);
         $year  = $request->get('year', now()->year);
 
-        $records = Attendance::where('employee_id', $employeeId)
+        $records = Attendance::with('shift')
+            ->where('employee_id', $employeeId)
             ->whereMonth('attendance_date', $month)
             ->whereYear('attendance_date', $year)
             ->orderBy('attendance_date')
@@ -394,8 +518,10 @@ class AttendanceController
             'absent'            => $records->where('status', 'absent')->count(),
             'late'              => $records->where('status', 'late')->count(),
             'on_leave'          => $records->where('status', 'on_leave')->count(),
-            'total_hours'       => $records->sum('working_hours'),
+            'total_hours'       => $records->sum('actual_worked_hours'),
             'total_late_minutes'=> $records->sum('late_minutes'),
+            'total_early_exit_minutes' => $records->sum('early_exit_minutes'),
+            'total_deduction_amount'   => $records->sum('deduction_amount'),
             'attendance_rate'   => $workingDays > 0 ? round(($records->where('status', 'present')->count() / $workingDays) * 100, 1) : 0,
         ];
 
@@ -439,42 +565,6 @@ class AttendanceController
             if (!$day->isWeekend()) $count++;
         }
         return $count;
-    }
-
-    private function lateMinutesFromInput(string $date, ?string $checkInTime, ?int $manualLateMinutes = null): int
-    {
-        if ($manualLateMinutes !== null) {
-            return max(0, $manualLateMinutes);
-        }
-
-        if (!$checkInTime) {
-            return 0;
-        }
-
-        $workStartTime = Config::get('hr.working_hours.check_in_time', '08:00');
-        $scheduled = Carbon::parse($date . ' ' . $workStartTime);
-        $actual = Carbon::parse($date . ' ' . $checkInTime);
-
-        return max(0, $scheduled->diffInMinutes($actual, false));
-    }
-
-    private function workingHoursFromInput(string $date, ?string $checkInTime, ?string $checkOutTime): int
-    {
-        if (!$checkInTime || !$checkOutTime) {
-            return 0;
-        }
-
-        return max(0, (int) Carbon::parse($date . ' ' . $checkInTime)->diffInHours(Carbon::parse($date . ' ' . $checkOutTime)));
-    }
-
-    private function deductionPolicy(int $lateMinutes): array
-    {
-        $halfDayAfterMinutes = (int) Config::get('hr.working_hours.half_day_deduction_after_minutes', 120);
-
-        return [
-            'half_day_after_minutes' => $halfDayAfterMinutes,
-            'deduction_type' => $lateMinutes >= $halfDayAfterMinutes ? 'half_day' : 'minutes',
-        ];
     }
 
     private function currentEmployee(): ?Employee

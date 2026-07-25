@@ -19,6 +19,8 @@ use Illuminate\Support\Facades\DB;
 
 class SalaryCalculationService
 {
+    public function __construct(private AttendancePenaltyService $attendancePenaltyService) {}
+
     public function calculate(Employee $employee, int $month, int $year): Salary
     {
         DB::beginTransaction();
@@ -74,6 +76,7 @@ class SalaryCalculationService
                 $totalIncentives += $pointsCredit;
                 $components[]     = ['type' => 'points_credit', 'name' => 'مكافأة نقاط (له)', 'id' => null, 'amount' => $pointsCredit];
             }
+            $totalPointsCredit = $pointsCredit;
 
             // Gross salary
             $grossSalary = $baseSalary + $totalIncentives + $totalAllowances + $totalCommissions;
@@ -95,6 +98,7 @@ class SalaryCalculationService
                 $totalDeductions += $pointsDebit;
                 $components[]     = ['type' => 'points_debit', 'name' => 'خصم نقاط (عليه)', 'id' => null, 'amount' => -$pointsDebit];
             }
+            $totalPointsDebit = $pointsDebit;
 
             // 5. Attendance deductions (late, half-day late & absence)
             $attendanceSummary = $this->calculateAttendanceDeduction($employee, $month, $year, $baseSalary);
@@ -144,6 +148,8 @@ class SalaryCalculationService
                 'total_deductions'  => $totalDeductions,
                 'total_advances'    => $totalAdvances,
                 'total_violations'  => $totalViolations,
+                'total_points_credit' => $totalPointsCredit ?? 0,
+                'total_points_debit'  => $totalPointsDebit ?? 0,
                 'net_salary'        => $netSalary,
                 'status'            => 'draft',
             ]);
@@ -184,40 +190,7 @@ class SalaryCalculationService
 
     private function calculateAttendanceDeduction(Employee $employee, int $month, int $year, float $baseSalary): array
     {
-        $workingDays = $this->getWorkingDaysInMonth($month, $year);
-        if ($workingDays === 0) {
-            return ['amount' => 0, 'label' => 'خصم تأخير/غياب'];
-        }
-
-        $dailyRate   = $baseSalary / $workingDays;
-        $hourlyRate  = $dailyRate / 8;
-        $minuteRate  = $hourlyRate / 60;
-        $halfDayAfterMinutes = (int) Config::get('hr.working_hours.half_day_deduction_after_minutes', 120);
-
-        $records = Attendance::where('employee_id', $employee->id)
-            ->whereMonth('attendance_date', $month)
-            ->whereYear('attendance_date', $year)
-            ->get();
-
-        $absentDays   = $records->where('status', 'absent')->count();
-        $halfDayLateRecords = $records->filter(fn ($record) => (int) $record->late_minutes >= $halfDayAfterMinutes);
-        $regularLateMinutes = $records
-            ->reject(fn ($record) => (int) $record->late_minutes >= $halfDayAfterMinutes)
-            ->sum('late_minutes');
-
-        $absentDeduction = $absentDays * $dailyRate;
-        $halfDayDeduction = $halfDayLateRecords->count() * ($dailyRate / 2);
-        $lateDeduction   = $regularLateMinutes * $minuteRate;
-
-        return [
-            'amount' => round($absentDeduction + $halfDayDeduction + $lateDeduction, 2),
-            'label' => sprintf(
-                'خصم حضور: %d غياب، %d نصف يوم، %d دقيقة تأخير',
-                $absentDays,
-                $halfDayLateRecords->count(),
-                $regularLateMinutes
-            ),
-        ];
+        return $this->attendancePenaltyService->calculateAttendanceDeductionForSalary($employee, $month, $year, $baseSalary);
     }
 
     private function getWorkingDaysInMonth(int $month, int $year): int
