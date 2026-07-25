@@ -561,97 +561,154 @@
         </div>
     </div>
 
+    @php $u = auth()->user(); $isSA = $u && $u->hasRole('super_admin'); $hasP = fn($p) => $isSA || ($u && $u->hasPermission($p)); @endphp
+
     <!-- Main Menu -->
     <div class="nav-section">
         <div class="nav-section-title">القائمة الرئيسية</div>
+        @if($hasP('view_dashboard'))
         <a href="/dashboard" class="nav-link {{ request()->is('dashboard') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-tachometer-alt"></i></span> لوحة التحكم
         </a>
+        @endif
     </div>
 
     <div class="nav-section">
         <div class="nav-section-title">الموارد البشرية</div>
+        @if($hasP('view_employees'))
         <a href="/employees" class="nav-link {{ request()->is('employees*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-user-tie"></i></span> الموظفين
         </a>
+        @endif
+        @if($hasP('view_attendance'))
         <a href="/attendance" class="nav-link {{ request()->is('attendance*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-fingerprint"></i></span> الحضور والانصراف
         </a>
+        @endif
+        @if($hasP('view_shifts'))
         <a href="/shifts" class="nav-link {{ request()->is('shifts*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-clock"></i></span> الورديات
         </a>
+        @endif
+        @if($hasP('view_salaries'))
         <a href="/salaries" class="nav-link {{ request()->is('salaries*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-money-bill-wave"></i></span> الرواتب
         </a>
+        @endif
+        @if($hasP('view_incentives'))
         <a href="/incentives" class="nav-link {{ request()->is('incentives*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-star"></i></span> الحوافز
         </a>
+        @endif
+        @if($hasP('view_deductions'))
         <a href="/deductions" class="nav-link {{ request()->is('deductions*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-minus-circle"></i></span> الخصومات
         </a>
+        @endif
+        @if($hasP('view_advances'))
         <a href="/advances" class="nav-link {{ request()->is('advances*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-hand-holding-usd"></i></span> السلف
         </a>
+        @endif
+        @if($hasP('view_allowances'))
         <a href="/allowances" class="nav-link {{ request()->is('allowances*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-gift"></i></span> البدلات
         </a>
+        @endif
+        @if($hasP('view_employee_points'))
         <a href="/employee-points" class="nav-link {{ request()->is('employee-points*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-star"></i></span> نقاط الموظفين
         </a>
+        @endif
     </div>
 
     <div class="nav-section">
         <div class="nav-section-title">التشغيل</div>
+        @if($hasP('view_requests'))
         <a href="/requests" class="nav-link {{ request()->is('requests*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-clipboard-list"></i></span> الطلبات
         </a>
+        @endif
+        @if($hasP('view_prepaid_requests'))
         <a href="/prepaid-requests" class="nav-link {{ request()->is('prepaid-requests*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-receipt"></i></span> المسبق الدفع
         </a>
+        @endif
+        @if($hasP('view_routes'))
         <a href="/routes" class="nav-link {{ request()->is('routes*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-route"></i></span> خطوط السير
         </a>
+        @endif
+        @if($hasP('view_deliveries'))
         <a href="/deliveries" class="nav-link {{ request()->is('deliveries*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-truck"></i></span> التسليمات
         </a>
+        @endif
+        @if($hasP('view_collections'))
         <a href="/collections" class="nav-link {{ request()->is('collections*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-coins"></i></span> التحصيلات
         </a>
+        @endif
+        @if($hasP('view_commissions'))
         <a href="/commissions" class="nav-link {{ request()->is('commissions*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-percent"></i></span> العمولات
         </a>
+        @endif
+        @if($hasP('view_car_violations'))
         <a href="/car-violations" class="nav-link {{ request()->is('car-violations*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-car-crash"></i></span> مخالفات السيارات
         </a>
+        @endif
     </div>
 
     <div class="nav-section">
         <div class="nav-section-title">الإدارة</div>
+        @if($hasP('view_customers'))
         <a href="/customers" class="nav-link {{ request()->is('customers*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-store"></i></span> العملاء
         </a>
+        @endif
+        @if($hasP('view_warehouses'))
         <a href="/warehouses" class="nav-link {{ request()->is('warehouses*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-warehouse"></i></span> المخازن
         </a>
+        @endif
+        @if($hasP('view_items'))
         <a href="/items" class="nav-link {{ request()->is('items*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-boxes"></i></span> الأصناف
         </a>
+        @endif
+        @if($hasP('view_approvals'))
         <a href="/approvals" class="nav-link {{ request()->is('approvals*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-check-double"></i></span> الموافقات
             <span class="badge-count" id="pendingCount">-</span>
         </a>
+        @endif
+        @if($hasP('view_notifications'))
         <a href="/notifications" class="nav-link {{ request()->is('notifications*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-bell"></i></span> الإشعارات
         </a>
+        @endif
+        @if($hasP('view_reports'))
         <a href="/reports" class="nav-link {{ request()->is('reports*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-chart-bar"></i></span> التقارير
         </a>
+        @endif
+        @if($hasP('view_work_locations'))
         <a href="/locations" class="nav-link {{ request()->is('locations*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-map-marker-alt"></i></span> مواقع العمل
         </a>
+        @endif
+        @if($hasP('view_tab_permissions'))
         <a href="/employee-tab-permissions" class="nav-link {{ request()->is('employee-tab-permissions*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-layer-group"></i></span> صلاحيات التابات
         </a>
+        @endif
+        @if($hasP('view_users'))
+        <a href="/users" class="nav-link {{ request()->is('users*') ? 'active' : '' }}">
+            <span class="icon"><i class="fas fa-users-cog"></i></span> المستخدمين
+        </a>
+        @endif
     </div>
 </nav>
 

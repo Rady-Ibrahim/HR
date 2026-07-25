@@ -31,6 +31,7 @@ use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\EmployeePointController;
 use App\Http\Controllers\Api\ShiftController;
 use App\Http\Controllers\Api\EmployeeShiftController;
+use App\Http\Controllers\Api\UserController;
 
 // Public
 Route::post('/auth/login', [AuthController::class, 'login']);
@@ -370,5 +371,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/',                [NotificationController::class, 'index']);
         Route::post('/{id}/read',      [NotificationController::class, 'markRead']);
         Route::delete('/{id}',         [NotificationController::class, 'destroy']);
+    });
+
+    // Users
+    Route::prefix('users')->group(function () {
+        Route::get('/',                    [UserController::class, 'index']);
+        Route::post('/',                   [UserController::class, 'store']);
+        Route::get('/roles',               [UserController::class, 'roles']);
+        Route::get('/sidebar-permissions', [UserController::class, 'sidebarPermissions']);
+        Route::get('/all-permissions',     [UserController::class, 'allPermissions']);
+        Route::get('/{id}',                [UserController::class, 'show']);
+        Route::put('/{id}/permissions',    [UserController::class, 'updatePermissions']);
     });
 });
