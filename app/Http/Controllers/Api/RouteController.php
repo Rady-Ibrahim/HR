@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\CustomerDailyExpectedAmount;
 use App\Models\Delivery;
 use App\Models\Request as RequestModel;
 use App\Models\Route as RouteModel;
@@ -70,6 +71,9 @@ class RouteController
             'deliveries.request.customer',
             'deliveries.driver',
         ])->findOrFail($id);
+
+        $this->attachDailyExpectedAmounts($route->stops);
+
         return response()->json(['success' => true, 'data' => $route]);
     }
 
@@ -110,6 +114,15 @@ class RouteController
             ]);
 
             foreach ($validated['stops'] as $index => $stop) {
+                $expectedAmount = $stop['expected_amount'] ?? null;
+
+                if (!$expectedAmount) {
+                    $daily = CustomerDailyExpectedAmount::where('customer_id', $stop['customer_id'])
+                        ->where('date', today())
+                        ->first();
+                    $expectedAmount = $daily?->amount;
+                }
+
                 RouteStop::create([
                     'route_id' => $route->id,
                     'customer_id' => $stop['customer_id'],
@@ -119,7 +132,7 @@ class RouteController
                     'cartons_count' => $stop['cartons_count'] ?? 0,
                     'bundles_count' => $stop['bundles_count'] ?? 0,
                     'packages_count' => $stop['packages_count'] ?? 0,
-                    'expected_amount' => $stop['expected_amount'] ?? null,
+                    'expected_amount' => $expectedAmount,
                     'goods_notes' => $stop['goods_notes'] ?? null,
                     'delivery_status' => $stop['delivery_status'] ?? 'pending',
                     'notes' => $stop['notes'] ?? null,
@@ -137,6 +150,7 @@ class RouteController
     public function stops($id): JsonResponse
     {
         $route = RouteModel::with(['stops.customer'])->findOrFail($id);
+        $this->attachDailyExpectedAmounts($route->stops);
 
         return response()->json([
             'success' => true,
@@ -182,6 +196,15 @@ class RouteController
 
             $route->stops()->delete();
             foreach ($validated['stops'] as $index => $stop) {
+                $expectedAmount = $stop['expected_amount'] ?? null;
+
+                if (!$expectedAmount) {
+                    $daily = CustomerDailyExpectedAmount::where('customer_id', $stop['customer_id'])
+                        ->where('date', today())
+                        ->first();
+                    $expectedAmount = $daily?->amount;
+                }
+
                 RouteStop::create([
                     'route_id' => $route->id,
                     'customer_id' => $stop['customer_id'],
@@ -191,7 +214,7 @@ class RouteController
                     'cartons_count' => $stop['cartons_count'] ?? 0,
                     'bundles_count' => $stop['bundles_count'] ?? 0,
                     'packages_count' => $stop['packages_count'] ?? 0,
-                    'expected_amount' => $stop['expected_amount'] ?? null,
+                    'expected_amount' => $expectedAmount,
                     'goods_notes' => $stop['goods_notes'] ?? null,
                     'delivery_status' => $stop['delivery_status'] ?? 'pending',
                     'notes' => $stop['notes'] ?? null,
@@ -314,5 +337,22 @@ class RouteController
         ];
 
         return response()->json(['success' => true, 'data' => $routes, 'summary' => $summary]);
+    }
+
+    private function attachDailyExpectedAmounts($stops): void
+    {
+        if ($stops->isEmpty()) return;
+
+        $customerIds = $stops->pluck('customer_id')->unique();
+        $dailyAmounts = CustomerDailyExpectedAmount::whereIn('customer_id', $customerIds)
+            ->where('date', today())
+            ->get()
+            ->keyBy('customer_id');
+
+        foreach ($stops as $stop) {
+            $daily = $dailyAmounts->get($stop->customer_id);
+            $stop->setAttribute('daily_expected_amount', $daily ? (float) $daily->amount : null);
+            $stop->setAttribute('daily_expected_amount_id', $daily?->id);
+        }
     }
 }

@@ -32,6 +32,7 @@ use App\Http\Controllers\Api\EmployeePointController;
 use App\Http\Controllers\Api\ShiftController;
 use App\Http\Controllers\Api\EmployeeShiftController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\CustomerExpectedAmountController;
 
 
 // Public
@@ -126,6 +127,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}/requests',             [CustomerController::class, 'requests']);
         Route::post('/{id}/assign-employee',     [CustomerController::class, 'assignEmployee']);
         Route::delete('/{id}/remove-employee/{employeeId}', [CustomerController::class, 'removeEmployee']);
+        Route::get('/{customerId}/expected-amounts/history', [CustomerExpectedAmountController::class, 'history']);
+    });
+
+    // Customer Expected Amounts
+    Route::prefix('customer-expected-amounts')->group(function () {
+        Route::post('/',       [CustomerExpectedAmountController::class, 'store']);
+        Route::put('/{id}',    [CustomerExpectedAmountController::class, 'update']);
+        Route::delete('/{id}', [CustomerExpectedAmountController::class, 'destroy']);
     });
 
     // Warehouses
