@@ -68,18 +68,16 @@ class SalaryCalculationService
                 $components[] = ['type' => 'commission', 'name' => $label, 'id' => $com->id, 'amount' => $com->amount, 'reason' => $com->reason];
             }
 
-            // 3.5 Employee Points (Credit: له)
-            $pointsCredit = (float) EmployeePoint::where('employee_id', $employee->id)
+            // 3.5 Employee Points (Credit: له) — stored separately from incentives
+            $totalPointsCredit = (float) EmployeePoint::where('employee_id', $employee->id)
                 ->where('month', $month)->where('year', $year)
                 ->where('type', 'credit')->sum('total_amount');
-            if ($pointsCredit > 0) {
-                $totalIncentives += $pointsCredit;
-                $components[]     = ['type' => 'points_credit', 'name' => 'مكافأة نقاط (له)', 'id' => null, 'amount' => $pointsCredit];
+            if ($totalPointsCredit > 0) {
+                $components[] = ['type' => 'points_credit', 'name' => 'مكافأة نقاط (له)', 'id' => null, 'amount' => $totalPointsCredit];
             }
-            $totalPointsCredit = $pointsCredit;
 
             // Gross salary
-            $grossSalary = $baseSalary + $totalIncentives + $totalAllowances + $totalCommissions;
+            $grossSalary = $baseSalary + $totalIncentives + $totalAllowances + $totalCommissions + $totalPointsCredit;
 
             // 4. Deductions
             $deductions = Deduction::where('employee_id', $employee->id)
@@ -90,15 +88,13 @@ class SalaryCalculationService
                 $components[] = ['type' => 'deduction', 'name' => $ded->deduction_type, 'id' => $ded->id, 'amount' => -$ded->amount, 'reason' => $ded->reason];
             }
 
-            // 4.5 Employee Points (Debit: عليه)
-            $pointsDebit = (float) EmployeePoint::where('employee_id', $employee->id)
+            // 4.5 Employee Points (Debit: عليه) — stored separately from deductions
+            $totalPointsDebit = (float) EmployeePoint::where('employee_id', $employee->id)
                 ->where('month', $month)->where('year', $year)
                 ->where('type', 'debit')->sum('total_amount');
-            if ($pointsDebit > 0) {
-                $totalDeductions += $pointsDebit;
-                $components[]     = ['type' => 'points_debit', 'name' => 'خصم نقاط (عليه)', 'id' => null, 'amount' => -$pointsDebit];
+            if ($totalPointsDebit > 0) {
+                $components[] = ['type' => 'points_debit', 'name' => 'خصم نقاط (عليه)', 'id' => null, 'amount' => -$totalPointsDebit];
             }
-            $totalPointsDebit = $pointsDebit;
 
             // 5. Attendance deductions (late, half-day late & absence)
             $attendanceSummary = $this->calculateAttendanceDeduction($employee, $month, $year, $baseSalary);
@@ -132,7 +128,7 @@ class SalaryCalculationService
                 $components[] = ['type' => 'violation', 'name' => $vio->violation_type, 'id' => $vio->id, 'amount' => -$vio->fine_amount, 'reason' => $vio->reason];
             }
 
-            $netSalary = $grossSalary - $totalDeductions - $totalAdvances - $totalViolations;
+            $netSalary = $grossSalary - $totalDeductions - $totalPointsDebit - $totalAdvances - $totalViolations;
             $netSalary = max(0, $netSalary);
 
             // Create salary record

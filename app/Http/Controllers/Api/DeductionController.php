@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\Deduction;
+use App\Http\Controllers\Api\Traits\RestrictToSubordinates;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class DeductionController
 {
+    use RestrictToSubordinates;
+
     public function index(Request $request): JsonResponse
     {
         $query = Deduction::with('employee');
@@ -17,6 +20,8 @@ class DeductionController
         if ($request->filled('deduction_type')) $query->where('deduction_type', $request->deduction_type);
         if ($request->filled('month'))         $query->where('month', $request->month);
         if ($request->filled('year'))          $query->where('year', $request->year);
+
+        $this->scopeSubordinates($query);
 
         $deductions = $query->orderByDesc('created_at')->paginate($request->get('per_page', 15));
 
@@ -34,8 +39,11 @@ class DeductionController
             'reason'         => 'nullable|string',
         ]);
 
-        $validated['applied_by_id'] = auth()->user()->employee_id ?? 1;
-        $validated['status']        = 'pending';
+        $this->validateSubordinate((int) $validated['employee_id']);
+
+        $me = $this->getCurrentEmployee();
+        $validated['applied_by_id'] = $me?->id;
+        $validated['status']        = 'approved';
 
         $deduction = Deduction::create($validated);
 

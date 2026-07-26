@@ -29,6 +29,8 @@ class Salary extends Model
         'total_advances' => 'decimal:2',
         'total_violations' => 'decimal:2',
         'net_salary' => 'decimal:2',
+        'total_points_credit' => 'decimal:2',
+        'total_points_debit' => 'decimal:2',
         'payment_date' => 'datetime',
     ];
 

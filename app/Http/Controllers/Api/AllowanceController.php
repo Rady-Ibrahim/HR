@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\Allowance;
+use App\Http\Controllers\Api\Traits\RestrictToSubordinates;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class AllowanceController
 {
+    use RestrictToSubordinates;
+
     public function index(Request $request): JsonResponse
     {
         $query = Allowance::with('employee');
@@ -28,6 +31,8 @@ class AllowanceController
             $query->whereMonth('start_date', $request->month)
                 ->whereYear('start_date', $request->year);
         }
+
+        $this->scopeSubordinates($query);
 
         $allowances = $query->orderByDesc('start_date')->paginate($request->get('per_page', 15));
         $allowances->getCollection()->transform(function ($allowance) {
@@ -56,6 +61,9 @@ class AllowanceController
             'reason'         => 'nullable|string',
         ]);
 
+        $this->validateSubordinate((int) $validated['employee_id']);
+
+        $me = $this->getCurrentEmployee();
         $month = $validated['month'] ?? now()->month;
         $year = $validated['year'] ?? now()->year;
         $validated['allowance_type'] = trim($validated['allowance_type']);
@@ -63,6 +71,7 @@ class AllowanceController
         $validated['recurring'] = $validated['recurring'] ?? $validated['is_recurring'] ?? false;
         unset($validated['month'], $validated['year'], $validated['is_recurring']);
 
+        $validated['applied_by_id'] = $me?->id;
         $validated['status'] = 'active';
         $allowance = Allowance::create($validated);
 
@@ -100,6 +109,10 @@ class AllowanceController
             'notes'          => 'nullable|string',
             'reason'         => 'nullable|string',
         ]);
+
+        if (!empty($validated['employee_id'])) {
+            $this->validateSubordinate((int) $validated['employee_id']);
+        }
 
         if (!empty($validated['month']) || !empty($validated['year'])) {
             $month = $validated['month'] ?? optional($allowance->start_date)->month ?? now()->month;

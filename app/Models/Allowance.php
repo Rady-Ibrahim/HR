@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Allowance extends Model
 {
     protected $fillable = [
-        'employee_id', 'allowance_type', 'amount', 'start_date',
+        'employee_id', 'applied_by_id', 'allowance_type', 'amount', 'start_date',
         'end_date', 'recurring', 'status', 'notes', 'reason'
     ];
 
@@ -22,5 +22,10 @@ class Allowance extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    public function appliedBy(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'applied_by_id');
     }
 }

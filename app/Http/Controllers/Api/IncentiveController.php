@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\Incentive;
+use App\Http\Controllers\Api\Traits\RestrictToSubordinates;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class IncentiveController
 {
+    use RestrictToSubordinates;
+
     public function index(Request $request): JsonResponse
     {
         $query = Incentive::with('employee');
@@ -17,6 +20,8 @@ class IncentiveController
         if ($request->filled('incentive_type')) $query->where('incentive_type', $request->incentive_type);
         if ($request->filled('month'))         $query->where('month', $request->month);
         if ($request->filled('year'))          $query->where('year', $request->year);
+
+        $this->scopeSubordinates($query);
 
         $incentives = $query->orderByDesc('created_at')->paginate($request->get('per_page', 15));
 
@@ -34,7 +39,14 @@ class IncentiveController
             'reason'         => 'nullable|string',
         ]);
 
-        $incentive = Incentive::create(array_merge($validated, ['status' => 'pending']));
+        $this->validateSubordinate((int) $validated['employee_id']);
+
+        $me = $this->getCurrentEmployee();
+        $data = array_merge($validated, [
+            'status'         => 'approved',
+            'approved_by_id' => $me?->id,
+        ]);
+        $incentive = Incentive::create($data);
 
         return response()->json([
             'success' => true,
@@ -73,7 +85,7 @@ class IncentiveController
         $incentive = Incentive::findOrFail($id);
         $incentive->update([
             'status'         => 'approved',
-            'approved_by_id' => auth()->user()->employee_id ?? 1,
+            'approved_by_id' => $this->getCurrentEmployee()?->id,
         ]);
 
         return response()->json(['success' => true, 'message' => 'تم اعتماد الحافز بنجاح', 'data' => $incentive]);

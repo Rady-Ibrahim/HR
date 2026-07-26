@@ -68,6 +68,8 @@ class RoleAndPermissionSeeder extends Seeder
             ['name' => 'approve_salaries', 'group' => 'salaries', 'description' => 'موافقة الرواتب'],
             ['name' => 'manage_incentives', 'group' => 'salaries', 'description' => 'إدارة الحوافز'],
             ['name' => 'manage_deductions', 'group' => 'salaries', 'description' => 'إدارة الخصومات'],
+            ['name' => 'manage_allowances', 'group' => 'salaries', 'description' => 'إدارة البدلات'],
+            ['name' => 'manage_team_financials', 'group' => 'salaries', 'description' => 'إدارة مالية الفريق'],
 
             // Reports
             ['name' => 'view_reports', 'group' => 'reports', 'description' => 'عرض التقارير'],
@@ -114,6 +116,17 @@ class RoleAndPermissionSeeder extends Seeder
         $managerRole = Role::where('name', 'manager')->first();
         if ($managerRole && $managerApprovePermissions->isNotEmpty()) {
             $managerRole->permissions()->syncWithoutDetaching($managerApprovePermissions);
+        }
+
+        // Manager team-financial permissions (allowances, incentives, deductions)
+        $teamFinancialPerms = Permission::whereIn('name', [
+            'manage_allowances',
+            'manage_incentives',
+            'manage_deductions',
+        ])->pluck('id');
+
+        if ($managerRole && $teamFinancialPerms->isNotEmpty()) {
+            $managerRole->permissions()->syncWithoutDetaching($teamFinancialPerms);
         }
 
         $hrRole = Role::where('name', 'hr_manager')->first();

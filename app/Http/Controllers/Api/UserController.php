@@ -90,6 +90,7 @@ class UserController extends Controller
                 ['name' => 'view_work_locations', 'label' => 'مواقع العمل'],
                 ['name' => 'view_tab_permissions', 'label' => 'صلاحيات التابات'],
                 ['name' => 'view_users', 'label' => 'المستخدمين'],
+                ['name' => 'manage_team_financials', 'label' => 'إدارة مالية الفريق'],
             ]],
         ];
 
