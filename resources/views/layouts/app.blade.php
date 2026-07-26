@@ -689,6 +689,11 @@
             <span class="badge-count" id="pendingCount">-</span>
         </a>
         @endif
+        @if($hasP('view_chat_groups'))
+        <a href="/chat-groups" class="nav-link {{ request()->is('chat-groups*') ? 'active' : '' }}">
+            <span class="icon"><i class="fas fa-comments"></i></span> مجموعات الدردشة
+        </a>
+        @endif
         @if($hasP('view_notifications'))
         <a href="/notifications" class="nav-link {{ request()->is('notifications*') ? 'active' : '' }}">
             <span class="icon"><i class="fas fa-bell"></i></span> الإشعارات
@@ -937,6 +942,12 @@ function resetLookupSelect(select, value = '') {
     hydrateLookupSelect(select);
 }
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char]));
+}
+function escapeJs(value) {
+    return String(value ?? '').replace(/['\\]/g, '\\$&').replace(/\n/g, '\\n');
+}
 function escapeLookupHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char]));
 }

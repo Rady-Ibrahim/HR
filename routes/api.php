@@ -33,6 +33,7 @@ use App\Http\Controllers\Api\ShiftController;
 use App\Http\Controllers\Api\EmployeeShiftController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\CustomerExpectedAmountController;
+use App\Http\Controllers\Api\ChatGroupController;
 
 
 // Public
@@ -74,6 +75,21 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{employeeId}',        [EmployeeMessageController::class, 'conversation']);
         Route::put('/{employeeId}/read',   [EmployeeMessageController::class, 'markRead']);
         Route::delete('/{messageId}',      [EmployeeMessageController::class, 'destroy']);
+    });
+
+    // ── Chat Groups ────────────────────────────────────────────────────────
+    Route::prefix('chat-groups')->group(function () {
+        Route::get('/my',                  [ChatGroupController::class, 'myGroups']);
+        Route::get('/',                    [ChatGroupController::class, 'index']);
+        Route::post('/',                   [ChatGroupController::class, 'store']);
+        Route::get('/{id}',                [ChatGroupController::class, 'show']);
+        Route::put('/{id}',                [ChatGroupController::class, 'update']);
+        Route::delete('/{id}',             [ChatGroupController::class, 'destroy']);
+        Route::post('/{id}/members',       [ChatGroupController::class, 'addMembers']);
+        Route::delete('/{id}/members/{employeeId}', [ChatGroupController::class, 'removeMember']);
+        Route::put('/{id}/members/{employeeId}/role', [ChatGroupController::class, 'updateMemberRole']);
+        Route::get('/{id}/messages',       [ChatGroupController::class, 'messages']);
+        Route::post('/{id}/read',          [ChatGroupController::class, 'markRead']);
     });
 
     // Admin: Employee Tab Permissions

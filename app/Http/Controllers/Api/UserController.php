@@ -84,6 +84,7 @@ class UserController extends Controller
                 ['name' => 'view_warehouses', 'label' => 'المخازن'],
                 ['name' => 'view_items', 'label' => 'الأصناف'],
                 ['name' => 'view_approvals', 'label' => 'الموافقات'],
+                ['name' => 'view_chat_groups', 'label' => 'مجموعات الدردشة'],
                 ['name' => 'view_notifications', 'label' => 'الإشعارات'],
                 ['name' => 'view_reports', 'label' => 'التقارير'],
                 ['name' => 'view_work_locations', 'label' => 'مواقع العمل'],

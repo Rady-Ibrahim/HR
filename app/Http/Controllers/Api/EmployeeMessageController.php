@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\ChatGroup;
+use App\Models\ChatGroupMember;
 use App\Models\Employee;
 use App\Models\EmployeeMessage;
+use App\Models\GroupMessageRead;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -34,6 +37,40 @@ class EmployeeMessageController
     {
         $me = $this->currentEmployee();
 
+        // Group message flow — new, additive
+        if ($request->has('group_id')) {
+            $validated = $request->validate([
+                'group_id'     => 'required|integer|exists:chat_groups,id',
+                'message'      => 'required|string|max:2000',
+                'message_type' => 'nullable|string|max:50',
+            ]);
+
+            $isMember = ChatGroupMember::where('group_id', $validated['group_id'])
+                ->where('employee_id', $me->id)
+                ->exists();
+
+            if (!$isMember) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'لا يمكنك إرسال رسالة لمجموعة لست عضواً فيها',
+                ], 403);
+            }
+
+            $msg = EmployeeMessage::create([
+                'sender_id'    => $me->id,
+                'group_id'     => $validated['group_id'],
+                'message'      => $validated['message'],
+                'message_type' => $validated['message_type'] ?? 'text',
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم إرسال الرسالة بنجاح',
+                'data'    => $this->formatMessage($msg->load(['sender', 'group'])),
+            ], 201);
+        }
+
+        // Direct 1-to-1 message flow — existing, unchanged
         $validated = $request->validate([
             'receiver_id' => 'required|integer|exists:employees,id',
             'message'     => 'required|string|max:2000',
@@ -63,7 +100,7 @@ class EmployeeMessageController
      |  GET /api/messages
      |  قائمة المحادثات (آخر رسالة مع كل شخص)
      | ──────────────────────────────────────────── */
-    public function conversations(): JsonResponse
+    public function conversations(Request $request): JsonResponse
     {
         $me = $this->currentEmployee();
 
@@ -120,10 +157,70 @@ class EmployeeMessageController
             ];
         });
 
-        return response()->json([
+        $response = [
             'success' => true,
             'data'    => $conversations->values(),
-        ]);
+        ];
+
+        // Optional: include group conversations for updated app builds
+        if ($request->boolean('include_groups')) {
+            $groupIds = ChatGroupMember::where('employee_id', $me->id)->pluck('group_id');
+
+            $groups = ChatGroup::whereIn('id', $groupIds)
+                ->with('creator:id,name,employee_code')
+                ->withCount('members')
+                ->orderByDesc('created_at')
+                ->get();
+
+            $groupConversations = $groups->map(function ($group) use ($me) {
+                $lastMessage = EmployeeMessage::where('group_id', $group->id)
+                    ->with('sender:id,name,employee_code')
+                    ->orderByDesc('created_at')
+                    ->first();
+
+                $readRecord = GroupMessageRead::where('group_id', $group->id)
+                    ->where('employee_id', $me->id)
+                    ->first();
+
+                $unreadCount = 0;
+                if ($readRecord?->last_read_at) {
+                    $unreadCount = EmployeeMessage::where('group_id', $group->id)
+                        ->where('sender_id', '!=', $me->id)
+                        ->where('created_at', '>', $readRecord->last_read_at)
+                        ->count();
+                } else {
+                    $unreadCount = EmployeeMessage::where('group_id', $group->id)
+                        ->where('sender_id', '!=', $me->id)
+                        ->count();
+                }
+
+                return [
+                    'group' => [
+                        'id' => $group->id,
+                        'name' => $group->name,
+                        'members_count' => $group->members_count,
+                        'created_by' => $group->creator ? [
+                            'id' => $group->creator->id,
+                            'name' => $group->creator->name,
+                        ] : null,
+                    ],
+                    'last_message' => $lastMessage ? [
+                        'id' => $lastMessage->id,
+                        'message' => $lastMessage->message,
+                        'sender_name' => $lastMessage->sender?->name,
+                        'sent_at' => $lastMessage->created_at->toIso8601String(),
+                    ] : null,
+                    'unread_count' => $unreadCount,
+                ];
+            });
+
+            $response['data'] = [
+                'direct' => $conversations->values(),
+                'groups' => $groupConversations->values(),
+            ];
+        }
+
+        return response()->json($response);
     }
 
     /* ─────────────────────────────────────────────

@@ -22,6 +22,7 @@ class EmployeeTabPermissionController
         ['tab_name' => 'التسليمات',          'tab_key' => '8'],
         ['tab_name' => 'التحصيلات',          'tab_key' => '9'],
         ['tab_name' => 'الحضور والانصراف',   'tab_key' => '10'],
+        ['tab_name' => 'مجموعات الدردشة',   'tab_key' => '11'],
     ];
 
     /**

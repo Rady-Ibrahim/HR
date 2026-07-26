@@ -81,4 +81,5 @@ Route::middleware('auth')->group(function () {
     Route::get('/employee-tab-permissions', fn() => view('employee-tab-permissions.index'));
     Route::get('/users', fn() => view('users.index'));
     Route::get('/financial-statement', fn() => view('financial-statement.index'));
+    Route::get('/chat-groups', fn() => view('chat-groups.index'));
 });

@@ -14,7 +14,9 @@ class EmployeeMessage extends Model
     protected $fillable = [
         'sender_id',
         'receiver_id',
+        'group_id',
         'message',
+        'message_type',
         'is_read',
         'read_at',
     ];
@@ -22,6 +24,7 @@ class EmployeeMessage extends Model
     protected $casts = [
         'is_read' => 'boolean',
         'read_at' => 'datetime',
+        'message_type' => 'string',
     ];
 
     /* ─── Relations ─── */
@@ -36,6 +39,11 @@ class EmployeeMessage extends Model
         return $this->belongsTo(Employee::class, 'receiver_id');
     }
 
+    public function group(): BelongsTo
+    {
+        return $this->belongsTo(ChatGroup::class, 'group_id');
+    }
+
     /* ─── Scopes ─── */
 
     /**
@@ -44,9 +52,21 @@ class EmployeeMessage extends Model
     public function scopeConversation($query, int $empA, int $empB)
     {
         return $query->where(function ($q) use ($empA, $empB) {
-            $q->where('sender_id', $empA)->where('receiver_id', $empB);
+            $q->whereNull('group_id')
+              ->where('sender_id', $empA)
+              ->where('receiver_id', $empB);
         })->orWhere(function ($q) use ($empA, $empB) {
-            $q->where('sender_id', $empB)->where('receiver_id', $empA);
+            $q->whereNull('group_id')
+              ->where('sender_id', $empB)
+              ->where('receiver_id', $empA);
         });
+    }
+
+    /**
+     * Scope to only group messages.
+     */
+    public function scopeInGroup($query, int $groupId)
+    {
+        return $query->where('group_id', $groupId);
     }
 }

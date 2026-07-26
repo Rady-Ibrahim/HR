@@ -165,6 +165,13 @@ class Employee extends Model
         return $this->hasMany(EmployeeMessage::class, 'receiver_id');
     }
 
+    public function chatGroups(): BelongsToMany
+    {
+        return $this->belongsToMany(ChatGroup::class, 'chat_group_members', 'employee_id', 'group_id')
+            ->withPivot('role', 'joined_at')
+            ->withTimestamps();
+    }
+
     public function points(): HasMany
     {
         return $this->hasMany(EmployeePoint::class);
