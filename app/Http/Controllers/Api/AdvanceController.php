@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\Advance;
+use App\Http\Controllers\Api\Traits\RestrictToSubordinates;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class AdvanceController
 {
+    use RestrictToSubordinates;
+
     public function index(Request $request): JsonResponse
     {
         $query = Advance::with('employee');
@@ -22,6 +25,8 @@ class AdvanceController
                     ->orWhere('phone', 'like', "%{$search}%");
             });
         }
+
+        $this->scopeSubordinates($query);
 
         $advances = $query->orderByDesc('advance_date')->paginate($request->get('per_page', 15));
 
@@ -44,6 +49,8 @@ class AdvanceController
             'installments_count' => 'required|integer|min:1',
             'reason'             => 'nullable|string',
         ])->validate();
+
+        $this->validateSubordinate((int) $validated['employee_id']);
 
         $installmentAmount = round($validated['amount'] / $validated['installments_count'], 2);
 
@@ -89,6 +96,10 @@ class AdvanceController
             $validated['installment_amount'] = round($amount / $installments, 2);
             $validated['remaining_installments'] = $installments;
             $validated['remaining_amount'] = $amount;
+        }
+
+        if (!empty($validated['employee_id'])) {
+            $this->validateSubordinate((int) $validated['employee_id']);
         }
 
         $advance->update($validated);

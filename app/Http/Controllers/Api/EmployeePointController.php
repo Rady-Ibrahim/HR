@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Employee;
 use App\Models\EmployeePoint;
+use App\Http\Controllers\Api\Traits\RestrictToSubordinates;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class EmployeePointController
 {
+    use RestrictToSubordinates;
+
     /**
      * [ADMIN] Get list of points records.
      * GET /api/employee-points
@@ -44,6 +47,8 @@ class EmployeePointController
                   });
             });
         }
+
+        $this->scopeSubordinates($query);
 
         $records = $query->orderByDesc('id')->paginate($request->get('per_page', 15));
 
@@ -82,6 +87,8 @@ class EmployeePointController
             'month'       => 'nullable|integer|min:1|max:12',
             'year'        => 'nullable|integer|min:2020|max:2050',
         ]);
+
+        $this->validateSubordinate((int) $validated['employee_id']);
 
         $points     = (float) $validated['points'];
         $pointPrice = (float) $validated['point_price'];

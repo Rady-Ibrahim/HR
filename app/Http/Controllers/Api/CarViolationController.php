@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\CarViolation;
+use App\Http\Controllers\Api\Traits\RestrictToSubordinates;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class CarViolationController
 {
+    use RestrictToSubordinates;
+
     public function index(Request $request): JsonResponse
     {
         $query = CarViolation::with('employee');
@@ -15,6 +18,8 @@ class CarViolationController
         if ($request->filled('employee_id'))   $query->where('employee_id', $request->employee_id);
         if ($request->filled('status'))        $query->where('status', $request->status);
         if ($request->filled('violation_type')) $query->where('violation_type', $request->violation_type);
+
+        $this->scopeSubordinates($query);
 
         $violations = $query->orderByDesc('violation_date')->paginate($request->get('per_page', 15));
 
@@ -32,6 +37,8 @@ class CarViolationController
             'fine_amount'    => 'required|numeric|min:0',
             'reason'         => 'nullable|string',
         ]);
+
+        $this->validateSubordinate((int) $validated['employee_id']);
 
         $validated['status'] = 'pending';
         $violation = CarViolation::create($validated);
