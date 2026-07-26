@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\Customer;
 use App\Models\CustomerDailyExpectedAmount;
 use App\Models\Delivery;
+use App\Models\Employee;
 use App\Models\Request as RequestModel;
 use App\Models\Route as RouteModel;
 use App\Models\RouteStop;
@@ -27,6 +29,7 @@ class RouteController
         }
 
         if ($request->filled('status')) $query->where('status', $request->status);
+        if ($request->filled('driver_id')) $query->where('driver_id', $request->driver_id);
 
         $routes = $query->with(['driver', 'salesRep'])
             ->withCount(['deliveries', 'stops'])
@@ -302,6 +305,87 @@ class RouteController
             'success' => true,
             'message' => 'تم ترحيل خط السير إلى التسليمات',
             'data' => $deliveries->load(['request.customer', 'driver', 'salesRep', 'routeStop.customer']),
+        ], 201);
+    }
+
+    public function createDelivery(Request $request, $id): JsonResponse
+    {
+        $employee = Employee::where('user_id', auth()->id())->first();
+        if (!$employee) {
+            return response()->json(['success' => false, 'message' => 'لا يوجد ملف موظف مرتبط بهذا الحساب'], 404);
+        }
+
+        $route = RouteModel::findOrFail($id);
+
+        if ($route->driver_id !== $employee->id && $route->sales_rep_id !== $employee->id) {
+            return response()->json(['success' => false, 'message' => 'خط السير هذا غير مخصص لك'], 403);
+        }
+
+        $validated = $request->validate([
+            'route_stop_id'                => 'required|exists:route_stops,id',
+            'request_id'                   => 'nullable|exists:requests,id',
+            'customer_id'                  => 'nullable|exists:customers,id',
+            'packages_count'               => 'nullable|integer|min:0',
+            'expected_collection_amount'   => 'nullable|numeric|min:0',
+            'goods_notes'                  => 'nullable|string',
+        ]);
+
+        $stop = RouteStop::where('id', $validated['route_stop_id'])
+            ->where('route_id', $route->id)
+            ->first();
+
+        if (!$stop) {
+            return response()->json(['success' => false, 'message' => 'المحطة المحددة غير موجودة في هذا الخط'], 422);
+        }
+
+        $existing = Delivery::where('route_stop_id', $stop->id)
+            ->where('status', 'completed')
+            ->exists();
+
+        if ($existing) {
+            return response()->json(['success' => false, 'message' => 'تم تسليم هذه المحطة مسبقاً'], 422);
+        }
+
+        $req = !empty($validated['request_id']) ? RequestModel::find($validated['request_id']) : null;
+
+        $delivery = DB::transaction(function () use ($route, $stop, $employee, $validated, $req) {
+            $delivery = Delivery::create([
+                'delivery_number'              => 'DEL-' . $route->id . '-' . $stop->id . '-' . now()->format('YmdHis'),
+                'request_id'                   => $validated['request_id'] ?? null,
+                'route_id'                     => $route->id,
+                'route_stop_id'                => $stop->id,
+                'driver_id'                    => $employee->id,
+                'packages_count'               => $validated['packages_count'] ?? $stop->packages_count,
+                'expected_collection_amount'   => $validated['expected_collection_amount'] ?? $stop->expected_amount,
+                'delivery_items'               => $validated['goods_notes'] ? ['goods_notes' => $validated['goods_notes']] : null,
+                'status'                       => 'completed',
+                'end_time'                     => now(),
+            ]);
+
+            $stop->update(['delivery_status' => 'completed']);
+
+            if ($req && in_array($req->status, ['approved', 'ready_for_delivery', 'in_delivery'])) {
+                $req->update(['status' => 'delivered']);
+            }
+
+            return $delivery;
+        });
+
+        $route->loadCount(['deliveries', 'stops']);
+        $summary = [
+            'total_deliveries'              => $route->deliveries_count,
+            'completed_deliveries'          => $route->deliveries()->where('status', 'completed')->count(),
+            'total_expected_collection'     => (float) $route->deliveries()->sum('expected_collection_amount'),
+            'total_packages_delivered'      => (int) $route->deliveries()->sum('packages_count'),
+            'total_stops'                   => $route->stops_count,
+            'completed_stops'               => $route->stops()->where('delivery_status', 'completed')->count(),
+        ];
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم تسليم المحطة بنجاح',
+            'data'    => $delivery->load(['request.customer', 'driver', 'routeStop.customer']),
+            'route_summary' => $summary,
         ], 201);
     }
 

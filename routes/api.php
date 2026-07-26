@@ -211,6 +211,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}/stops', [RouteController::class, 'stops']);
         Route::put('/{id}/with-stops', [RouteController::class, 'updateWithStops']);
         Route::post('/{id}/dispatch', [RouteController::class, 'dispatch']);
+        Route::post('/{id}/deliveries', [RouteController::class, 'createDelivery']);
     });
 
     // Deliveries
