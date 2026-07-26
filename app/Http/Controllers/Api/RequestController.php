@@ -435,11 +435,17 @@ class RequestController
             ?? $requestModel->preparedBy?->reporting_manager_id;
 
         if (!$managerId) {
+            $requestModel->update([
+                'status' => 'approved',
+                'approved_by_id' => $reviewerId,
+                'approved_at' => now(),
+                'notes' => $validated['notes'] ?? $requestModel->notes,
+            ]);
             return response()->json([
-                'success' => false,
-                'message' => 'تمت مراجعة الطلب، لكن لا يوجد مدير مربوط بصاحب الطلب من الداش بورد',
+                'success' => true,
+                'message' => 'تمت مراجعة الطلب واعتماده (لا يوجد مدير مربوط بالطلب)',
                 'data' => $requestModel->fresh(['customer', 'createdBy', 'reviewerEmployee']),
-            ], 422);
+            ]);
         }
 
         $managerApproval = $this->createManagerApproval($requestModel, $managerId, $validated['notes'] ?? 'تمت مراجعة الطلب وإرساله للمدير');

@@ -7,6 +7,7 @@ use App\Models\Delivery;
 use App\Models\Request as RequestModel;
 use App\Models\Route as RouteModel;
 use App\Models\RouteStop;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -114,24 +115,28 @@ class RouteController
             ]);
 
             foreach ($validated['stops'] as $index => $stop) {
-                $expectedAmount = $stop['expected_amount'] ?? null;
+                $expectedAmount = array_key_exists('expected_amount', $stop) ? $stop['expected_amount'] : null;
 
-                if (!$expectedAmount) {
+                if (is_null($expectedAmount)) {
                     $daily = CustomerDailyExpectedAmount::where('customer_id', $stop['customer_id'])
                         ->where('date', today())
                         ->first();
                     $expectedAmount = $daily?->amount;
                 }
 
+                $boxes = $stop['boxes_count'] ?? 0;
+                $cartons = $stop['cartons_count'] ?? 0;
+                $bundles = $stop['bundles_count'] ?? 0;
+
                 RouteStop::create([
                     'route_id' => $route->id,
                     'customer_id' => $stop['customer_id'],
                     'stop_order' => $index + 1,
                     'request_ids' => $stop['request_ids'] ?? [],
-                    'boxes_count' => $stop['boxes_count'] ?? 0,
-                    'cartons_count' => $stop['cartons_count'] ?? 0,
-                    'bundles_count' => $stop['bundles_count'] ?? 0,
-                    'packages_count' => $stop['packages_count'] ?? 0,
+                    'boxes_count' => $boxes,
+                    'cartons_count' => $cartons,
+                    'bundles_count' => $bundles,
+                    'packages_count' => $boxes + $cartons + $bundles,
                     'expected_amount' => $expectedAmount,
                     'goods_notes' => $stop['goods_notes'] ?? null,
                     'delivery_status' => $stop['delivery_status'] ?? 'pending',
@@ -196,24 +201,28 @@ class RouteController
 
             $route->stops()->delete();
             foreach ($validated['stops'] as $index => $stop) {
-                $expectedAmount = $stop['expected_amount'] ?? null;
+                $expectedAmount = array_key_exists('expected_amount', $stop) ? $stop['expected_amount'] : null;
 
-                if (!$expectedAmount) {
+                if (is_null($expectedAmount)) {
                     $daily = CustomerDailyExpectedAmount::where('customer_id', $stop['customer_id'])
                         ->where('date', today())
                         ->first();
                     $expectedAmount = $daily?->amount;
                 }
 
+                $boxes = $stop['boxes_count'] ?? 0;
+                $cartons = $stop['cartons_count'] ?? 0;
+                $bundles = $stop['bundles_count'] ?? 0;
+
                 RouteStop::create([
                     'route_id' => $route->id,
                     'customer_id' => $stop['customer_id'],
                     'stop_order' => $index + 1,
                     'request_ids' => $stop['request_ids'] ?? [],
-                    'boxes_count' => $stop['boxes_count'] ?? 0,
-                    'cartons_count' => $stop['cartons_count'] ?? 0,
-                    'bundles_count' => $stop['bundles_count'] ?? 0,
-                    'packages_count' => $stop['packages_count'] ?? 0,
+                    'boxes_count' => $boxes,
+                    'cartons_count' => $cartons,
+                    'bundles_count' => $bundles,
+                    'packages_count' => $boxes + $cartons + $bundles,
                     'expected_amount' => $expectedAmount,
                     'goods_notes' => $stop['goods_notes'] ?? null,
                     'delivery_status' => $stop['delivery_status'] ?? 'pending',
@@ -232,6 +241,11 @@ class RouteController
     public function dispatch(Request $request, $id): JsonResponse
     {
         $route = RouteModel::with('stops')->findOrFail($id);
+
+        if ($route->deliveries()->whereIn('status', ['pending', 'in_transit'])->exists()) {
+            return response()->json(['success' => false, 'message' => 'لا يمكن ترحيل خط السير مرة أخرى، يوجد تسليمات معلقة أو في الطريق'], 422);
+        }
+
         $validated = $request->validate([
             'driver_id' => 'nullable|exists:employees,id',
             'sales_rep_id' => 'nullable|exists:employees,id',
@@ -245,7 +259,7 @@ class RouteController
         }
 
         $deliveries = DB::transaction(function () use ($route, $validated, $driverId) {
-            $created = collect();
+                $created = new EloquentCollection();
 
             foreach ($route->stops as $stop) {
                 $requestIds = $stop->request_ids ?: [];

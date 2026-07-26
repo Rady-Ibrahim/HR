@@ -159,15 +159,23 @@
 
 <!-- ─── ASSIGN SHIFT MODAL ─── -->
 <div class="modal fade" id="assignModal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header"><h5 class="modal-title"><i class="fas fa-user-clock me-2"></i> تعيين وردية لموظف</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-header"><h5 class="modal-title"><i class="fas fa-user-clock me-2"></i> تعيين وردية لموظفين</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body">
                 <form id="assignForm">
                     <div class="row g-3">
                         <div class="col-12">
-                            <label class="form-label">الموظف *</label>
-                            <select name="employee_id" id="af_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select>
+                            <label class="form-label">الموظفون *</label>
+                            <div class="d-flex gap-2 mb-2">
+                                <input type="text" id="af_search" class="form-control form-control-sm" placeholder="بحث..." style="width:200px" oninput="filterEmpChecks()">
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleEmpChecks(true)">تحديد الكل</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleEmpChecks(false)">إلغاء</button>
+                            </div>
+                            <div id="af_employees" class="border rounded p-2" style="max-height:220px;overflow:auto">
+                                <div class="text-center text-muted py-3">جاري تحميل الموظفين...</div>
+                            </div>
+                            <small class="text-muted" id="af_selectedCount">0 محدد</small>
                         </div>
                         <div class="col-12">
                             <label class="form-label">الوردية *</label>
@@ -429,25 +437,82 @@ function confirmDeleteAssignment(id) {
     new bootstrap.Modal(document.getElementById('shiftDeleteModal')).show();
 }
 
+let allEmployeesForAssign = [];
+
 function openAssignModal() {
     document.getElementById('assignForm').reset();
     document.getElementById('af_from').value = '{{ date("Y-m-d") }}';
+    document.getElementById('af_selectedCount').textContent = '0 محدد';
     loadShiftSelect();
     new bootstrap.Modal(document.getElementById('assignModal')).show();
+    loadEmployeesForAssign();
+}
+
+async function loadEmployeesForAssign() {
+    const box = document.getElementById('af_employees');
+    box.innerHTML = '<div class="text-center text-muted py-3">جاري التحميل...</div>';
+    const r = await apiFetch('/employees?per_page=1000&status=active');
+    if (!r.success) {
+        box.innerHTML = '<div class="text-danger p-2">فشل تحميل الموظفين</div>';
+        return;
+    }
+    allEmployeesForAssign = r.data?.data ?? r.data ?? [];
+    renderEmpChecks(allEmployeesForAssign);
+}
+
+function renderEmpChecks(list) {
+    const box = document.getElementById('af_employees');
+    if (!list.length) {
+        box.innerHTML = '<div class="text-muted p-2">لا يوجد موظفون</div>';
+        return;
+    }
+    box.innerHTML = list.map(e => `
+        <label class="d-flex align-items-center gap-2 py-1 px-1 emp-check-row" data-name="${(e.name || '').toLowerCase()}" style="cursor:pointer;border-bottom:1px solid #f0f0f0">
+            <input type="checkbox" class="af-emp-check" value="${e.id}" onchange="updateAssignCount()">
+            <span class="fw-semibold">${e.name}</span>
+            <small class="text-muted ms-auto">${e.employee_code ?? ''} · ${e.employee_type_label || e.employee_type || ''}</small>
+        </label>
+    `).join('');
+    updateAssignCount();
+}
+
+function filterEmpChecks() {
+    const q = (document.getElementById('af_search').value || '').toLowerCase().trim();
+    document.querySelectorAll('#af_employees .emp-check-row').forEach(row => {
+        row.style.display = !q || row.dataset.name.includes(q) ? '' : 'none';
+    });
+}
+
+function toggleEmpChecks(checked) {
+    document.querySelectorAll('#af_employees .emp-check-row').forEach(row => {
+        if (row.style.display === 'none') return;
+        const cb = row.querySelector('.af-emp-check');
+        if (cb) cb.checked = checked;
+    });
+    updateAssignCount();
+}
+
+function updateAssignCount() {
+    const n = document.querySelectorAll('.af-emp-check:checked').length;
+    document.getElementById('af_selectedCount').textContent = n + ' محدد';
 }
 
 async function saveAssignment() {
-    const data = {
-        employee_id: parseInt(document.getElementById('af_emp').value),
-        shift_id: parseInt(document.getElementById('af_shift').value),
-        effective_from: document.getElementById('af_from').value,
-        effective_to: document.getElementById('af_to').value || null,
-    };
-    if (!data.employee_id || !data.shift_id) { showAlert('يرجى اختيار الموظف والوردية', 'warning'); return; }
-    const r = await apiFetch('/employee-shifts', { method: 'POST', body: JSON.stringify(data) });
+    const employee_ids = [...document.querySelectorAll('.af-emp-check:checked')].map(cb => parseInt(cb.value));
+    const shift_id = parseInt(document.getElementById('af_shift').value);
+    const effective_from = document.getElementById('af_from').value;
+    const effective_to = document.getElementById('af_to').value || null;
+
+    if (!employee_ids.length) { showAlert('اختر موظف واحد على الأقل', 'warning'); return; }
+    if (!shift_id) { showAlert('اختر الوردية', 'warning'); return; }
+
+    const r = await apiFetch('/employee-shifts/bulk', {
+        method: 'POST',
+        body: JSON.stringify({ employee_ids, shift_id, effective_from, effective_to }),
+    });
     if (r.success) {
         bootstrap.Modal.getInstance(document.getElementById('assignModal')).hide();
-        showAlert('تم تعيين الوردية');
+        showAlert(r.message || 'تم تعيين الوردية');
         loadAssignments();
     } else showAlert(r.message || 'فشل التعيين', 'danger');
 }
