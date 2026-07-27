@@ -9,6 +9,7 @@ use App\Models\Customer;
 use App\Models\Approval;
 use App\Models\Employee;
 use App\Models\Notification;
+use App\Services\OneSignalService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -809,7 +810,7 @@ class RequestController
 
     private function notifyEmployee(int $employeeId, string $title, string $message, object $related, string $type = 'manager_review'): void
     {
-        $employee = Employee::find($employeeId);
+        $employee = Employee::with('user')->find($employeeId);
         if (!$employee || !$employee->user_id) {
             return;
         }
@@ -822,6 +823,19 @@ class RequestController
             'related_model' => get_class($related),
             'related_id' => $related->id,
         ]);
+
+        if ($employee->user->onesignal_player_id) {
+            app(OneSignalService::class)->sendNotification(
+                [$employee->user->id],
+                $title,
+                $message,
+                [
+                    'related_model' => get_class($related),
+                    'related_id' => (string) $related->id,
+                    'type' => $type,
+                ]
+            );
+        }
     }
 
     private function createReviewerApproval(RequestModel $requestModel, int $reviewerId, ?string $notes = null): Approval

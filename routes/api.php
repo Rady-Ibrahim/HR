@@ -45,6 +45,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Auth
     Route::post('/auth/logout',           [AuthController::class, 'logout']);
     Route::get('/auth/me',                [AuthController::class, 'me']);
+    Route::put('/auth/profile',           [AuthController::class, 'updateProfile']);
     Route::post('/auth/change-password',  [AuthController::class, 'changePassword']);
 
     // Mobile: my financial transactions

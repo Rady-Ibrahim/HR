@@ -53,6 +53,31 @@ class AuthController
         ]);
     }
 
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => 'nullable|string|max:255',
+            'phone' => 'nullable|string|max:20',
+            'onesignal_player_id' => 'nullable|string|max:255',
+        ]);
+
+        $user = $request->user();
+
+        $updateData = array_filter($validated, fn($value) => $value !== null);
+
+        if (!empty($updateData)) {
+            $user->update($updateData);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم تحديث الملف الشخصي بنجاح',
+            'data' => [
+                'user' => $user->fresh(),
+            ],
+        ]);
+    }
+
     public function logout(Request $request): JsonResponse
     {
         $request->user()->currentAccessToken()->delete();
@@ -70,6 +95,7 @@ class AuthController
                 'user'        => $user,
                 'employee'    => $employee,
                 'permissions' => $this->getAllPermissions($user),
+                'onesignal_player_id' => $user->onesignal_player_id,
             ],
         ]);
     }
