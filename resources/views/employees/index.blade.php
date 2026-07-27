@@ -37,7 +37,7 @@
                 </select>
             </div>
             <div class="col-md-2"><label class="form-label">القسم</label>
-                <input type="text" id="deptFilter" class="form-control" placeholder="القسم">
+                <select id="deptFilter" class="form-select"><option value="">الكل</option></select>
             </div>
             <div class="col-md-3 d-flex gap-2">
                 <button class="btn-primary-custom flex-fill" onclick="loadEmployees()"><i class="fas fa-filter me-1"></i> بحث</button>
@@ -101,7 +101,9 @@
                             </select>
                             <small class="text-muted">السائق والمندوب نفس النوع والصلاحيات</small>
                         </div>
-                        <div class="col-md-6"><label class="form-label">القسم *</label><input type="text" name="department" id="ef_department" class="form-control" required></div>
+                        <div class="col-md-6"><label class="form-label">القسم *</label>
+                            <select name="department" id="ef_department" class="form-select" required><option value="">اختر القسم</option></select>
+                        </div>
                         <div class="col-md-6"><label class="form-label">تاريخ التعيين *</label><input type="date" name="joining_date" id="ef_joining_date" class="form-control" required></div>
                         <div class="col-md-6"><label class="form-label">الراتب الأساسي *</label>
                             <div class="input-group"><input type="number" name="base_salary" id="ef_base_salary" class="form-control" required><span class="input-group-text">ج.م</span></div>
@@ -204,7 +206,7 @@
 
 @push('scripts')
 <script>
-let currentPage = 1, empDeleteId = null, employeesLookup = [], managersLookup = [], teamSelectedIds = new Set();
+let currentPage = 1, empDeleteId = null, employeesLookup = [], managersLookup = [], teamSelectedIds = new Set(), departments = [];
 const statusLabels = { active:'نشط', inactive:'غير نشط', on_leave:'إجازة', suspended:'موقوف', resigned:'استقال' };
 const statusBadge  = { active:'badge-active', inactive:'badge-inactive', on_leave:'badge-approved', suspended:'badge-rejected', resigned:'badge-draft' };
 const typeLabels = { manager:'مدير', employee:'موظف عادي', driver_representative:'سائق / مندوب' };
@@ -374,6 +376,21 @@ async function loadEmployeeLookups() {
     employeesLookup = employeesR.success ? (employeesR.data?.data ?? []) : [];
     managersLookup = managersR.success ? (managersR.data ?? []) : employeesLookup.filter(isManagerEmployee);
     renderManagerOptions(document.getElementById('empId').value || null);
+}
+
+async function loadDepartments() {
+    const r = await apiFetch('/departments');
+    if (!r.success) return;
+    departments = r.data ?? [];
+    const deptFilter = document.getElementById('deptFilter');
+    const efDepartment = document.getElementById('ef_department');
+    const currentFilter = deptFilter.value;
+    const currentForm = efDepartment.value;
+    const opts = departments.map(d => `<option value="${d.name}">${d.name}</option>`).join('');
+    deptFilter.innerHTML = '<option value="">الكل</option>' + opts;
+    efDepartment.innerHTML = '<option value="">اختر القسم</option>' + opts;
+    if (currentFilter) deptFilter.value = currentFilter;
+    if (currentForm) efDepartment.value = currentForm;
 }
 
 function renderManagerOptions(excludeId = null) {
@@ -546,7 +563,7 @@ document.getElementById('ef_employee_type').addEventListener('change', toggleCom
 document.getElementById('searchInput').addEventListener('keypress', e => { if(e.key==='Enter') loadEmployees(); });
 document.addEventListener('DOMContentLoaded', async () => {
     toggleCommissionRateField();
-    await loadEmployeeLookups();
+    await Promise.all([loadEmployeeLookups(), loadDepartments()]);
     loadEmployees();
 });
 </script>
