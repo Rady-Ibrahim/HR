@@ -74,6 +74,7 @@ class RouteController
             'stops.customer',
             'deliveries.request.customer',
             'deliveries.driver',
+            'odometerVerifiedBy',
         ])->findOrFail($id);
 
         $this->attachDailyExpectedAmounts($route->stops);
@@ -435,6 +436,134 @@ class RouteController
         ];
 
         return response()->json(['success' => true, 'data' => $routes, 'summary' => $summary]);
+    }
+
+    public function recordOdometerStart(Request $request, $id): JsonResponse
+    {
+        $route = RouteModel::findOrFail($id);
+
+        if ($route->odometer_start !== null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'تم تسجيل قراءة البداية مسبقاً'
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'odometer_start' => 'required|numeric|min:0|max:9999999.99',
+            'photo'          => 'nullable|image|max:5120',
+            'notes'          => 'nullable|string',
+        ]);
+
+        $data = ['odometer_start' => $validated['odometer_start']];
+
+        if ($request->hasFile('photo')) {
+            $data['odometer_start_photo'] = $request->file('photo')
+                ->store('routes/odometer', 'public');
+        }
+
+        if ($request->filled('notes')) {
+            $data['odometer_notes'] = $validated['notes'];
+        }
+
+        $route->update($data);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم تسجيل قراءة عداد البداية',
+            'data'    => $route->fresh(),
+        ]);
+    }
+
+    public function recordOdometerEnd(Request $request, $id): JsonResponse
+    {
+        $route = RouteModel::findOrFail($id);
+
+        if ($route->odometer_start === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'يجب تسجيل قراءة البداية أولاً'
+            ], 422);
+        }
+
+        if ($route->odometer_end !== null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'تم تسجيل قراءة النهاية مسبقاً'
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'odometer_end' => 'required|numeric|min:0|max:9999999.99',
+            'photo'        => 'nullable|image|max:5120',
+            'notes'        => 'nullable|string',
+        ]);
+
+        if ($validated['odometer_end'] <= $route->odometer_start) {
+            return response()->json([
+                'success' => false,
+                'message' => 'قراءة النهاية يجب أن تكون أكبر من قراءة البداية'
+            ], 422);
+        }
+
+        $data = [
+            'odometer_end' => $validated['odometer_end'],
+            'actual_distance_km' => round($validated['odometer_end'] - $route->odometer_start, 2),
+        ];
+
+        if ($request->hasFile('photo')) {
+            $data['odometer_end_photo'] = $request->file('photo')
+                ->store('routes/odometer', 'public');
+        }
+
+        if ($request->filled('notes')) {
+            $data['odometer_notes'] = isset($data['odometer_notes'])
+                ? $data['odometer_notes'] . "\n" . $validated['notes']
+                : $validated['notes'];
+        }
+
+        $route->update($data);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم تسجيل قراءة عداد النهاية',
+            'data'    => $route->fresh(),
+        ]);
+    }
+
+    public function verifyOdometer(Request $request, $id): JsonResponse
+    {
+        $route = RouteModel::findOrFail($id);
+
+        if ($route->odometer_start === null || $route->odometer_end === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'يجب إكمال قراءات البداية والنهاية أولاً'
+            ], 422);
+        }
+
+        if ($route->odometer_verified_at) {
+            return response()->json([
+                'success' => false,
+                'message' => 'تم اعتماد القراءات مسبقاً'
+            ], 422);
+        }
+
+        $employee = Employee::where('user_id', auth()->id())->first();
+        if (!$employee) {
+            return response()->json(['success' => false, 'message' => 'لا يوجد ملف موظف مرتبط'], 404);
+        }
+
+        $route->update([
+            'odometer_verified_by' => $employee->id,
+            'odometer_verified_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم اعتماد قراءات العداد',
+            'data'    => $route->fresh()->load('odometerVerifiedBy'),
+        ]);
     }
 
     private function attachDailyExpectedAmounts($stops): void

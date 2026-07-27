@@ -212,6 +212,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{id}/with-stops', [RouteController::class, 'updateWithStops']);
         Route::post('/{id}/dispatch', [RouteController::class, 'dispatch']);
         Route::post('/{id}/deliveries', [RouteController::class, 'createDelivery']);
+        Route::post('/{id}/odometer-start', [RouteController::class, 'recordOdometerStart']);
+        Route::post('/{id}/odometer-end',   [RouteController::class, 'recordOdometerEnd']);
+        Route::post('/{id}/odometer-verify', [RouteController::class, 'verifyOdometer']);
     });
 
     // Deliveries

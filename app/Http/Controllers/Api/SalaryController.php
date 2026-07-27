@@ -21,6 +21,14 @@ class SalaryController
         if ($request->filled('status'))      $query->where('status', $request->status);
         if ($request->filled('employee_id')) $query->where('employee_id', $request->employee_id);
 
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->whereHas('employee', function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('employee_code', 'like', "%{$search}%");
+            });
+        }
+
         $salaries = $query->orderByDesc('year')->orderByDesc('month')->paginate($request->get('per_page', 15));
 
         $totals = [

@@ -14,11 +14,17 @@ class Route extends Model
     protected $fillable = [
         'route_code', 'route_name', 'driver_id', 'sales_rep_id', 'vehicle_number',
         'start_point', 'end_point', 'distance_km',
-        'estimated_time_minutes', 'waypoints', 'status'
+        'estimated_time_minutes', 'waypoints', 'status',
+        'odometer_start', 'odometer_end', 'odometer_start_photo', 'odometer_end_photo',
+        'actual_distance_km', 'odometer_notes', 'odometer_verified_by', 'odometer_verified_at',
     ];
 
     protected $casts = [
-        'waypoints' => 'json',
+        'waypoints'           => 'json',
+        'odometer_start'      => 'decimal:2',
+        'odometer_end'        => 'decimal:2',
+        'actual_distance_km'  => 'decimal:2',
+        'odometer_verified_at' => 'datetime',
     ];
 
     public function deliveries(): HasMany
@@ -39,5 +45,10 @@ class Route extends Model
     public function salesRep(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'sales_rep_id');
+    }
+
+    public function odometerVerifiedBy(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'odometer_verified_by');
     }
 }
