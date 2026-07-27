@@ -95,7 +95,10 @@
                         </div>
                         <div class="col-md-12">
                             <label class="form-label">الأعضاء <span class="text-muted" id="gf_selected_count" style="font-size:.8rem">(0)</span></label>
-                            <input type="text" id="gf_member_search" class="form-control mb-2" placeholder="بحث عن موظف..." oninput="filterMemberCheckboxes()">
+                            <div class="input-group mb-2">
+                                <input type="text" id="gf_member_search" class="form-control" placeholder="بحث عن موظف...">
+                                <button class="btn btn-outline-primary" type="button" onclick="filterMemberCheckboxes()"><i class="fas fa-search"></i></button>
+                            </div>
                             <div id="gf_members_container" class="border rounded" style="max-height:200px;overflow-y:auto;padding:4px"></div>
                         </div>
                     </div>
@@ -148,7 +151,7 @@ let employeesLookup = [];
 
 async function loadLookups() {
     const r = await apiFetch('/employees?per_page=1000');
-    employeesLookup = r.success ? (r.data?.data || []) : [];
+    employeesLookup = r.success ? (r.data?.data ?? r.data ?? []) : [];
 }
 
 async function loadGroups(page = 1) {
@@ -195,8 +198,13 @@ async function loadGroups(page = 1) {
     document.getElementById('groupPagination').innerHTML = pages.join('');
 }
 
-function renderMemberCheckboxes(selectedIds = []) {
+async function renderMemberCheckboxes(selectedIds = []) {
     const container = document.getElementById('gf_members_container');
+    if (!employeesLookup.length) {
+        const r = await apiFetch('/employees?per_page=500');
+        employeesLookup = r.success ? (r.data?.data ?? r.data ?? []) : [];
+        if (!employeesLookup.length) { container.innerHTML = '<div class="text-muted text-center py-3">لا يوجد موظفون</div>'; return; }
+    }
     container.innerHTML = employeesLookup.map(e => {
         const checked = selectedIds.includes(e.id);
         return `<label class="d-flex align-items-center gap-2 px-2 py-1 member-check-item" style="cursor:pointer;border-radius:4px">
@@ -212,18 +220,39 @@ function updateMemberCount() {
     document.getElementById('gf_selected_count').textContent = `(${count})`;
 }
 
-function filterMemberCheckboxes() {
-    const q = document.getElementById('gf_member_search').value.trim().toLowerCase();
-    document.querySelectorAll('#gf_members_container .member-check-item').forEach(el => {
-        el.style.display = !q || el.textContent.toLowerCase().includes(q) ? '' : 'none';
-    });
+async function filterMemberCheckboxes() {
+    const searchInput = document.getElementById('gf_member_search');
+    const container = document.getElementById('gf_members_container');
+    if (!container) return;
+    const q = searchInput ? searchInput.value.trim() : '';
+    const selected = [...document.querySelectorAll('#gf_members_container .member-check:checked')].map(cb => Number(cb.value));
+
+    if (!q) {
+        if (employeesLookup.length) { await renderMemberCheckboxes(selected); return; }
+        const r = await apiFetch('/employees?per_page=500');
+        employeesLookup = r.success ? (r.data?.data ?? r.data ?? []) : [];
+        await renderMemberCheckboxes(selected);
+        return;
+    }
+
+    const r = await apiFetch('/employees?search=' + encodeURIComponent(q) + '&per_page=100');
+    if (!r.success) return;
+    const results = r.data?.data ?? r.data ?? [];
+    container.innerHTML = results.map(e => {
+        const checked = selected.includes(e.id);
+        return `<label class="d-flex align-items-center gap-2 px-2 py-1 member-check-item" style="cursor:pointer;border-radius:4px">
+            <input type="checkbox" class="form-check-input m-0 member-check" value="${e.id}" ${checked ? 'checked' : ''} onchange="updateMemberCount()">
+            <span style="font-size:.85rem">${escapeHtml(e.name)} <small class="text-muted">(${escapeHtml(e.employee_code || e.id)})</small></span>
+        </label>`;
+    }).join('');
+    updateMemberCount();
 }
 
-function openAddModal() {
+async function openAddModal() {
     document.getElementById('groupId').value = '';
     document.getElementById('groupForm').reset();
     document.getElementById('gf_member_search').value = '';
-    renderMemberCheckboxes([]);
+    await renderMemberCheckboxes([]);
     document.getElementById('groupModalTitle').innerHTML = '<i class="fas fa-users me-2"></i> إضافة مجموعة جديدة';
     new bootstrap.Modal(document.getElementById('groupModal')).show();
 }
@@ -242,7 +271,7 @@ async function openEditModal(id) {
     document.getElementById('gf_member_search').value = '';
 
     const memberIds = (g.employees || []).map(e => e.id);
-    renderMemberCheckboxes(memberIds);
+    await renderMemberCheckboxes(memberIds);
 }
 
 async function saveGroup() {
@@ -342,6 +371,11 @@ document.getElementById('groupSearch').addEventListener('keypress', e => { if (e
 document.addEventListener('DOMContentLoaded', async () => {
     await loadLookups();
     loadGroups();
+    const searchInput = document.getElementById('gf_member_search');
+    if (searchInput) {
+        searchInput.addEventListener('input', filterMemberCheckboxes);
+        searchInput.addEventListener('keypress', e => { if (e.key === 'Enter') filterMemberCheckboxes(); });
+    }
 });
 </script>
 @endpush
