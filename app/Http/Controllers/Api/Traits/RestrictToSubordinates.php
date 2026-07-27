@@ -7,6 +7,28 @@ use Illuminate\Support\Facades\Auth;
 
 trait RestrictToSubordinates
 {
+    private function isAdminUser(): bool
+    {
+        $user = Auth::user();
+        if (!$user) return false;
+
+        if ($user->hasRole('super_admin')) return true;
+        if ($user->hasRole('admin')) return true;
+
+        $managementRoles = [
+            'manager', 'finance_manager', 'hr_manager', 'operations_manager',
+            'delivery_manager', 'warehouse_manager',
+            'approver_level_1', 'approver_level_2', 'approver_level_3',
+        ];
+        foreach ($managementRoles as $role) {
+            if ($user->hasRole($role)) return true;
+        }
+
+        if (method_exists($user, 'can') && $user->can('manage_team_financials')) return true;
+
+        return false;
+    }
+
     private function getCurrentEmployee(): ?Employee
     {
         $user = Auth::user();
@@ -33,18 +55,18 @@ trait RestrictToSubordinates
 
     private function validateSubordinate(int $employeeId): void
     {
+        if ($this->isAdminUser()) return;
+
         $emp = $this->getCurrentEmployee();
         if (!$emp) {
-            abort(401, 'غير مصرح');
+            abort(401, 'غير مصرح - لا يوجد ملف موظف مرتبط');
         }
 
-        $isSuperAdmin = Auth::user()?->hasRole('super_admin')
-            ?? optional(Auth::user()?->roles()->first())?->name === 'super_admin';
-
-        if ($isSuperAdmin) return;
-
         if (!$emp->is_manager) {
-            abort(403, 'غير مصرح لك. أنت لست مديراً.');
+            if ($employeeId !== $emp->id) {
+                abort(403, 'غير مصرح لك. يمكنك إضافة سجلات لنفسك فقط.');
+            }
+            return;
         }
 
         $exists = $emp->subordinates()->where('id', $employeeId)->exists();
@@ -55,13 +77,10 @@ trait RestrictToSubordinates
 
     private function scopeSubordinates($query, string $employeeColumn = 'employee_id')
     {
+        if ($this->isAdminUser()) return $query;
+
         $emp = $this->getCurrentEmployee();
         if (!$emp) return $query;
-
-        $isSuperAdmin = Auth::user()?->hasRole('super_admin')
-            ?? optional(Auth::user()?->roles()->first())?->name === 'super_admin';
-
-        if ($isSuperAdmin) return $query;
 
         if (!$emp->is_manager) {
             $query->where($employeeColumn, $emp->id);
