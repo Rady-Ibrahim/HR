@@ -27,40 +27,55 @@
                 </div>
                 <form id="prepaidForm">
                     <div class="mb-3">
-                        <label class="form-label">اسم العميل *</label>
-                        <select name="customer_id" id="customer_id" class="form-select" required>
+                        <label class="form-label">اسم العميل</label>
+                        <select name="customer_id" id="customer_id" class="form-select">
                             <option value="">اختر العميل</option>
                         </select>
                     </div>
 
                     <div class="row g-2">
                         <div class="col-6 mb-3">
-                            <label class="form-label">عدد الأصناف *</label>
-                            <input type="number" name="items_count" id="items_count" class="form-control" min="1" value="1" required>
+                            <label class="form-label">عدد الأصناف</label>
+                            <input type="number" name="items_count" id="items_count" class="form-control" min="1" value="1">
                         </div>
                         <div class="col-6 mb-3">
-                            <label class="form-label">عدد الطلبيات *</label>
-                            <input type="number" name="orders_count" id="orders_count" class="form-control" min="1" value="1" required>
+                            <label class="form-label">عدد الطلبيات</label>
+                            <input type="number" name="orders_count" id="orders_count" class="form-control" min="1" value="1">
                         </div>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">اسم موظف محضر *</label>
-                        <select name="prepared_by_id" id="prepared_by_id" class="form-select" required>
+                        <label class="form-label">اسم موظف محضر</label>
+                        <select name="prepared_by_id" id="prepared_by_id" class="form-select">
                             <option value="">اختر الموظف</option>
                         </select>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">يرحل لموظف يراجع *</label>
-                        <select name="reviewer_employee_id" id="reviewer_employee_id" class="form-select" required>
+                        <label class="form-label">يرحل لموظف يراجع</label>
+                        <select name="reviewer_employee_id" id="reviewer_employee_id" class="form-select">
                             <option value="">اختر موظف المراجعة</option>
                         </select>
                     </div>
 
                     <div class="mb-3">
+                        <label class="form-label">تاريخ ووقت البداية</label>
+                        <div class="input-group">
+                            <input type="datetime-local" name="started_at" id="started_at" class="form-control">
+                            <button type="button" class="btn btn-outline-primary" onclick="setCurrentTime('started_at')">
+                                <i class="fas fa-clock"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">تاريخ ووقت الانتهاء</label>
+                        <input type="datetime-local" name="ended_at" id="ended_at" class="form-control">
+                    </div>
+
+                    <div class="mb-3">
                         <label class="form-label">ملاحظات</label>
-                        <textarea name="notes" id="notes" class="form-control" rows="3"></textarea>
+                        <textarea name="notes" id="notes" class="form-control" rows="2"></textarea>
                     </div>
 
                     <button type="submit" class="btn-primary-custom w-100">
@@ -124,10 +139,78 @@
         </div>
     </div>
 </div>
+<!-- FULL EDIT REQUEST MODAL -->
+<div class="modal fade" id="editRequestModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-edit me-2"></i>تعديل الطلب</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editRequestId">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">اسم العميل</label>
+                        <select id="edit_customer_id" class="form-select"><option value="">اختر العميل</option></select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">عدد الأصناف</label>
+                        <input type="number" id="edit_items_count" class="form-control" min="1">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">عدد الطلبيات</label>
+                        <input type="number" id="edit_orders_count" class="form-control" min="1">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">اسم موظف محضر</label>
+                        <select id="edit_prepared_by_id" class="form-select"><option value="">اختر الموظف</option></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">يرحل لموظف يراجع</label>
+                        <select id="edit_reviewer_employee_id" class="form-select"><option value="">اختر موظف المراجعة</option></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">تاريخ ووقت البداية</label>
+                        <div class="input-group">
+                            <input type="datetime-local" id="edit_started_at" class="form-control">
+                            <button type="button" class="btn btn-outline-primary" onclick="setCurrentTime('edit_started_at')"><i class="fas fa-clock"></i></button>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">تاريخ ووقت الانتهاء</label>
+                        <div class="input-group">
+                            <input type="datetime-local" id="edit_ended_at" class="form-control">
+                            <button type="button" class="btn btn-outline-primary" onclick="setCurrentTime('edit_ended_at')"><i class="fas fa-clock"></i></button>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div id="editDuration" class="alert alert-info py-2" style="font-size:.85rem"></div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">ملاحظات</label>
+                        <textarea id="edit_notes" class="form-control" rows="2"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <button type="button" class="btn-primary-custom" onclick="saveEditRequest()">حفظ التعديلات</button>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
 <script>
+function setCurrentTime(fieldId) {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60000;
+    const local = new Date(now - offset);
+    document.getElementById(fieldId).value = local.toISOString().slice(0, 16);
+}
+
 const requestStatusLabel = {
     draft: 'مسودة',
     prepared: 'تم التحضير',
@@ -161,14 +244,20 @@ async function loadLookups() {
     ]);
 
     if (customers.success) {
-        document.getElementById('customer_id').innerHTML = '<option value="">اختر العميل</option>' +
-            customers.data.data.map(c => `<option value="${c.id}">${c.name}${c.company_name ? ' - ' + c.company_name : ''}</option>`).join('');
+        const custOpts = customers.data.data.map(c => `<option value="${c.id}">${c.name}${c.company_name ? ' - ' + c.company_name : ''}</option>`).join('');
+        document.getElementById('customer_id').innerHTML = '<option value="">اختر العميل</option>' + custOpts;
+        const editCust = document.getElementById('edit_customer_id');
+        if (editCust) editCust.innerHTML = '<option value="">اختر العميل</option>' + custOpts;
     }
 
     if (employees.success) {
-        const options = employees.data.data.map(e => `<option value="${e.id}">${e.name} - ${e.employee_code ?? e.id}</option>`).join('');
-        document.getElementById('prepared_by_id').innerHTML = '<option value="">اختر الموظف</option>' + options;
-        document.getElementById('reviewer_employee_id').innerHTML = '<option value="">اختر موظف المراجعة</option>' + options;
+        const empOpts = employees.data.data.map(e => `<option value="${e.id}">${e.name} - ${e.employee_code ?? e.id}</option>`).join('');
+        document.getElementById('prepared_by_id').innerHTML = '<option value="">اختر الموظف</option>' + empOpts;
+        document.getElementById('reviewer_employee_id').innerHTML = '<option value="">اختر موظف المراجعة</option>' + empOpts;
+        const editPrep = document.getElementById('edit_prepared_by_id');
+        const editRev = document.getElementById('edit_reviewer_employee_id');
+        if (editPrep) editPrep.innerHTML = '<option value="">اختر الموظف</option>' + empOpts;
+        if (editRev) editRev.innerHTML = '<option value="">اختر موظف المراجعة</option>' + empOpts;
     }
 }
 
@@ -198,6 +287,7 @@ async function loadPrepaidRequests() {
             <td>
                 <div class="d-flex gap-1">
                     <button class="btn btn-sm btn-outline-info" onclick="viewPrepaid(${req.id})" title="عرض"><i class="fas fa-eye"></i></button>
+                    <button class="btn btn-sm btn-outline-warning" onclick="openEditRequestModal(${req.id})" title="تعديل"><i class="fas fa-edit"></i></button>
                     <button class="btn btn-sm btn-outline-success" onclick="approvePrepaid(${req.id})" title="اعتماد"><i class="fas fa-check"></i></button>
                     <button class="btn btn-sm btn-outline-danger" onclick="rejectPrepaid(${req.id})" title="رفض"><i class="fas fa-times"></i></button>
                 </div>
@@ -238,15 +328,89 @@ async function rejectPrepaid(id) {
     showAlert(r.message || 'فشل رفض الطلب', 'danger');
 }
 
+async function openEditRequestModal(id) {
+    const r = await apiFetch('/requests/' + id);
+    if (!r.success) return;
+    const req = r.data;
+    document.getElementById('editRequestId').value = req.id;
+    document.getElementById('edit_customer_id').value = req.customer_id ?? '';
+    document.getElementById('edit_items_count').value = req.items_count ?? '';
+    document.getElementById('edit_orders_count').value = req.orders_count ?? req.total_quantity ?? '';
+    document.getElementById('edit_prepared_by_id').value = req.prepared_by_id ?? '';
+    document.getElementById('edit_reviewer_employee_id').value = req.reviewer_employee_id ?? '';
+    document.getElementById('edit_started_at').value = req.started_at ? req.started_at.substring(0, 16) : '';
+    document.getElementById('edit_ended_at').value = req.ended_at ? req.ended_at.substring(0, 16) : '';
+    document.getElementById('edit_notes').value = req.notes ?? '';
+    updateEditDuration();
+    new bootstrap.Modal(document.getElementById('editRequestModal')).show();
+}
+
+function updateEditDuration() {
+    const startedAtValue = document.getElementById('edit_started_at').value;
+    if (!startedAtValue) {
+        document.getElementById('editDuration').textContent = 'لم يتم تسجيل وقت بداية';
+        return;
+    }
+    const start = new Date(startedAtValue);
+    const endedAtValue = document.getElementById('edit_ended_at').value;
+    const end = endedAtValue ? new Date(endedAtValue) : new Date();
+    const diffMs = end - start;
+    if (diffMs < 0) {
+        document.getElementById('editDuration').textContent = 'وقت الانتهاء قبل وقت البداية';
+        return;
+    }
+    const totalSec = Math.floor(diffMs / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    const parts = [];
+    if (h > 0) parts.push(h + ' ساعة');
+    if (m > 0) parts.push(m + ' دقيقة');
+    if (s > 0) parts.push(s + ' ثانية');
+    document.getElementById('editDuration').textContent = 'الفارق الزمني: ' + (parts.join(' ') || 'أقل من دقيقة');
+}
+
+async function saveEditRequest() {
+    const id = document.getElementById('editRequestId').value;
+    const data = {
+        customer_id: document.getElementById('edit_customer_id').value || null,
+        items_count: document.getElementById('edit_items_count').value ? Number(document.getElementById('edit_items_count').value) : null,
+        orders_count: document.getElementById('edit_orders_count').value ? Number(document.getElementById('edit_orders_count').value) : null,
+        prepared_by_id: document.getElementById('edit_prepared_by_id').value || null,
+        reviewer_employee_id: document.getElementById('edit_reviewer_employee_id').value || null,
+        started_at: document.getElementById('edit_started_at').value || null,
+        ended_at: document.getElementById('edit_ended_at').value || null,
+        notes: document.getElementById('edit_notes').value || null,
+    };
+    const r = await apiFetch('/requests/' + id, {
+        method: 'PUT',
+        body: JSON.stringify(data)
+    });
+    if (r.success) {
+        bootstrap.Modal.getInstance(document.getElementById('editRequestModal')).hide();
+        showAlert('تم تحديث الطلب');
+        loadPrepaidRequests();
+        return;
+    }
+    showAlert(r.message || 'فشل التحديث', 'danger');
+}
+
 document.getElementById('prepaidForm').addEventListener('submit', async (event) => {
     event.preventDefault();
     const fd = new FormData(event.target);
+    const rawCustomer = fd.get('customer_id');
+    const rawItems = fd.get('items_count');
+    const rawOrders = fd.get('orders_count');
+    const rawPrepared = fd.get('prepared_by_id');
+    const rawReviewer = fd.get('reviewer_employee_id');
     const data = {
-        customer_id: Number(fd.get('customer_id')),
-        items_count: Number(fd.get('items_count')),
-        orders_count: Number(fd.get('orders_count')),
-        prepared_by_id: Number(fd.get('prepared_by_id')),
-        reviewer_employee_id: Number(fd.get('reviewer_employee_id')),
+        customer_id: rawCustomer ? Number(rawCustomer) : null,
+        items_count: rawItems ? Number(rawItems) : null,
+        orders_count: rawOrders ? Number(rawOrders) : null,
+        prepared_by_id: rawPrepared ? Number(rawPrepared) : null,
+        reviewer_employee_id: rawReviewer ? Number(rawReviewer) : null,
+        started_at: fd.get('started_at') || null,
+        ended_at: fd.get('ended_at') || null,
         notes: fd.get('notes') || null
     };
 
@@ -255,6 +419,8 @@ document.getElementById('prepaidForm').addEventListener('submit', async (event) 
         event.target.reset();
         document.getElementById('items_count').value = 1;
         document.getElementById('orders_count').value = 1;
+        document.getElementById('started_at').value = '';
+        document.getElementById('ended_at').value = '';
         showAlert('تم ترحيل الطلب للمراجعة');
         loadPrepaidRequests();
     } else {
@@ -262,9 +428,15 @@ document.getElementById('prepaidForm').addEventListener('submit', async (event) 
     }
 });
 
+document.getElementById('edit_started_at').addEventListener('change', updateEditDuration);
+document.getElementById('edit_ended_at').addEventListener('change', updateEditDuration);
+
 document.addEventListener('DOMContentLoaded', () => {
     loadLookups();
     loadPrepaidRequests();
+    if (!document.getElementById('started_at').value) {
+        setCurrentTime('started_at');
+    }
 });
 </script>
 @endpush

@@ -155,32 +155,39 @@ class RequestController
     public function storePrepaid(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'customer_id' => 'required|exists:customers,id',
-            'items_count' => 'required|integer|min:1',
-            'orders_count' => 'required|integer|min:1',
-            'prepared_by_id' => 'required|exists:employees,id',
-            'reviewer_employee_id' => 'required|exists:employees,id',
+            'customer_id' => 'nullable|exists:customers,id',
+            'items_count' => 'nullable|integer|min:1',
+            'orders_count' => 'nullable|integer|min:1',
+            'prepared_by_id' => 'nullable|exists:employees,id',
+            'reviewer_employee_id' => 'nullable|exists:employees,id',
+            'started_at' => 'nullable|date',
+            'ended_at' => 'nullable|date|after_or_equal:started_at',
             'notes' => 'nullable|string',
         ]);
 
-        $customer = Customer::findOrFail($validated['customer_id']);
+        $currentEmployee = $this->currentEmployee();
+
+        $customerId = $validated['customer_id'] ?? null;
+        $customer = $customerId ? Customer::find($customerId) : null;
 
         $payload = [
-            'request_number' => 'PRE-' . now()->format('YmdHis'),
-            'customer_id' => $customer->id,
-            'customer_name' => $customer->name,
-            'company_name' => $customer->company_name,
-            'items_count' => $validated['items_count'],
-            'total_quantity' => $validated['orders_count'],
+            'request_number' => \App\Models\Request::nextPrepaidNumber(),
+            'customer_id' => $customer?->id,
+            'customer_name' => $customer?->name,
+            'company_name' => $customer?->company_name,
+            'items_count' => $validated['items_count'] ?? 0,
+            'total_quantity' => $validated['orders_count'] ?? 0,
             'status' => 'under_review',
-            'created_by_id' => $this->currentEmployeeId(),
-            'prepared_by_id' => $validated['prepared_by_id'],
+            'created_by_id' => $currentEmployee?->id,
+            'prepared_by_id' => $validated['prepared_by_id'] ?? $currentEmployee?->id,
             'prepared_at' => now(),
+            'started_at' => $validated['started_at'] ?? now(),
+            'ended_at' => $validated['ended_at'] ?? null,
             'notes' => $validated['notes'] ?? null,
         ];
 
         if (Schema::hasColumn('requests', 'orders_count')) {
-            $payload['orders_count'] = $validated['orders_count'];
+            $payload['orders_count'] = $validated['orders_count'] ?? 0;
         }
         if (Schema::hasColumn('requests', 'payment_type')) {
             $payload['payment_type'] = 'prepaid';
@@ -192,7 +199,10 @@ class RequestController
         }
 
         $requestModel = RequestModel::create($payload);
-        $this->createReviewerApproval($requestModel, $validated['reviewer_employee_id'], 'تم ترحيل طلب تحضير الطلبيه للمراجعة');
+
+        if ($payload['reviewer_employee_id'] ?? null) {
+            $this->createReviewerApproval($requestModel, $payload['reviewer_employee_id'], 'تم ترحيل طلب تحضير الطلبيه للمراجعة');
+        }
 
         return response()->json([
             'success' => true,
@@ -232,6 +242,8 @@ class RequestController
             'estimated_delivery_date' => 'nullable|date',
             'delivery_date' => 'nullable|date',
             'reviewer_employee_id' => 'nullable|exists:employees,id',
+            'started_at' => 'nullable|date',
+            'ended_at' => 'nullable|date|after_or_equal:started_at',
             'status' => 'nullable|string',
             'notes' => 'nullable|string',
             'items' => 'nullable|array',
@@ -244,6 +256,8 @@ class RequestController
             $payload = collect($validated)->only(['customer_id', 'warehouse', 'notes', 'reviewer_employee_id'])->toArray();
             $payload['assigned_employee_id'] = $validated['assigned_employee_id'] ?? $validated['employee_id'] ?? $requestModel->assigned_employee_id;
             $payload['estimated_delivery_date'] = $validated['estimated_delivery_date'] ?? $validated['delivery_date'] ?? $requestModel->estimated_delivery_date;
+            $payload['started_at'] = $validated['started_at'] ?? $requestModel->started_at;
+            $payload['ended_at'] = $validated['ended_at'] ?? $requestModel->ended_at;
             if (($validated['status'] ?? null) === 'under_review') {
                 $payload['status'] = 'under_review';
                 $payload['prepared_at'] = $requestModel->prepared_at ?? now();

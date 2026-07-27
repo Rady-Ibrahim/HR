@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 class Request extends Model
 {
@@ -18,7 +19,8 @@ class Request extends Model
         'payment_type', 'status', 'created_by_id', 'prepared_by_id', 'reviewer_employee_id',
         'reviewed_by_id', 'approved_by_id',
         'prepared_at', 'reviewed_at', 'approved_at', 'estimated_delivery_date',
-        'actual_delivery_date', 'notes', 'rejection_reason'
+        'actual_delivery_date', 'started_at', 'ended_at',
+        'notes', 'rejection_reason'
     ];
 
     protected $casts = [
@@ -28,6 +30,8 @@ class Request extends Model
         'prepared_at' => 'datetime',
         'reviewed_at' => 'datetime',
         'approved_at' => 'datetime',
+        'started_at' => 'datetime',
+        'ended_at' => 'datetime',
     ];
 
     public function customer(): BelongsTo
@@ -83,5 +87,37 @@ class Request extends Model
     public function employee(): BelongsTo
     {
         return $this->assignedEmployee();
+    }
+
+    public function getDurationAttribute(): ?string
+    {
+        if (!$this->started_at) return null;
+
+        $end = $this->ended_at ?? now();
+        $start = $this->started_at instanceof \Carbon\Carbon
+            ? $this->started_at
+            : carbon($this->started_at);
+        $end = $end instanceof \Carbon\Carbon
+            ? $end
+            : carbon($end);
+
+        $diff = $start->diff($end);
+        $parts = [];
+        if ($diff->h > 0) $parts[] = $diff->h . ' ساعة';
+        if ($diff->i > 0) $parts[] = $diff->i . ' دقيقة';
+        if ($diff->s > 0) $parts[] = $diff->s . ' ثانية';
+
+        return implode(' ', $parts) ?: 'أقل من دقيقة';
+    }
+
+    public static function nextPrepaidNumber(): string
+    {
+        $lastNumber = self::where('request_number', 'like', 'Order-%')
+            ->orderByRaw("CAST(SUBSTRING(request_number, 7) AS UNSIGNED) DESC")
+            ->value(DB::raw("CAST(SUBSTRING(request_number, 7) AS UNSIGNED)"));
+
+        $next = ($lastNumber ?? 0) + 1;
+
+        return 'Order-' . str_pad($next, 2, '0', STR_PAD_LEFT);
     }
 }
