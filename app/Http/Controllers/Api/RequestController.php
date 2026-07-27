@@ -192,11 +192,11 @@ class RequestController
         }
 
         $requestModel = RequestModel::create($payload);
-        $this->createReviewerApproval($requestModel, $validated['reviewer_employee_id'], 'تم ترحيل طلب المسبق الدفع للمراجعة');
+        $this->createReviewerApproval($requestModel, $validated['reviewer_employee_id'], 'تم ترحيل طلب تحضير الطلبيه للمراجعة');
 
         return response()->json([
             'success' => true,
-            'message' => 'تم ترحيل طلب المسبق الدفع للمراجعة',
+            'message' => 'تم ترحيل طلب تحضير الطلبيه للمراجعة',
             'data' => $requestModel->load(['customer', 'preparedBy', 'reviewerEmployee', 'assignedEmployee']),
         ], 201);
     }

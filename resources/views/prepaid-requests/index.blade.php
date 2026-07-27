@@ -1,12 +1,12 @@
 @extends('layouts.app')
-@section('title', 'المسبق الدفع')
-@section('page-title', 'المسبق الدفع')
+@section('title', ' تحضير الطلبيه')
+@section('page-title', ' تحضير الطلبيه')
 
 @section('content')
 <div class="page-header">
     <div>
-        <h1><i class="fas fa-receipt me-2 text-primary"></i> المسبق الدفع</h1>
-        <div class="breadcrumb">ترحيل طلبات المسبق الدفع للمراجعة</div>
+        <h1><i class="fas fa-receipt me-2 text-primary"></i> تحضير الطلبيه</h1>
+        <div class="breadcrumb">ترحيل طلبات تحضير الطلبيه للمراجعة</div>
     </div>
     <div class="d-flex gap-2">
         <button class="btn btn-outline-primary" onclick="loadPrepaidRequests()"><i class="fas fa-sync-alt me-1"></i> تحديث</button>
@@ -217,7 +217,7 @@ async function viewPrepaid(id) {
 }
 
 async function approvePrepaid(id) {
-    const r = await apiFetch(`/requests/${id}/manager-approve`, { method: 'POST', body: JSON.stringify({ notes: 'اعتماد من صفحة المسبق الدفع' }) });
+    const r = await apiFetch(`/requests/${id}/manager-approve`, { method: 'POST', body: JSON.stringify({ notes: 'اعتماد من صفحة تحضير الطلبيه' }) });
     if (r.success) {
         showAlert('تم اعتماد الطلب');
         loadPrepaidRequests();

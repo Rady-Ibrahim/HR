@@ -109,6 +109,7 @@ class EmployeeMessageController
          * نستخدم sub-query لإيجاد max(id) لكل زوج (me <-> other)
          */
         $latestIds = EmployeeMessage::withTrashed(false)
+            ->whereNull('group_id')
             ->where(function ($q) use ($me) {
                 $q->where('sender_id', $me->id)
                   ->orWhere('receiver_id', $me->id);

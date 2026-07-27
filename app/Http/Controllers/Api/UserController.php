@@ -72,7 +72,7 @@ class UserController extends Controller
             ]],
             ['section' => 'التشغيل', 'perms' => [
                 ['name' => 'view_requests', 'label' => 'الطلبات'],
-                ['name' => 'view_prepaid_requests', 'label' => 'المسبق الدفع'],
+                ['name' => 'view_prepaid_requests', 'label' => ' تحضير الطلبيه'],
                 ['name' => 'view_routes', 'label' => 'خطوط السير'],
                 ['name' => 'view_deliveries', 'label' => 'التسليمات'],
                 ['name' => 'view_collections', 'label' => 'التحصيلات'],

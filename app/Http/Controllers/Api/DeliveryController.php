@@ -408,6 +408,7 @@ class DeliveryController
         }
 
         Notification::create([
+            'sender_id' => auth()->id(),
             'user_id' => $employee->user_id,
             'title' => $title,
             'message' => $message,

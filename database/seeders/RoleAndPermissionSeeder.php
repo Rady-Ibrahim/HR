@@ -77,6 +77,55 @@ class RoleAndPermissionSeeder extends Seeder
 
             // Dashboard
             ['name' => 'view_dashboard', 'group' => 'dashboard', 'description' => 'عرض لوحة التحكم'],
+
+            // Shifts
+            ['name' => 'view_shifts', 'group' => 'shifts', 'description' => 'عرض الورديات'],
+
+            // Read-only salary sub-permissions (view-only variants)
+            ['name' => 'view_incentives', 'group' => 'salaries', 'description' => 'عرض الحوافز'],
+            ['name' => 'view_deductions', 'group' => 'salaries', 'description' => 'عرض الخصومات'],
+            ['name' => 'view_advances', 'group' => 'salaries', 'description' => 'عرض السلف'],
+            ['name' => 'view_allowances', 'group' => 'salaries', 'description' => 'عرض البدلات'],
+            ['name' => 'view_commissions', 'group' => 'salaries', 'description' => 'عرض العمولات'],
+
+            // Employee points
+            ['name' => 'view_employee_points', 'group' => 'employees', 'description' => 'عرض نقاط الموظفين'],
+
+            // Prepaid requests
+            ['name' => 'view_prepaid_requests', 'group' => 'requests', 'description' => 'عرض تحضير الطلبيه'],
+
+            // Delivery routes
+            ['name' => 'view_routes', 'group' => 'deliveries', 'description' => 'عرض خطوط السير'],
+
+            // Car violations
+            ['name' => 'view_car_violations', 'group' => 'car_violations', 'description' => 'عرض مخالفات السيارات'],
+
+            // Customers
+            ['name' => 'view_customers', 'group' => 'customers', 'description' => 'عرض العملاء'],
+
+            // Warehouses
+            ['name' => 'view_warehouses', 'group' => 'warehouses', 'description' => 'عرض المخازن'],
+
+            // Items
+            ['name' => 'view_items', 'group' => 'items', 'description' => 'عرض الأصناف'],
+
+            // Approvals
+            ['name' => 'view_approvals', 'group' => 'approvals', 'description' => 'عرض الموافقات'],
+
+            // Chat groups
+            ['name' => 'view_chat_groups', 'group' => 'chat_groups', 'description' => 'عرض مجموعات الدردشة'],
+
+            // Notifications
+            ['name' => 'view_notifications', 'group' => 'notifications', 'description' => 'عرض الإشعارات'],
+
+            // Work locations
+            ['name' => 'view_work_locations', 'group' => 'work_locations', 'description' => 'عرض مواقع العمل'],
+
+            // Tab permissions
+            ['name' => 'view_tab_permissions', 'group' => 'settings', 'description' => 'عرض صلاحيات التابات'],
+
+            // Users
+            ['name' => 'view_users', 'group' => 'users', 'description' => 'عرض المستخدمين'],
         ];
 
         foreach ($permissions as $permission) {
