@@ -200,6 +200,16 @@ class RequestController
 
         $requestModel = RequestModel::create($payload);
 
+        if ($payload['prepared_by_id'] ?? null) {
+            $this->notifyEmployee(
+                $payload['prepared_by_id'],
+                'تم إنشاء طلب تحضير طلبيه',
+                'تم إنشاء الطلب ' . $requestModel->request_number . ' وإرساله للمراجعة',
+                $requestModel,
+                'prepaid_created'
+            );
+        }
+
         if ($payload['reviewer_employee_id'] ?? null) {
             $this->createReviewerApproval($requestModel, $payload['reviewer_employee_id'], 'تم ترحيل طلب تحضير الطلبيه للمراجعة');
         }
@@ -448,6 +458,16 @@ class RequestController
         $managerId = $requestModel->createdBy?->reporting_manager_id
             ?? $requestModel->preparedBy?->reporting_manager_id;
 
+        if ($requestModel->prepared_by_id) {
+            $this->notifyEmployee(
+                $requestModel->prepared_by_id,
+                'تمت مراجعة الطلب',
+                'تمت مراجعة الطلب ' . $requestModel->request_number . ' بواسطة المراجع',
+                $requestModel,
+                'prepaid_reviewed'
+            );
+        }
+
         if (!$managerId) {
             $requestModel->update([
                 'status' => 'approved',
@@ -455,6 +475,15 @@ class RequestController
                 'approved_at' => now(),
                 'notes' => $validated['notes'] ?? $requestModel->notes,
             ]);
+            if ($requestModel->prepared_by_id) {
+                $this->notifyEmployee(
+                    $requestModel->prepared_by_id,
+                    'تم اعتماد الطلب',
+                    'تم اعتماد الطلب ' . $requestModel->request_number,
+                    $requestModel,
+                    'prepaid_approved'
+                );
+            }
             return response()->json([
                 'success' => true,
                 'message' => 'تمت مراجعة الطلب واعتماده (لا يوجد مدير مربوط بالطلب)',
@@ -497,6 +526,16 @@ class RequestController
             'reviewed_at' => now(),
             'rejection_reason' => $validated['reason'],
         ]);
+
+        if ($requestModel->prepared_by_id) {
+            $this->notifyEmployee(
+                $requestModel->prepared_by_id,
+                'تم رفض الطلب',
+                'تم رفض الطلب ' . $requestModel->request_number . ' بواسطة المراجع - السبب: ' . $validated['reason'],
+                $requestModel,
+                'prepaid_rejected'
+            );
+        }
 
         return response()->json([
             'success' => true,
@@ -604,6 +643,26 @@ class RequestController
             'notes' => $validated['notes'] ?? $requestModel->notes,
         ]);
 
+        if ($requestModel->prepared_by_id) {
+            $this->notifyEmployee(
+                $requestModel->prepared_by_id,
+                'تم اعتماد الطلب',
+                'تم اعتماد الطلب ' . $requestModel->request_number . ' بواسطة المدير',
+                $requestModel,
+                'prepaid_approved'
+            );
+        }
+
+        if ($requestModel->reviewer_employee_id) {
+            $this->notifyEmployee(
+                $requestModel->reviewer_employee_id,
+                'تم اعتماد الطلب من المدير',
+                'تم اعتماد الطلب ' . $requestModel->request_number . ' الذي راجعته بواسطة المدير',
+                $requestModel,
+                'prepaid_approved'
+            );
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'تمت موافقة المدير على الطلب',
@@ -635,6 +694,26 @@ class RequestController
             'rejection_reason' => $validated['reason'],
         ]);
 
+        if ($requestModel->prepared_by_id) {
+            $this->notifyEmployee(
+                $requestModel->prepared_by_id,
+                'تم رفض الطلب',
+                'تم رفض الطلب ' . $requestModel->request_number . ' بواسطة المدير - السبب: ' . $validated['reason'],
+                $requestModel,
+                'prepaid_rejected'
+            );
+        }
+
+        if ($requestModel->reviewer_employee_id) {
+            $this->notifyEmployee(
+                $requestModel->reviewer_employee_id,
+                'تم رفض الطلب من المدير',
+                'تم رفض الطلب ' . $requestModel->request_number . ' الذي راجعته بواسطة المدير - السبب: ' . $validated['reason'],
+                $requestModel,
+                'prepaid_rejected'
+            );
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'تم رفض الطلب من المدير',
@@ -656,6 +735,16 @@ class RequestController
             'approved_by_id' => auth()->user()->employee_id ?? 1,
             'notes' => $validated['notes'] ?? null,
         ]);
+
+        if ($requestModel->prepared_by_id) {
+            $this->notifyEmployee(
+                $requestModel->prepared_by_id,
+                'تم اعتماد الطلب',
+                'تم اعتماد الطلب ' . $requestModel->request_number,
+                $requestModel,
+                'prepaid_approved'
+            );
+        }
 
         return response()->json([
             'success' => true,
@@ -802,6 +891,16 @@ class RequestController
             'status' => 'rejected',
             'rejection_reason' => $validated['rejection_reason'] ?? $validated['reason'],
         ]);
+
+        if ($requestModel->prepared_by_id) {
+            $this->notifyEmployee(
+                $requestModel->prepared_by_id,
+                'تم رفض الطلب',
+                'تم رفض الطلب ' . $requestModel->request_number . ' - السبب: ' . ($validated['rejection_reason'] ?? $validated['reason']),
+                $requestModel,
+                'prepaid_rejected'
+            );
+        }
 
         return response()->json([
             'success' => true,
