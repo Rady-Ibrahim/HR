@@ -54,7 +54,7 @@
                     <input type="hidden" id="custId">
                     <div class="row g-3">
                         <div class="col-md-6"><label class="form-label">اسم العميل *</label><input type="text" name="name" id="cf_name" class="form-control" required></div>
-                        <div class="col-md-6"><label class="form-label">رقم الهاتف *</label><input type="text" name="phone" id="cf_phone" class="form-control" required></div>
+                        <div class="col-md-6"><label class="form-label">رقم الهاتف</label><input type="text" name="phone" id="cf_phone" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">البريد الإلكتروني</label><input type="email" name="email" id="cf_email" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">رقم هاتف إضافي</label><input type="text" name="phone2" id="cf_phone2" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">حد الائتمان (ج.م)</label><input type="number" name="credit_limit" id="cf_credit_limit" class="form-control" placeholder="0.00"></div>

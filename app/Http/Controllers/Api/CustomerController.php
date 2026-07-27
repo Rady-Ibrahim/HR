@@ -39,7 +39,7 @@ class CustomerController
         $validated = $request->validate([
             'name'              => 'required|string|max:255',
             'company_name'      => 'nullable|string|max:255',
-            'phone'             => 'required|string|max:20',
+            'phone'             => 'nullable|string|max:20',
             'phone_alternative' => 'nullable|string|max:20',
             'email'             => 'nullable|email',
             'city'              => 'nullable|string',
