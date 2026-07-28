@@ -305,9 +305,10 @@ function addEarlyRuleRow() {
 
 function collectRuleRows(containerSelector, prefix) {
     const rows = document.querySelectorAll(containerSelector + ' tbody tr');
+    const minuteKey = prefix === 'er' ? 'early' : 'delay';
     return Array.from(rows).map(row => ({
-        min_delay_minutes: parseInt(row.querySelector('.' + prefix + '-min')?.value) || 0,
-        max_delay_minutes: row.querySelector('.' + prefix + '-max')?.value ? parseInt(row.querySelector('.' + prefix + '-max').value) : null,
+        ['min_' + minuteKey + '_minutes']: parseInt(row.querySelector('.' + prefix + '-min')?.value) || 0,
+        ['max_' + minuteKey + '_minutes']: row.querySelector('.' + prefix + '-max')?.value ? parseInt(row.querySelector('.' + prefix + '-max').value) : null,
         deduction_type: row.querySelector('.' + prefix + '-type')?.value || 'minutes',
         deduction_value: row.querySelector('.' + prefix + '-value')?.value ? parseFloat(row.querySelector('.' + prefix + '-value').value) : null,
     }));
