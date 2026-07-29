@@ -99,15 +99,17 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">اسم السائق</label>
-                            <select name="driver_id" id="rf_driver_id" class="form-select">
-                                <option value="">اختر السائق</option>
-                            </select>
+                            <div class="ac-container">
+                                <input type="text" class="form-control" id="rf_driver_input" placeholder="ابحث عن سائق..." autocomplete="off">
+                                <input type="hidden" name="driver_id" id="rf_driver_id">
+                            </div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">اسم المندوب</label>
-                            <select name="sales_rep_id" id="rf_sales_rep_id" class="form-select">
-                                <option value="">اختر المندوب</option>
-                            </select>
+                            <div class="ac-container">
+                                <input type="text" class="form-control" id="rf_sales_rep_input" placeholder="ابحث عن مندوب..." autocomplete="off">
+                                <input type="hidden" name="sales_rep_id" id="rf_sales_rep_id">
+                            </div>
                         </div>
                     </div>
 
@@ -168,26 +170,26 @@ let routeDeleteId = null;
 let routePage = 1;
 let stopRowCounter = 0;
 let customersLookup = [];
-let employeesLookup = [];
 let requestsLookup = [];
+let driverAutocomplete, delegateAutocomplete;
 
 const routeStatusLabel = { active: 'نشط', inactive: 'غير نشط', archived: 'مؤرشف' };
 const routeStatusBadge = { active: 'badge-active', inactive: 'badge-inactive', archived: 'badge-draft' };
 
-async function loadLookups() {
-    const [customers, employees, requests] = await Promise.all([
-        apiFetch('/customers?per_page=100&status=active'),
-        apiFetch('/employees?per_page=1000'),
-        apiFetch('/requests?per_page=100')
+async function initRouteLookups() {
+    const [customers, requests] = await Promise.all([
+        apiFetch('/customers?per_page=1000&status=active'),
+        apiFetch('/requests?per_page=100'),
     ]);
-
     customersLookup = customers.success ? (customers.data.data || []) : [];
-    employeesLookup = employees.success ? (employees.data.data || []) : [];
     requestsLookup = requests.success ? (requests.data.data || []) : [];
 
-    const empOptions = employeesLookup.map(e => `<option value="${e.id}">${escapeHtml(e.name)} - ${escapeHtml(e.employee_code ?? e.id)}</option>`).join('');
-    document.getElementById('rf_driver_id').innerHTML = '<option value="">اختر السائق</option>' + empOptions;
-    document.getElementById('rf_sales_rep_id').innerHTML = '<option value="">اختر المندوب</option>' + empOptions;
+    driverAutocomplete = createSearchableSelect(
+        document.getElementById('rf_driver_input'), 'drivers'
+    );
+    delegateAutocomplete = createSearchableSelect(
+        document.getElementById('rf_sales_rep_input'), 'delegates'
+    );
 }
 
 async function loadRoutes(page = 1) {
@@ -243,6 +245,8 @@ function openAddModal() {
     document.getElementById('rf_status').value = 'active';
     document.getElementById('stopsContainer').innerHTML = '';
     stopRowCounter = 0;
+    if (driverAutocomplete) driverAutocomplete.reset();
+    if (delegateAutocomplete) delegateAutocomplete.reset();
     addStopRow();
     document.getElementById('routeModalTitle').innerHTML = '<i class="fas fa-route me-2"></i> إضافة خط سير جديد';
     new bootstrap.Modal(document.getElementById('routeModal')).show();
@@ -261,8 +265,8 @@ async function openEditModal(id) {
     document.getElementById('rf_route_name').value = route.route_name ?? '';
     document.getElementById('rf_vehicle_number').value = route.vehicle_number ?? '';
     document.getElementById('rf_status').value = route.status ?? 'active';
-    document.getElementById('rf_driver_id').value = route.driver_id ?? '';
-    document.getElementById('rf_sales_rep_id').value = route.sales_rep_id ?? '';
+    if (driverAutocomplete) driverAutocomplete.setValue(route.driver_id ?? '', route.driver?.name ?? '');
+    if (delegateAutocomplete) delegateAutocomplete.setValue(route.sales_rep_id ?? '', route.sales_rep?.name ?? '');
     document.getElementById('stopsContainer').innerHTML = '';
     stopRowCounter = 0;
     (route.stops || []).forEach(stop => addStopRow(stop));
@@ -288,9 +292,10 @@ function addStopRow(stop = null) {
             <div class="row g-2">
                 <div class="col-md-4">
                     <label class="form-label">اسم العميل *</label>
-                    <select class="form-select stop-customer" required onchange="renderRequestOptions(this.closest('.route-stop-row'))">
-                        ${customerOptions(stop?.customer_id)}
-                    </select>
+                    <div class="ac-container">
+                        <input type="text" class="form-control stop-customer-input" placeholder="ابحث عن عميل..." autocomplete="off" data-customer-id="${stop?.customer_id ?? ''}">
+                        <input type="hidden" class="stop-customer" name="customer_id">
+                    </div>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">الطلبيات المرتبطة</label>
@@ -332,20 +337,23 @@ function addStopRow(stop = null) {
         </div>
     `;
     document.getElementById('stopsContainer').appendChild(div);
+    const input = div.querySelector('.stop-customer-input');
+    createSearchableSelect(input, 'customers', {
+        onSelect: () => renderRequestOptions(div)
+    });
+    if (stop?.customer_id) {
+        const label = customersLookup.find(c => String(c.id) === String(stop.customer_id));
+        const fullLabel = label ? `${label.name}${label.company_name ? ' - ' + label.company_name : ''}` : '';
+        input.value = fullLabel;
+        input.dataset.customerId = stop.customer_id;
+        input.closest('.ac-container').querySelector('.stop-customer').value = stop.customer_id;
+    }
     renderRequestOptions(div, stop?.request_ids || []);
     refreshStopOrders();
 }
 
-function customerOptions(selectedId = '') {
-    return '<option value="">اختر العميل</option>' + customersLookup.map(c => {
-        const selected = String(c.id) === String(selectedId) ? 'selected' : '';
-        const label = `${c.name}${c.company_name ? ' - ' + c.company_name : ''}`;
-        return `<option value="${c.id}" ${selected}>${escapeHtml(label)}</option>`;
-    }).join('');
-}
-
 function renderRequestOptions(row, selectedIds = []) {
-    const customerId = row.querySelector('.stop-customer').value;
+    const customerId = row.querySelector('.stop-customer')?.value || '';
     const select = row.querySelector('.stop-requests');
     const selected = selectedIds.map(String);
     const matching = requestsLookup.filter(req => !customerId || String(req.customer_id) === String(customerId));
@@ -408,8 +416,8 @@ async function saveRoute() {
     const data = {
         route_name: document.getElementById('rf_route_name').value || null,
         vehicle_number: document.getElementById('rf_vehicle_number').value || null,
-        driver_id: valueOrNull('rf_driver_id'),
-        sales_rep_id: valueOrNull('rf_sales_rep_id'),
+        driver_id: driverAutocomplete ? Number(driverAutocomplete.getValue()) || null : null,
+        sales_rep_id: delegateAutocomplete ? Number(delegateAutocomplete.getValue()) || null : null,
         status: document.getElementById('rf_status').value || 'active',
         stops: collectStops()
     };
@@ -554,7 +562,7 @@ function escapeJs(value) {
 
 document.getElementById('routeSearch').addEventListener('keypress', e => { if (e.key === 'Enter') loadRoutes(); });
 document.addEventListener('DOMContentLoaded', async () => {
-    await loadLookups();
+    await initRouteLookups();
     loadRoutes();
 });
 </script>

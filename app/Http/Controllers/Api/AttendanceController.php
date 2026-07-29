@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Traits\RestrictToSubordinates;
 use App\Models\Attendance;
 use App\Models\AttendanceRequest;
 use App\Models\Employee;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\Config;
 
 class AttendanceController
 {
+    use RestrictToSubordinates;
     public function __construct(private AttendancePenaltyService $penaltyService) {}
 
     public function index(Request $request): JsonResponse
@@ -427,9 +429,12 @@ class AttendanceController
 
     public function requestLeave(Request $request): JsonResponse
     {
+        $employee = $this->getCurrentEmployee();
+        if (!$employee) {
+            return response()->json(['success' => false, 'message' => 'غير مصرح - لا يوجد ملف موظف مرتبط'], 401);
+        }
 
         $validated = $request->validate([
-            'employee_id'  => 'required|exists:employees,id',
             'request_type' => 'required|in:sick,leave,late,early,excuse',
             'from_date'    => 'required|date',
             'to_date'      => 'required|date|after_or_equal:from_date',
@@ -439,6 +444,7 @@ class AttendanceController
         $from = Carbon::parse($validated['from_date']);
         $to   = Carbon::parse($validated['to_date']);
         $validated['days_count'] = $from->diffInDays($to) + 1;
+        $validated['employee_id'] = $employee->id;
 
         $leaveRequest = AttendanceRequest::create($validated);
 
@@ -451,6 +457,10 @@ class AttendanceController
 
     public function approveLeave(Request $request, $id): JsonResponse
     {
+        if (!$this->isAdminUser()) {
+            return response()->json(['success' => false, 'message' => 'غير مصرح بالموافقة على طلبات الإجازات'], 403);
+        }
+
         $leaveRequest = AttendanceRequest::findOrFail($id);
         $validated    = $request->validate([
             'status' => 'required|in:approved,rejected',
@@ -459,7 +469,7 @@ class AttendanceController
 
         $leaveRequest->update([
             'approval_status' => $validated['status'],
-            'approved_by_id'  => $this->currentEmployee()?->id ?? 1,
+            'approved_by_id'  => $this->getCurrentEmployee()?->id ?? 1,
             'approval_notes'  => $validated['notes'] ?? null,
         ]);
 
@@ -486,8 +496,9 @@ class AttendanceController
     {
         $query = AttendanceRequest::with('employee');
 
-        if ($request->filled('status'))      $query->where('approval_status', $request->status);
-        if ($request->filled('employee_id')) $query->where('employee_id', $request->employee_id);
+        if ($request->filled('status')) $query->where('approval_status', $request->status);
+
+        $this->scopeSubordinates($query);
 
         $requests = $query->orderByDesc('created_at')->paginate($request->get('per_page', 15));
 

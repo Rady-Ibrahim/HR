@@ -37,6 +37,10 @@ class EmployeeController
             });
         }
 
+        if ($request->filled('sub_role')) {
+            $query->where('sub_role', $request->sub_role);
+        }
+
         if ($request->filled('department')) {
             $query->where('department', $request->department);
         }
@@ -479,6 +483,10 @@ class EmployeeController
 
         if ($request->filled('employee_type')) {
             $query->where('employee_type', $request->employee_type);
+        }
+
+        if ($request->filled('sub_role')) {
+            $query->where('sub_role', $request->sub_role);
         }
 
         if ($request->filled('department')) {

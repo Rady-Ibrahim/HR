@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\EmployeeSubRoleEnum;
 use App\Enums\EmployeeTypeEnum;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -17,7 +18,7 @@ class Employee extends Model
     protected $fillable = [
         'user_id', 'employee_code', 'name', 'email', 'phone', 'phone_alternative',
         'national_id', 'date_of_birth', 'joining_date', 'position', 'department',
-        'employee_type', 'salary_type', 'base_salary', 'collection_commission_rate',
+        'employee_type', 'sub_role', 'salary_type', 'base_salary', 'collection_commission_rate',
         'status', 'car_license', 'car_number',
         'gps_device_id', 'reporting_manager_id', 'notes'
     ];
@@ -30,6 +31,7 @@ class Employee extends Model
         'base_salary' => 'decimal:2',
         'collection_commission_rate' => 'decimal:2',
         'employee_type' => EmployeeTypeEnum::class,
+        'sub_role' => EmployeeSubRoleEnum::class,
     ];
 
     protected static function booted(): void

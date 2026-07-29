@@ -544,6 +544,29 @@
         @keyframes spin { to { transform: rotate(360deg); } }
 
         .chart-container { position: relative; height: 280px; }
+
+        .ac-dropdown {
+            position: absolute; z-index: 9999; top: 100%; left: 0; right: 0;
+            background: #fff; border: 1.5px solid #e8ebf5; border-radius: 10px;
+            max-height: 220px; overflow-y: auto; box-shadow: 0 6px 20px rgba(0,0,0,.12);
+            display: none; margin-top: 2px;
+        }
+        .ac-dropdown.show { display: block; }
+        .ac-option {
+            padding: 8px 14px; cursor: pointer; font-size: .875rem; transition: background .15s;
+        }
+        .ac-option:hover, .ac-option.ac-active { background: #f0f2ff; color: var(--primary); }
+        .ac-option:first-child { border-radius: 10px 10px 0 0; }
+        .ac-option:last-child { border-radius: 0 0 10px 10px; }
+        .ac-container { position: relative; }
+        .ac-container .form-control { padding-left: 32px; }
+        .ac-container .ac-toggle {
+            position: absolute; left: 6px; top: 50%; transform: translateY(-50%);
+            border: none; background: transparent; color: #8892a4; cursor: pointer;
+            padding: 4px 6px; font-size: .7rem; z-index: 2; transition: color .2s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .ac-container .ac-toggle:hover { color: var(--primary); }
     </style>
     @stack('styles')
 </head>
@@ -874,6 +897,24 @@ const lookupConfig = {
         rows: r => r.data?.data ?? r.data ?? [],
         label: e => `${e.name ?? '-'}${e.employee_code ? ' - ' + e.employee_code : ''}`,
     },
+    drivers: {
+        url: '/employees?per_page=1000&employee_type=driver_representative',
+        rows: r => {
+            const all = r.data?.data ?? r.data ?? [];
+            const filtered = all.filter(e => e.sub_role === 'driver');
+            return filtered.length ? filtered : all;
+        },
+        label: e => `${e.name ?? '-'}${e.employee_code ? ' - ' + e.employee_code : ''}`,
+    },
+    delegates: {
+        url: '/employees?per_page=1000&employee_type=driver_representative',
+        rows: r => {
+            const all = r.data?.data ?? r.data ?? [];
+            const filtered = all.filter(e => e.sub_role === 'delegate');
+            return filtered.length ? filtered : all;
+        },
+        label: e => `${e.name ?? '-'}${e.employee_code ? ' - ' + e.employee_code : ''}`,
+    },
     customers: {
         url: '/customers?per_page=1000',
         rows: r => r.data?.data ?? r.data ?? [],
@@ -950,6 +991,106 @@ function escapeJs(value) {
 }
 function escapeLookupHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char]));
+}
+
+function createSearchableSelect(input, lookupType, { onSelect } = {}) {
+    const container = input.parentElement;
+    container.classList.add('ac-container');
+    const hidden = container.querySelector('input[type="hidden"]') || (() => {
+        const h = document.createElement('input');
+        h.type = 'hidden';
+        h.name = input.name;
+        container.appendChild(h);
+        return h;
+    })();
+    input.removeAttribute('name');
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'ac-toggle';
+    toggle.innerHTML = '<i class="fas fa-chevron-down"></i>';
+    container.appendChild(toggle);
+
+    let items = [];
+    let dropdown = null;
+    let selectedValue = '';
+    let open = false;
+
+    getLookupRows(lookupType).then(rows => {
+        items = rows;
+    });
+
+    function showAll() {
+        if (items.length) showDropdown(items);
+    }
+
+    input.addEventListener('input', () => {
+        const val = input.value.trim();
+        if (!val) { selectedValue = ''; hidden.value = ''; if (open) showAll(); else hideDropdown(); return; }
+        const filtered = items.filter(item =>
+            lookupConfig[lookupType].label(item).toLowerCase().includes(val.toLowerCase())
+        );
+        open = true;
+        showDropdown(filtered);
+    });
+
+    input.addEventListener('focus', () => showAll());
+
+    toggle.addEventListener('click', e => {
+        e.stopPropagation();
+        if (open) { hideDropdown(); } else { showAll(); }
+    });
+
+    input.addEventListener('blur', () => setTimeout(() => { open = false; hideDropdown(); }, 200));
+
+    input.addEventListener('keydown', e => {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!open) { showAll(); return; }
+        }
+        if (!open) return;
+        const options = dropdown?.querySelectorAll('.ac-option');
+        if (!options?.length) return;
+        let idx = Array.from(options).findIndex(o => o.classList.contains('ac-active'));
+        if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(idx + 1, options.length - 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); idx = Math.max(idx - 1, 0); }
+        else if (e.key === 'Enter') { e.preventDefault(); if (idx >= 0) options[idx].click(); return; }
+        else return;
+        options.forEach(o => o.classList.remove('ac-active'));
+        if (idx >= 0) options[idx].classList.add('ac-active');
+    });
+
+    function showDropdown(filtered) {
+        if (!dropdown) {
+            dropdown = document.createElement('div');
+            dropdown.className = 'ac-dropdown';
+            container.appendChild(dropdown);
+        }
+        if (!filtered.length) { hideDropdown(); return; }
+        dropdown.innerHTML = filtered.map((item, i) =>
+            `<div class="ac-option${i === 0 ? ' ac-active' : ''}" data-value="${item.id}">${escapeLookupHtml(lookupConfig[lookupType].label(item))}</div>`
+        ).join('');
+        dropdown.classList.add('show');
+        open = true;
+        dropdown.querySelectorAll('.ac-option').forEach(opt => {
+            opt.addEventListener('mousedown', e => {
+                e.preventDefault();
+                selectedValue = opt.dataset.value;
+                hidden.value = selectedValue;
+                input.value = opt.textContent;
+                if (onSelect) onSelect(selectedValue);
+                hideDropdown();
+            });
+        });
+    }
+
+    function hideDropdown() { if (dropdown) dropdown.classList.remove('show'); open = false; }
+
+    return {
+        getValue: () => hidden.value,
+        setValue: (id, label) => { hidden.value = id; input.value = label || ''; selectedValue = id; },
+        reset: () => { hidden.value = ''; input.value = ''; selectedValue = ''; open = false; hideDropdown(); },
+    };
 }
 
 // Load pending approvals count
