@@ -48,6 +48,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/auth/profile',           [AuthController::class, 'updateProfile']);
     Route::post('/auth/change-password',  [AuthController::class, 'changePassword']);
     Route::post('/client-devices',        [AuthController::class, 'storeDeviceToken']);
+    Route::delete('/client-devices',       [AuthController::class, 'destroyDeviceToken']);
 
     // Mobile: my financial transactions
     Route::get('/me/financials', [FinancialController::class, 'myFinancials']);

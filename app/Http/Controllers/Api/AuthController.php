@@ -100,6 +100,19 @@ class AuthController
         ]);
     }
 
+    public function destroyDeviceToken(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $user->update([
+            'onesignal_player_id' => null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم إلغاء تسجيل الجهاز بنجاح',
+        ]);
+    }
+
     public function logout(Request $request): JsonResponse
     {
         $request->user()->currentAccessToken()->delete();
