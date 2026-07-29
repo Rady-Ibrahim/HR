@@ -58,7 +58,12 @@
                     <input type="hidden" id="delId">
                     <div class="row g-3">
                         <div class="col-md-6"><label class="form-label">طلب البيع</label><select name="request_id" id="df2_request" class="form-select" data-lookup="requests" data-placeholder="اختر طلب البيع"></select></div>
-                        <div class="col-md-6"><label class="form-label">المندوب / السائق</label><select name="driver_id" id="df2_driver" class="form-select" data-lookup="employees" data-placeholder="اختر المندوب / السائق"></select></div>
+                        <div class="col-md-6"><label class="form-label">المندوب / السائق</label>
+                            <div class="ac-container">
+                                <input type="text" class="form-control" id="df2_driver_input" placeholder="ابحث عن مندوب / سائق..." autocomplete="off">
+                                <input type="hidden" name="driver_id" id="df2_driver">
+                            </div>
+                        </div>
                         <div class="col-md-6"><label class="form-label">خط السير</label><select name="route_id" id="df2_route" class="form-select" data-lookup="routes" data-placeholder="اختر خط السير"></select></div>
                         <div class="col-md-6"><label class="form-label">تاريخ التسليم المخطط</label><input type="date" name="scheduled_date" id="df2_sched" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">الحالة</label>
@@ -125,15 +130,14 @@
 @push('scripts')
 <script>
 let delDeleteId=null, delPage=1;
-let employeesLookup = [];
+let driverAutocomplete;
 const delStatusLabels = { pending:'معلق', in_transit:'جاري', completed:'اتسلم', failed:'لم تسلم', partially_delivered:'جزئي', delivered:'اتسلم', not_delivered:'لم تسلم' };
 const delStatusBadge  = { pending:'badge-pending', in_transit:'badge-approved', completed:'badge-active', failed:'badge-rejected', partially_delivered:'badge-pending', delivered:'badge-active', not_delivered:'badge-rejected' };
 
 async function loadDeliveryLookups() {
-    const employees = await apiFetch('/employees?per_page=1000');
-    employeesLookup = employees.success ? (employees.data.data || []) : [];
-    const options = employeesLookup.map(e => `<option value="${e.id}">${escapeHtml(e.name)} - ${escapeHtml(e.employee_code ?? e.id)}</option>`).join('');
-    document.getElementById('df2_notify_employee').innerHTML = '<option value="">بدون إشعار</option>' + options;
+    driverAutocomplete = createSearchableSelect(
+        document.getElementById('df2_driver_input'), 'drivers'
+    );
 }
 
 async function loadDeliveries(page=1) {
@@ -183,6 +187,7 @@ function openAddModal() {
     document.getElementById('df2_payment_method').value='cash';
     document.getElementById('df2_notify_employee').value='';
     document.getElementById('df2_sched').value='';
+    if (driverAutocomplete) driverAutocomplete.reset();
     new bootstrap.Modal(document.getElementById('delModal')).show();
 }
 async function openEditModal(id) {
@@ -191,7 +196,7 @@ async function openEditModal(id) {
     const r=await apiFetch('/deliveries/'+id); if(!r.success) return; const d=r.data;
     document.getElementById('delId').value=d.id;
     document.getElementById('df2_request').value=d.request_id??'';
-    document.getElementById('df2_driver').value=d.driver_id??'';
+    if (driverAutocomplete) driverAutocomplete.setValue(d.driver_id ?? '', d.driver?.name ?? '');
     document.getElementById('df2_route').value=d.route_id??'';
     document.getElementById('df2_sched').value=d.delivery_items?.scheduled_date??'';
     document.getElementById('df2_status').value=d.status==='completed'?'delivered':(d.status==='failed'?'not_delivered':'delivered');

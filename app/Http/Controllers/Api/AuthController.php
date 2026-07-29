@@ -78,6 +78,28 @@ class AuthController
         ]);
     }
 
+    public function storeDeviceToken(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'onesignal_player_id' => 'required|string|max:255',
+            'device_type'         => 'nullable|string|in:android,ios,web',
+        ]);
+
+        $user = $request->user();
+        $user->update([
+            'onesignal_player_id' => $validated['onesignal_player_id'],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم تسجيل رمز الجهاز بنجاح',
+            'data'    => [
+                'user_id'             => $user->id,
+                'onesignal_player_id' => $user->onesignal_player_id,
+            ],
+        ]);
+    }
+
     public function logout(Request $request): JsonResponse
     {
         $request->user()->currentAccessToken()->delete();

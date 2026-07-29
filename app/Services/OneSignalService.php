@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
-use App\Models\Employee;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class OneSignalService
 {
@@ -27,34 +27,22 @@ class OneSignalService
             return;
         }
 
-        $response = Http::withHeaders([
-            'Authorization' => 'Basic ' . $this->restApiKey,
-            'Content-Type' => 'application/json',
-        ])->post('https://onesignal.com/api/v1/notifications', [
-            'app_id' => $this->appId,
-            'include_external_user_ids' => array_map('strval', $userIds),
-            'headings' => ['en' => $title, 'ar' => $title],
-            'contents' => ['en' => $message, 'ar' => $message],
-            'data' => $data,
-        ]);
-    }
-
-    public function sendToEmployee(int $employeeId, string $title, string $message, array $data = []): void
-    {
-        $employee = Employee::find($employeeId);
-        if (!$employee || !$employee->user || !$employee->user->onesignal_player_id) {
-            return;
+        try {
+            Http::withHeaders([
+                'Authorization' => 'Basic ' . $this->restApiKey,
+                'Content-Type' => 'application/json',
+            ])->post('https://onesignal.com/api/v1/notifications', [
+                'app_id' => $this->appId,
+                'include_external_user_ids' => array_map('strval', $userIds),
+                'headings' => ['en' => $title, 'ar' => $title],
+                'contents' => ['en' => $message, 'ar' => $message],
+                'data' => $data,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('OneSignal notification failed', [
+                'user_ids' => $userIds,
+                'error' => $e->getMessage(),
+            ]);
         }
-
-        $response = Http::withHeaders([
-            'Authorization' => 'Basic ' . $this->restApiKey,
-            'Content-Type' => 'application/json',
-        ])->post('https://onesignal.com/api/v1/notifications', [
-            'app_id' => $this->appId,
-            'include_external_user_ids' => [(string) $employee->user->id],
-            'headings' => ['en' => $title, 'ar' => $title],
-            'contents' => ['en' => $message, 'ar' => $message],
-            'data' => $data,
-        ]);
     }
 }

@@ -47,6 +47,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/auth/me',                [AuthController::class, 'me']);
     Route::put('/auth/profile',           [AuthController::class, 'updateProfile']);
     Route::post('/auth/change-password',  [AuthController::class, 'changePassword']);
+    Route::post('/client-devices',        [AuthController::class, 'storeDeviceToken']);
 
     // Mobile: my financial transactions
     Route::get('/me/financials', [FinancialController::class, 'myFinancials']);
