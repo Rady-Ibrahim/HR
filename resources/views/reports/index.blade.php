@@ -80,12 +80,91 @@
 
 @push('scripts')
 <script>
+const L = {
+    id:'م', employee_code:'الكود', name:'الاسم', position:'الوظيفة', department:'القسم',
+    status:'الحالة', joining_date:'تاريخ التعيين', base_salary:'الراتب الأساسي',
+    present_days:'أيام الحضور', absent_days:'أيام الغياب', late_count:'عدد التأخير',
+    total_hours:'إجمالي الساعات', manager:'المدير',
+    present:'حضور', absent:'غياب', late:'تأخير', on_leave:'إجازة',
+    late_minutes:'دقائق تأخير', working_hours:'ساعات العمل',
+    incentive_type:'نوع الحافز', amount:'المبلغ', reason:'السبب', date:'التاريخ',
+    description:'الوصف', allowance_type:'نوع البدل',
+    deduction_type:'نوع الخصم', total_amount:'الإجمالي',
+    advance_date:'تاريخ السلفة', remaining_amount:'المتبقي',
+    installment_amount:'القسط', remaining_installments:'الأقساط المتبقية',
+    remaining:'المتبقي', installments_count:'عدد الأقساط',
+    violation_type:'نوع المخالفة', fine_amount:'قيمة الغرامة',
+    violation_date:'تاريخ المخالفة', violation_code:'كود المخالفة',
+    vehicle_number:'رقم المركبة',
+    request_number:'رقم الطلب', customer_name:'العميل', company_name:'الشركة',
+    warehouse:'المستودع', items_count:'عدد الأصناف', orders_count:'عدد الطلبيات',
+    total_quantity:'الكمية', payment_type:'نوع الدفع',     created_at:'تاريخ الإنشاء', created_by:'بواسطة',
+    updated_at:'آخر تعديل', notes:'ملاحظات',
+    paid_installments:'الأقساط المدفوعة',
+    collection_number:'رقم التحصيل', collected_date:'تاريخ التحصيل',
+    total:'الإجمالي', count:'العدد', total_value:'القيمة',
+    by_status:'حسب الحالة', by_customer:'حسب العميل',
+    by_method:'حسب طريقة الدفع', by_driver:'حسب السائق', by_department:'حسب القسم',
+    by_type:'حسب النوع', by_employee:'حسب الموظف',
+    driver_id:'السائق', driver:'السائق', payment_method:'طريقة الدفع',
+    collection_status:'حالة التحصيل',
+    total_gross:'الإجمالي الخام', total_net:'الصافي',
+    total_incentives:'إجمالي الحوافز', total_allowances:'إجمالي البدلات',
+    total_commissions:'إجمالي العمولات', total_points_credit:'نقاط (له)',
+    total_points_debit:'نقاط (عليه)', total_deductions:'إجمالي الخصومات',
+    total_advances:'إجمالي السلف', total_violations:'إجمالي المخالفات',
+    gross_salary:'الراتب الإجمالي', net_salary:'صافي الراتب',
+    completed_deliveries:'توصيلات مكتملة',
+    top_delivery:'أفضل المندوبين', top_collection:'أفضل التحصيل', top_attendance:'أفضل الحضور',
+    completed:'مكتمل', failed:'فاشل', delivered:'مكتمل',
+    period:'الفترة', employees:'الموظفين', requests:'الطلبات',
+    collections:'التحصيلات', salary:'الرواتب', deliveries:'التوصيلات',
+    active:'نشط', paid_count:'عدد المدفوع', pending:'معلق',
+    month:'الشهر', year:'السنة', points:'النقاط', point_price:'سعر النقطة',
+    direction:'الاتجاه', type:'النوع',
+};
+
 let currentReport = '';
 const reportTitles = {
     employees: 'تقرير الموظفين', attendance: 'تقرير الحضور', requests: 'تقرير الطلبات',
     collections: 'تقرير التحصيلات', salaries: 'تقرير الرواتب', performance: 'تقرير الأداء',
     incentives: 'تقرير الحوافز', monthly: 'الملخص الشهري'
 };
+
+function t(key) { return L[key] || key.replace(/_/g,' '); }
+
+function fmt(v) {
+    if (v === null || v === undefined) return '-';
+    if (typeof v === 'number') return Number(v).toLocaleString('ar-EG');
+    if (typeof v === 'object') return '';
+    return String(v);
+}
+
+function renderSummary(obj) {
+    let html = '<div class="row g-3">';
+    Object.entries(obj).forEach(([k, v]) => {
+        if (typeof v === 'object' && v !== null) {
+            const inner = Object.entries(v).map(([sk, sv]) =>
+                `<div class="d-flex justify-content-between border-bottom py-1"><span>${t(sk)}</span><span class="fw-bold">${fmt(sv)}</span></div>`
+            ).join('');
+            html += `<div class="col-md-4"><div class="stat-card"><div class="stat-label fw-bold mb-2">${t(k)}</div>${inner}</div></div>`;
+        } else {
+            html += `<div class="col-md-3"><div class="stat-card text-center"><div class="fw-bold fs-4">${fmt(v)}</div><div class="stat-label">${t(k)}</div></div></div>`;
+        }
+    });
+    html += '</div>';
+    return html;
+}
+
+function renderTable(rows) {
+    const cols = Object.keys(rows[0]);
+    let html = `<div class="table-responsive"><table class="data-table"><thead><tr>${cols.map(c => `<th>${t(c)}</th>`).join('')}</tr></thead><tbody>`;
+    rows.forEach(row => {
+        html += `<tr>${cols.map(c => `<td>${fmt(row[c])}</td>`).join('')}</tr>`;
+    });
+    html += '</tbody></table></div>';
+    return html;
+}
 
 async function loadReport(key) {
     currentReport = key;
@@ -102,10 +181,7 @@ async function loadReport(key) {
     if (from) params.append('date_from', from);
     if (to)   params.append('date_to', to);
 
-    let url;
-    if (key === 'monthly') url = '/reports/monthly-summary';
-    else if (key === 'incentives') url = '/reports/incentives';
-    else url = '/reports/' + key;
+    let url = key === 'monthly' ? '/reports/monthly-summary' : '/reports/' + key;
 
     const r = await apiFetch(url + '?' + params);
     if (!r.success) { document.getElementById('reportBody').innerHTML = `<div class="alert alert-danger">${r.message}</div>`; return; }
@@ -118,24 +194,33 @@ function renderReport(key, data) {
         document.getElementById('reportBody').innerHTML = '<div class="text-center text-muted py-4"><i class="fas fa-inbox fa-2x mb-2"></i><br>لا توجد بيانات</div>';
         return;
     }
-    const rows = (data.data ?? data);
-    if (!Array.isArray(rows) || !rows.length) {
-        // Summary stats
-        let html = '<div class="row g-3">';
-        Object.entries(rows).forEach(([k, v]) => {
-            html += `<div class="col-md-3"><div class="stat-card text-center"><div class="fw-bold fs-4">${typeof v === 'number' ? Number(v).toLocaleString('ar-EG') : v}</div><div class="stat-label">${k.replace(/_/g,' ')}</div></div></div>`;
+
+    // Performance report has nested named arrays
+    if (key === 'performance') {
+        let html = '';
+        Object.entries(data).forEach(([section, list]) => {
+            if (!Array.isArray(list) || !list.length) return;
+            html += `<h6 class="fw-bold text-primary mt-3 mb-2"><i class="fas fa-trophy me-1"></i> ${t(section)}</h6>`;
+            html += renderTable(list);
         });
-        html += '</div>';
-        document.getElementById('reportBody').innerHTML = html;
+        document.getElementById('reportBody').innerHTML = html || '<div class="text-center text-muted py-4">لا توجد بيانات أداء</div>';
         return;
     }
-    const cols = Object.keys(rows[0]);
-    let html = `<div class="table-responsive"><table class="data-table"><thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>`;
-    rows.forEach(row => {
-        html += `<tr>${cols.map(c => `<td>${row[c] ?? '-'}</td>`).join('')}</tr>`;
-    });
-    html += '</tbody></table></div>';
-    document.getElementById('reportBody').innerHTML = html;
+
+    // Monthly summary: nested object
+    if (key === 'monthly') {
+        document.getElementById('reportBody').innerHTML = renderSummary(data);
+        return;
+    }
+
+    // Standard reports use data.data (pagination wrapper) or data (direct array)
+    const rows = (data.data ?? data);
+    if (!Array.isArray(rows) || !rows.length) {
+        document.getElementById('reportBody').innerHTML = renderSummary(rows);
+        return;
+    }
+
+    document.getElementById('reportBody').innerHTML = renderTable(rows);
 }
 
 function reloadReport() { if (currentReport) loadReport(currentReport); }

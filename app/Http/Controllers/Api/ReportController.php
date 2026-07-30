@@ -90,13 +90,26 @@ class ReportController
 
         $requests = RequestModel::with(['customer', 'createdBy'])
             ->whereBetween('created_at', [$from, $to . ' 23:59:59'])
-            ->get();
+            ->get()
+            ->map(fn($r) => [
+                'id'              => $r->id,
+                'request_number'  => $r->request_number,
+                'customer_name'   => $r->customer?->name ?? $r->customer_name,
+                'company_name'    => $r->company_name,
+                'total_amount'    => (float) $r->total_amount,
+                'status'          => $r->status,
+                'payment_type'    => $r->payment_type,
+                'items_count'     => $r->items_count,
+                'total_quantity'  => $r->total_quantity,
+                'created_by'      => $r->createdBy?->name,
+                'created_at'      => $r->created_at->toDateString(),
+            ]);
 
         $summary = [
             'total'         => $requests->count(),
             'total_value'   => $requests->sum('total_amount'),
             'by_status'     => $requests->groupBy('status')->map->count(),
-            'by_customer'   => $requests->groupBy('customer.name')->map(fn($g) => ['count' => $g->count(), 'total' => $g->sum('total_amount')]),
+            'by_customer'   => $requests->groupBy('customer_name')->map(fn($g) => ['count' => $g->count(), 'total' => $g->sum('total_amount')]),
         ];
 
         return response()->json(['success' => true, 'data' => $requests, 'summary' => $summary]);
@@ -109,14 +122,23 @@ class ReportController
 
         $collections = Collection::with(['delivery.request.customer', 'driver'])
             ->whereBetween('collected_date', [$from, $to])
-            ->get();
+            ->get()
+            ->map(fn($c) => [
+                'id'               => $c->id,
+                'collection_number' => $c->collection_number,
+                'total_amount'     => (float) $c->total_amount,
+                'payment_method'   => $c->payment_method,
+                'collection_status'=> $c->collection_status,
+                'driver'           => $c->driver?->name,
+                'collected_date'   => $c->collected_date,
+            ]);
 
         $summary = [
             'total'           => $collections->sum('total_amount'),
             'count'           => $collections->count(),
             'by_method'       => $collections->groupBy('payment_method')->map->sum('total_amount'),
             'by_status'       => $collections->groupBy('collection_status')->map->sum('total_amount'),
-            'by_driver'       => $collections->groupBy('driver.name')->map->sum('total_amount'),
+            'by_driver'       => $collections->groupBy('driver')->map->sum('total_amount'),
         ];
 
         return response()->json(['success' => true, 'data' => $collections, 'summary' => $summary]);
@@ -127,21 +149,38 @@ class ReportController
         $month = $request->get('month', now()->month);
         $year  = $request->get('year', now()->year);
 
-        $salaries = Salary::with(['employee', 'approver'])
+        $salaries = Salary::with('employee')
             ->where('month', $month)->where('year', $year)
-            ->get();
+            ->get()
+            ->map(fn($s) => [
+                'id'                 => $s->id,
+                'employee'           => $s->employee?->name,
+                'base_salary'        => (float) $s->base_salary,
+                'gross_salary'       => (float) $s->gross_salary,
+                'total_incentives'   => (float) $s->total_incentives,
+                'total_allowances'   => (float) $s->total_allowances,
+                'total_commissions'  => (float) $s->total_commissions,
+                'total_points_credit'=> (float) $s->total_points_credit,
+                'total_points_debit' => (float) $s->total_points_debit,
+                'total_deductions'   => (float) $s->total_deductions,
+                'total_advances'     => (float) $s->total_advances,
+                'total_violations'   => (float) $s->total_violations,
+                'net_salary'         => (float) $s->net_salary,
+                'status'             => $s->status,
+            ]);
 
         $summary = [
-            'total_gross'        => $salaries->sum('gross_salary'),
-            'total_net'          => $salaries->sum('net_salary'),
-            'total_incentives'   => $salaries->sum('total_incentives'),
-            'total_allowances'   => $salaries->sum('total_allowances'),
-            'total_commissions'  => $salaries->sum('total_commissions'),
-            'total_deductions'   => $salaries->sum('total_deductions'),
-            'total_advances'     => $salaries->sum('total_advances'),
-            'total_violations'   => $salaries->sum('total_violations'),
-            'by_status'          => $salaries->groupBy('status')->map->count(),
-            'by_department'      => $salaries->groupBy('employee.department')->map->sum('net_salary'),
+            'total_gross'           => $salaries->sum('gross_salary'),
+            'total_net'             => $salaries->sum('net_salary'),
+            'total_incentives'      => $salaries->sum('total_incentives'),
+            'total_allowances'      => $salaries->sum('total_allowances'),
+            'total_commissions'     => $salaries->sum('total_commissions'),
+            'total_points_credit'   => $salaries->sum('total_points_credit'),
+            'total_points_debit'    => $salaries->sum('total_points_debit'),
+            'total_deductions'      => $salaries->sum('total_deductions'),
+            'total_advances'        => $salaries->sum('total_advances'),
+            'total_violations'      => $salaries->sum('total_violations'),
+            'by_status'             => $salaries->groupBy('status')->map->count(),
         ];
 
         return response()->json(['success' => true, 'data' => $salaries, 'summary' => $summary]);
@@ -156,7 +195,13 @@ class ReportController
             $q->where('status', 'completed')
               ->whereMonth('created_at', $month)
               ->whereYear('created_at', $year);
-        }])->orderByDesc('completed_deliveries')->limit(10)->get(['id', 'name', 'employee_code', 'department']);
+        }])->orderByDesc('completed_deliveries')->limit(10)->get(['id', 'name', 'employee_code', 'department'])
+        ->map(fn($e) => [
+            'name'                => $e->name,
+            'employee_code'       => $e->employee_code,
+            'department'          => $e->department,
+            'completed_deliveries'=> (int) $e->completed_deliveries,
+        ]);
 
         $topCollection = Collection::where('collection_status', 'deposited')
             ->whereMonth('collected_date', $month)->whereYear('collected_date', $year)
@@ -164,7 +209,11 @@ class ReportController
             ->selectRaw('driver_id, SUM(total_amount) as total')
             ->groupBy('driver_id')
             ->orderByDesc('total')
-            ->limit(10)->get();
+            ->limit(10)->get()
+            ->map(fn($c) => [
+                'driver' => $c->driver?->name,
+                'total'  => (float) $c->total,
+            ]);
 
         $topAttendance = Employee::with(['attendances' => function ($q) use ($month, $year) {
             $q->whereMonth('attendance_date', $month)->whereYear('attendance_date', $year);
@@ -193,13 +242,22 @@ class ReportController
         $year  = $request->get('year', now()->year);
 
         $incentives = Incentive::with('employee')
-            ->where('month', $month)->where('year', $year)->get();
+            ->where('month', $month)->where('year', $year)->get()
+            ->map(fn($i) => [
+                'id'             => $i->id,
+                'employee'       => $i->employee?->name,
+                'incentive_type' => $i->incentive_type,
+                'amount'         => (float) $i->amount,
+                'reason'         => $i->reason,
+                'status'         => $i->status,
+                'date'           => $i->created_at->toDateString(),
+            ]);
 
         $summary = [
             'total'         => $incentives->sum('amount'),
             'by_type'       => $incentives->groupBy('incentive_type')->map->sum('amount'),
             'by_status'     => $incentives->groupBy('status')->map->count(),
-            'by_employee'   => $incentives->groupBy('employee.name')->map->sum('amount'),
+            'by_employee'   => $incentives->groupBy('employee')->map->sum('amount'),
         ];
 
         return response()->json(['success' => true, 'data' => $incentives, 'summary' => $summary]);
