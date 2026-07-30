@@ -31,7 +31,7 @@ class AuthController
             return response()->json(['success' => false, 'message' => 'الحساب غير نشط. تواصل مع الإدارة.'], 403);
         }
 
-        $user->tokens()->where('name', '!=', 'dashboard')->delete();
+        $user->tokens()->delete();
         $token = $user->createToken('api-token')->plainTextToken;
 
         $employee = Employee::where('user_id', $user->id)->first();
