@@ -136,7 +136,7 @@ class FinancialController
             ->map(fn($p) => [
                 'id' => $p->id,
                 'type' => 'point',
-                'amount' => (float) $p->total_amount,
+                'total_amount' => (float) $p->total_amount,
                 'points' => (float) $p->points,
                 'point_price' => (float) $p->point_price,
                 'reason' => $p->reason,

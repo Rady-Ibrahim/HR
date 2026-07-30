@@ -862,6 +862,7 @@ async function apiFetch(url, options = {}) {
             ...defaults,
             ...options,
             headers: { ...defaults.headers, ...(options.headers || {}) },
+            credentials: 'same-origin',
         });
 
         let data = {};

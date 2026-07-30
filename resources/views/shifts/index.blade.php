@@ -175,6 +175,7 @@
                                 <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleEmpChecks(true)">تحديد الكل</button>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleEmpChecks(false)">إلغاء</button>
                             </div>
+                            <div id="af_selectedTags" class="d-flex flex-wrap gap-1 mb-1"></div>
                             <div id="af_employees" class="border rounded p-2" style="max-height:220px;overflow:auto">
                                 <div class="text-center text-muted py-3">جاري تحميل الموظفين...</div>
                             </div>
@@ -457,11 +458,14 @@ function confirmDeleteAssignment(id) {
 }
 
 let allEmployeesForAssign = [];
+let selectedEmployees = [];
 
 function openAssignModal() {
     document.getElementById('assignForm').reset();
     document.getElementById('af_from').value = '{{ date("Y-m-d") }}';
-    document.getElementById('af_selectedCount').textContent = '0 محدد';
+    document.getElementById('af_search').value = '';
+    selectedEmployees = [];
+    updateAssignDisplay();
     loadShiftSelect();
     new bootstrap.Modal(document.getElementById('assignModal')).show();
     loadEmployeesForAssign();
@@ -485,39 +489,71 @@ function renderEmpChecks(list) {
         box.innerHTML = '<div class="text-muted p-2">لا يوجد موظفون</div>';
         return;
     }
-    box.innerHTML = list.map(e => `
-        <label class="d-flex align-items-center gap-2 py-1 px-1 emp-check-row" data-name="${(e.name || '').toLowerCase()}" style="cursor:pointer;border-bottom:1px solid #f0f0f0">
-            <input type="checkbox" class="af-emp-check" value="${e.id}" onchange="updateAssignCount()">
-            <span class="fw-semibold">${e.name}</span>
-            <small class="text-muted ms-auto">${e.employee_code ?? ''} · ${e.employee_type_label || e.employee_type || ''}</small>
-        </label>
-    `).join('');
-    updateAssignCount();
+    box.innerHTML = list.map(e => {
+        const checked = selectedEmployees.some(s => s.id === e.id);
+        return '<label class="d-flex align-items-center gap-2 py-1 px-1 emp-check-row" data-name="' + ((e.name || '').toLowerCase()) + '" style="cursor:pointer;border-bottom:1px solid #f0f0f0">' +
+            '<input type="checkbox" class="af-emp-check" value="' + e.id + '" data-name="' + e.name + '" data-code="' + (e.employee_code || '') + '" data-type="' + (e.employee_type_label || e.employee_type || '') + '" ' + (checked ? 'checked' : '') + ' onchange="onEmpCheckChange(this)">' +
+            '<span class="fw-semibold">' + e.name + '</span>' +
+            '<small class="text-muted ms-auto">' + (e.employee_code ?? '') + ' · ' + (e.employee_type_label || e.employee_type || '') + '</small>' +
+        '</label>';
+    }).join('');
+    updateAssignDisplay();
 }
 
 function filterEmpChecks() {
     const q = (document.getElementById('af_search').value || '').toLowerCase().trim();
-    document.querySelectorAll('#af_employees .emp-check-row').forEach(row => {
-        row.style.display = !q || row.dataset.name.includes(q) ? '' : 'none';
-    });
+    const filtered = q ? allEmployeesForAssign.filter(e => (e.name || '').toLowerCase().includes(q)) : allEmployeesForAssign;
+    renderEmpChecks(filtered);
 }
 
 function toggleEmpChecks(checked) {
     document.querySelectorAll('#af_employees .emp-check-row').forEach(row => {
-        if (row.style.display === 'none') return;
         const cb = row.querySelector('.af-emp-check');
-        if (cb) cb.checked = checked;
+        if (cb) {
+            cb.checked = checked;
+            onEmpCheckChange(cb);
+        }
     });
-    updateAssignCount();
 }
 
-function updateAssignCount() {
-    const n = document.querySelectorAll('.af-emp-check:checked').length;
+function onEmpCheckChange(cb) {
+    const id = parseInt(cb.value);
+    if (cb.checked) {
+        if (!selectedEmployees.find(s => s.id === id)) {
+            selectedEmployees.push({ id, name: cb.dataset.name, code: cb.dataset.code, type: cb.dataset.type });
+        }
+    } else {
+        selectedEmployees = selectedEmployees.filter(s => s.id !== id);
+    }
+    updateAssignDisplay();
+}
+
+function updateAssignDisplay() {
+    const n = selectedEmployees.length;
     document.getElementById('af_selectedCount').textContent = n + ' محدد';
+    const container = document.getElementById('af_selectedTags');
+    if (!n) {
+        container.innerHTML = '';
+        return;
+    }
+    container.innerHTML = selectedEmployees.map(e =>
+        '<span class="badge bg-primary d-inline-flex align-items-center gap-1" style="font-size:0.85rem;padding:0.4rem 0.6rem">' +
+            e.name +
+            '<small class="text-white-50">' + (e.code || '') + '</small>' +
+            '<i class="fas fa-times" style="cursor:pointer" onclick="uncheckEmployee(' + e.id + ')"></i>' +
+        '</span>'
+    ).join('');
+}
+
+function uncheckEmployee(id) {
+    selectedEmployees = selectedEmployees.filter(s => s.id !== id);
+    const cb = document.querySelector('#af_employees .af-emp-check[value="' + id + '"]');
+    if (cb) cb.checked = false;
+    updateAssignDisplay();
 }
 
 async function saveAssignment() {
-    const employee_ids = [...document.querySelectorAll('.af-emp-check:checked')].map(cb => parseInt(cb.value));
+    const employee_ids = selectedEmployees.map(e => e.id);
     const shift_id = parseInt(document.getElementById('af_shift').value);
     const effective_from = document.getElementById('af_from').value;
     const effective_to = document.getElementById('af_to').value || null;
