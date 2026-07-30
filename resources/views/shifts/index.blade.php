@@ -78,7 +78,10 @@
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">نهاية العمل</label>
-                            <input type="time" name="end_time" id="sf_end" class="form-control" placeholder="بدون = مفتوح">
+                            <div class="input-group">
+                                <input type="time" name="end_time" id="sf_end" class="form-control">
+                                <button type="button" class="btn btn-outline-secondary" onclick="clearEndTime()" title="بدون نهاية (مفتوح)"><i class="fas fa-infinity"></i></button>
+                            </div>
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">سماح التأخير (دقيقة)</label>
@@ -318,7 +321,7 @@ function openAddShiftModal() {
     document.getElementById('sf_id').value = '';
     document.getElementById('shiftForm').reset();
     document.getElementById('sf_start').value = '08:00';
-    document.getElementById('sf_end').value = '';
+    document.getElementById('sf_end').value = '17:00';
     document.getElementById('sf_grace').value = '15';
     document.getElementById('sf_active').value = '1';
     document.getElementById('shiftModalTitle').innerHTML = '<i class="fas fa-clock me-2"></i> إضافة وردية جديدة';
@@ -372,6 +375,10 @@ async function openEditShift(id) {
     if (!s.early_exit_rules?.length) resetEarlyRules();
 }
 
+function clearEndTime() {
+    document.getElementById('sf_end').value = '';
+}
+
 async function saveShift() {
     const id = document.getElementById('sf_id').value;
     const data = {
@@ -419,17 +426,19 @@ async function loadAssignments() {
         document.getElementById('assignmentsTable').innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">لا توجد تعيينات</td></tr>';
         return;
     }
-    document.getElementById('assignmentsTable').innerHTML = all.map(a => `
-        <tr>
+    document.getElementById('assignmentsTable').innerHTML = all.map(a => {
+        const st = a.shift?.start_time?.substring(0,5);
+        const et = a.shift?.end_time?.substring(0,5);
+        return `<tr>
             <td>${a.employee?.name ?? '-'}</td>
             <td>${a.shift?.name ?? '-'}</td>
-            <td>${a.effective_from}</td>
-            <td>${a.effective_to ?? 'مستمر'}</td>
+            <td>${a.effective_from}${st ? 'T' + st : ''}</td>
+            <td>${a.effective_to ? a.effective_to + (et ? 'T' + et : '') : 'مستمر'}</td>
             <td>
                 <button class="btn btn-sm btn-outline-danger" onclick="confirmDeleteAssignment(${a.id})"><i class="fas fa-trash"></i></button>
             </td>
-        </tr>
-    `).join('');
+        </tr>`;
+    }).join('');
 }
 
 function confirmDeleteAssignment(id) {
