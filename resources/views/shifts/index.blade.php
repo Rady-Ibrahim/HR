@@ -426,14 +426,22 @@ async function loadAssignments() {
         document.getElementById('assignmentsTable').innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">لا توجد تعيينات</td></tr>';
         return;
     }
+function fmtTime(t) {
+    if (!t) return '';
+    const [h, m] = t.substring(0,5).split(':');
+    const hh = parseInt(h);
+    const ampm = hh >= 12 ? 'PM' : 'AM';
+    const h12 = hh % 12 || 12;
+    return  String(h12).padStart(2,'0') + ':' + m + ampm;
+}
     document.getElementById('assignmentsTable').innerHTML = all.map(a => {
         const st = a.shift?.start_time?.substring(0,5);
         const et = a.shift?.end_time?.substring(0,5);
         return `<tr>
             <td>${a.employee?.name ?? '-'}</td>
             <td>${a.shift?.name ?? '-'}</td>
-            <td>${a.effective_from}${st ? 'T' + st : ''}</td>
-            <td>${a.effective_to ? a.effective_to + (et ? 'T' + et : '') : 'مستمر'}</td>
+            <td>${st ? fmtTime(st) + ' ' : ''}${a.effective_from}</td>
+            <td>${a.effective_to ? fmtTime(et) + ' ' + a.effective_to : 'مستمر'}</td>
             <td>
                 <button class="btn btn-sm btn-outline-danger" onclick="confirmDeleteAssignment(${a.id})"><i class="fas fa-trash"></i></button>
             </td>
