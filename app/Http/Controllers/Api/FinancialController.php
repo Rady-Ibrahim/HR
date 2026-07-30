@@ -41,6 +41,7 @@ class FinancialController
             ->map(fn($i) => [
                 'id' => $i->id,
                 'type' => 'incentive',
+                'incentive_type' => $i->incentive_type,
                 'amount' => (float) $i->amount,
                 'reason' => $i->reason,
                 'date' => $i->created_at->toDateString(),
@@ -58,9 +59,11 @@ class FinancialController
             ->map(fn($a) => [
                 'id' => $a->id,
                 'type' => 'allowance',
+                'allowance_type' => $a->allowance_type,
                 'amount' => (float) $a->amount,
                 'reason' => $a->reason,
                 'date' => $a->start_date->toDateString(),
+                'status' => $a->status,
             ]);
 
         $commissions = Commission::where('employee_id', $employee->id)
@@ -87,6 +90,7 @@ class FinancialController
             ->map(fn($d) => [
                 'id' => $d->id,
                 'type' => 'deduction',
+                'deduction_type' => $d->deduction_type,
                 'amount' => (float) $d->amount,
                 'reason' => $d->reason,
                 'date' => $d->created_at->toDateString(),
@@ -106,6 +110,7 @@ class FinancialController
                 'status' => $a->status,
                 'installment_amount' => (float) $a->installment_amount,
                 'remaining_installments' => $a->remaining_installments,
+                'remaining_amount' => (float) $a->remaining_amount,
             ]);
 
         $violations = CarViolation::where('employee_id', $employee->id)
@@ -116,6 +121,7 @@ class FinancialController
             ->map(fn($v) => [
                 'id' => $v->id,
                 'type' => 'violation',
+                'violation_type' => $v->violation_type,
                 'amount' => (float) $v->fine_amount,
                 'reason' => $v->reason,
                 'date' => $v->violation_date->toDateString(),

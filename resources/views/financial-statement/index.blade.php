@@ -172,7 +172,7 @@ async function loadStatement() {
     const pts = r.data.points || [];
     document.getElementById('fsPtsCount').textContent = `(${pts.length})`;
     document.getElementById('fsPoints').innerHTML = pts.length
-        ? pts.map(p => `<tr><td>${p.type==='credit'?'له (+)':'عليه (-)'}</td><td>${p.reason||'-'}</td><td>${Number(p.points).toLocaleString()}</td><td class="${p.type==='credit'?'text-success':'text-danger'}">${Number(p.total_amount).toLocaleString()} ج.م</td></tr>`).join('')
+        ? pts.map(p => `<tr><td>${p.direction==='credit'?'له (+)':'عليه (-)'}</td><td>${p.reason||'-'}</td><td>${Number(p.points).toLocaleString()}</td><td class="${p.direction==='credit'?'text-success':'text-danger'}">${Number(p.total_amount).toLocaleString()} ج.م</td></tr>`).join('')
         : '<tr><td colspan="4" class="text-muted text-center">لا توجد نقاط</td></tr>';
 
     // Deductions
@@ -193,7 +193,7 @@ async function loadStatement() {
     const vio = r.data.violations || [];
     document.getElementById('fsVioCount').textContent = `(${vio.length})`;
     document.getElementById('fsViolations').innerHTML = vio.length
-        ? vio.map(v => `<tr><td>${v.violation_type}</td><td>${v.reason||'-'}</td><td class="text-danger">${Number(v.fine_amount).toLocaleString()} ج.م</td><td><span class="badge-status ${v.status==='pending'?'badge-pending':v.status==='paid'?'badge-rejected':'badge-approved'}">${v.status==='pending'?'معلق':v.status==='paid'?'مدفوع':v.status==='waived'?'إعفاء':v.status}</span></td></tr>`).join('')
+        ? vio.map(v => `<tr><td>${v.violation_type}</td><td>${v.reason||'-'}</td><td class="text-danger">${Number(v.amount).toLocaleString()} ج.م</td><td><span class="badge-status ${v.status==='pending'?'badge-pending':v.status==='paid'?'badge-rejected':'badge-approved'}">${v.status==='pending'?'معلق':v.status==='paid'?'مدفوع':v.status==='waived'?'إعفاء':v.status}</span></td></tr>`).join('')
         : '<tr><td colspan="4" class="text-muted text-center">لا توجد مخالفات</td></tr>';
 }
 

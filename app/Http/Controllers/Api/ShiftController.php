@@ -28,7 +28,7 @@ class ShiftController
         $validated = $request->validate([
             'name' => 'required|string|max:100',
             'start_time' => 'required|date_format:H:i',
-            'end_time' => 'required|date_format:H:i|after:start_time',
+            'end_time' => 'nullable|date_format:H:i',
             'grace_period_minutes' => 'nullable|integer|min:0|max:180',
             'is_active' => 'nullable|boolean',
             'late_rules' => 'nullable|array',
@@ -46,7 +46,7 @@ class ShiftController
         $shift = Shift::create([
             'name' => $validated['name'],
             'start_time' => $validated['start_time'],
-            'end_time' => $validated['end_time'],
+            'end_time' => $validated['end_time'] ?? null,
             'grace_period_minutes' => $validated['grace_period_minutes'] ?? 15,
             'is_active' => $validated['is_active'] ?? true,
         ]);
@@ -86,7 +86,7 @@ class ShiftController
         $validated = $request->validate([
             'name' => 'sometimes|string|max:100',
             'start_time' => 'sometimes|date_format:H:i',
-            'end_time' => 'sometimes|date_format:H:i|after:start_time',
+            'end_time' => 'sometimes|nullable|date_format:H:i',
             'grace_period_minutes' => 'nullable|integer|min:0|max:180',
             'is_active' => 'nullable|boolean',
             'late_rules' => 'nullable|array',

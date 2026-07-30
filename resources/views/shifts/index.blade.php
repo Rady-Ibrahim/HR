@@ -77,8 +77,8 @@
                             <input type="time" name="start_time" id="sf_start" class="form-control" required>
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label">نهاية العمل *</label>
-                            <input type="time" name="end_time" id="sf_end" class="form-control" required>
+                            <label class="form-label">نهاية العمل</label>
+                            <input type="time" name="end_time" id="sf_end" class="form-control" placeholder="بدون = مفتوح">
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">سماح التأخير (دقيقة)</label>
@@ -318,7 +318,7 @@ function openAddShiftModal() {
     document.getElementById('sf_id').value = '';
     document.getElementById('shiftForm').reset();
     document.getElementById('sf_start').value = '08:00';
-    document.getElementById('sf_end').value = '17:00';
+    document.getElementById('sf_end').value = '';
     document.getElementById('sf_grace').value = '15';
     document.getElementById('sf_active').value = '1';
     document.getElementById('shiftModalTitle').innerHTML = '<i class="fas fa-clock me-2"></i> إضافة وردية جديدة';
@@ -383,7 +383,8 @@ async function saveShift() {
         late_rules: collectRuleRows('#lateRulesTable', 'lr'),
         early_exit_rules: collectRuleRows('#earlyRulesTable', 'er'),
     };
-    if (!data.name || !data.start_time || !data.end_time) { showAlert('يرجى ملء الحقول المطلوبة', 'warning'); return; }
+    if (!data.name || !data.start_time) { showAlert('يرجى ملء الحقول المطلوبة', 'warning'); return; }
+    if (!data.end_time) data.end_time = null;
     const r = await apiFetch(id ? `/shifts/${id}` : '/shifts', { method: id ? 'PUT' : 'POST', body: JSON.stringify(data) });
     if (r.success) {
         bootstrap.Modal.getInstance(document.getElementById('shiftModal')).hide();

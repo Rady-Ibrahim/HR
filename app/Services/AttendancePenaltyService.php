@@ -76,6 +76,15 @@ class AttendancePenaltyService
 
     public function calculateEarlyExitPenalty(Shift $shift, Carbon $checkInTime, Carbon $checkOutTime, Carbon $date): array
     {
+        if ($shift->end_time === null) {
+            return [
+                'early_exit_minutes' => 0,
+                'actual_worked_hours' => round((int) $checkInTime->diffInMinutes($checkOutTime) / 60, 2),
+                'deduction_type' => null,
+                'deduction_amount' => 0.0,
+            ];
+        }
+
         $expectedEnd = Carbon::parse($date->toDateString() . ' ' . $shift->end_time);
         $workedMinutes = (int) $checkInTime->diffInMinutes($checkOutTime);
         $expectedMinutes = (int) Carbon::parse($shift->start_time)->diffInMinutes(Carbon::parse($shift->end_time));
