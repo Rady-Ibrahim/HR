@@ -79,16 +79,22 @@ class EmployeePointController
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id',
-            'type'        => 'required|in:credit,debit',
-            'points'      => 'required|numeric|gt:0',
-            'point_price' => 'required|numeric|min:0',
-            'reason'      => 'required|string|max:1000',
-            'month'       => 'nullable|integer|min:1|max:12',
-            'year'        => 'nullable|integer|min:2020|max:2050',
+            'employee_ids'   => 'required_without:employee_id|array',
+            'employee_ids.*' => 'exists:employees,id',
+            'employee_id'    => 'required_without:employee_ids|exists:employees,id',
+            'type'           => 'required|in:credit,debit',
+            'points'         => 'required|numeric|gt:0',
+            'point_price'    => 'required|numeric|min:0',
+            'reason'         => 'required|string|max:1000',
+            'month'          => 'nullable|integer|min:1|max:12',
+            'year'           => 'nullable|integer|min:2020|max:2050',
         ]);
 
-        $this->validateSubordinate((int) $validated['employee_id']);
+        $employeeIds = array_values(array_unique(array_map('intval', $validated['employee_ids'] ?? [$validated['employee_id']])));
+
+        foreach ($employeeIds as $empId) {
+            $this->validateSubordinate($empId);
+        }
 
         $points     = (float) $validated['points'];
         $pointPrice = (float) $validated['point_price'];
@@ -97,22 +103,31 @@ class EmployeePointController
         $month = $validated['month'] ?? now()->month;
         $year  = $validated['year'] ?? now()->year;
 
-        $record = EmployeePoint::create([
-            'employee_id'   => $validated['employee_id'],
-            'type'          => $validated['type'],
-            'points'        => $points,
-            'point_price'   => $pointPrice,
-            'total_amount'  => $total,
-            'reason'        => $validated['reason'],
-            'month'         => $month,
-            'year'          => $year,
-            'created_by_id' => Auth::id(),
-        ]);
+        $records = [];
+        foreach ($employeeIds as $empId) {
+            $records[] = EmployeePoint::create([
+                'employee_id'   => $empId,
+                'type'          => $validated['type'],
+                'points'        => $points,
+                'point_price'   => $pointPrice,
+                'total_amount'  => $total,
+                'reason'        => $validated['reason'],
+                'month'         => $month,
+                'year'          => $year,
+                'created_by_id' => Auth::id(),
+            ]);
+        }
+
+        $data = count($records) === 1
+            ? $records[0]->load('employee:id,name,employee_code')
+            : EmployeePoint::whereIn('id', array_column($records, 'id'))->with('employee:id,name,employee_code')->get();
 
         return response()->json([
             'success' => true,
-            'message' => 'تم إضافة النقاط بنجاح',
-            'data'    => $record->load('employee:id,name,employee_code'),
+            'message' => count($records) > 1
+                ? 'تم إضافة النقاط لجميع الموظفين المحددين بنجاح'
+                : 'تم إضافة النقاط بنجاح',
+            'data'    => $data,
         ], 201);
     }
 

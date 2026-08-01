@@ -49,6 +49,26 @@
         font-weight: 800;
         color: #1a237e;
     }
+    .emp-picker-list {
+        max-height: 210px;
+        overflow-y: auto;
+        border: 1.5px solid #e8ebf5;
+        border-radius: 10px;
+        background: #fafbff;
+        padding: 6px;
+    }
+    .emp-picker-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        border-bottom: 1px solid #f2f4fb;
+    }
+    .emp-picker-row:last-child { border-bottom: none; }
+    .emp-picker-row:hover { background: #eef1ff; }
+    .emp-picker-row .form-check-input { cursor: pointer; flex-shrink: 0; }
 </style>
 
 <div class="page-header">
@@ -180,9 +200,21 @@
                 <form id="addPointForm">
                     <div class="mb-3">
                         <label class="form-label fw-semibold">اختر الموظف *</label>
-                        <select id="pf_employee_id" class="form-select" required>
-                            <option value="">-- اختر الموظف --</option>
-                        </select>
+                        <div class="d-flex gap-2 mb-2">
+                            <div class="input-group flex-grow-1">
+                                <input type="text" id="pf_empSearch" class="form-control" placeholder="ابحث بالاسم أو الكود..." oninput="renderEmpPicker()">
+                                <button class="btn btn-outline-secondary" type="button" onclick="clearEmpSearch()" title="مسح البحث"><i class="fas fa-times"></i></button>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary text-nowrap" onclick="selectAllEmployees()">
+                                <i class="fas fa-users me-1"></i> اختيار كل الموظفين
+                            </button>
+                        </div>
+                        <div id="pf_empList" class="emp-picker-list"></div>
+                        <div class="d-flex align-items-center justify-content-between mt-1">
+                            <div class="text-muted" style="font-size:.8rem" id="pf_selectedCount">0 محدد</div>
+                            <a href="#" class="small text-danger text-decoration-none" onclick="clearAllEmployees(event)">مسح الكل</a>
+                        </div>
+                        <div id="pf_selectedTags" class="d-flex flex-wrap gap-1 mt-2"></div>
                     </div>
 
                     <div class="mb-3">
@@ -282,23 +314,111 @@ document.addEventListener('DOMContentLoaded', () => {
     loadPoints();
 });
 
+let allEmployeesForPoints = [];
+let selectedPointEmployees = [];
+
 async function loadEmployeesDropdown() {
     try {
         const res = await apiFetch('/employees?per_page=1000&status=active');
         const list = res.data?.data || res.data || [];
-        
-        const filterSelect = document.getElementById('filterEmp');
-        const formSelect = document.getElementById('pf_employee_id');
+        allEmployeesForPoints = list;
 
-        const options = list.map(emp => 
+        const filterSelect = document.getElementById('filterEmp');
+        filterSelect.innerHTML = '<option value="">كل الموظفين</option>' + list.map(emp =>
             `<option value="${emp.id}">${escHtml(emp.name)} (${escHtml(emp.employee_code || '')})</option>`
         ).join('');
 
-        filterSelect.innerHTML = '<option value="">كل الموظفين</option>' + options;
-        formSelect.innerHTML   = '<option value="">-- اختر الموظف --</option>' + options;
+        renderEmpPicker();
     } catch (e) {
         console.error('Failed loading employees', e);
     }
+}
+
+function getFilteredPointEmployees() {
+    const q = (document.getElementById('pf_empSearch')?.value || '').trim().toLowerCase();
+    if (!q) return allEmployeesForPoints;
+    return allEmployeesForPoints.filter(e =>
+        (e.name || '').toLowerCase().includes(q) ||
+        String(e.employee_code || '').toLowerCase().includes(q)
+    );
+}
+
+function renderEmpPicker() {
+    const box = document.getElementById('pf_empList');
+    const filtered = getFilteredPointEmployees();
+
+    if (!filtered.length) {
+        box.innerHTML = '<div class="text-muted text-center py-3">' +
+            (allEmployeesForPoints.length ? 'لا توجد نتائج مطابقة للبحث' : 'لا يوجد موظفون نشطون') + '</div>';
+        updateEmpSelectionUI();
+        return;
+    }
+
+    box.innerHTML = filtered.map(e => {
+        const checked = selectedPointEmployees.some(s => s.id === e.id);
+        return `<label class="emp-picker-row">
+            <input type="checkbox" class="form-check-input m-0" value="${e.id}" data-name="${escHtml(e.name)}" data-code="${escHtml(e.employee_code || '')}" ${checked ? 'checked' : ''} onchange="onPointEmpCheck(this)">
+            <span class="fw-semibold small">${escHtml(e.name)}</span>
+            <span class="text-muted small ms-auto">${escHtml(e.employee_code || '')}</span>
+        </label>`;
+    }).join('');
+    updateEmpSelectionUI();
+}
+
+function onPointEmpCheck(cb) {
+    const id = parseInt(cb.value);
+    if (cb.checked) {
+        if (!selectedPointEmployees.find(s => s.id === id)) {
+            selectedPointEmployees.push({ id, name: cb.dataset.name, code: cb.dataset.code });
+        }
+    } else {
+        selectedPointEmployees = selectedPointEmployees.filter(s => s.id !== id);
+    }
+    updateEmpSelectionUI();
+}
+
+function updateEmpSelectionUI() {
+    const n = selectedPointEmployees.length;
+    document.getElementById('pf_selectedCount').textContent =
+        n === 0 ? 'لم يتم اختيار أي موظف'
+        : n === 1 ? 'موظف واحد محدد'
+        : n + ' موظفين محددين';
+
+    const tags = document.getElementById('pf_selectedTags');
+    if (!n) { tags.innerHTML = ''; return; }
+    tags.innerHTML = selectedPointEmployees.map(e =>
+        `<span class="badge d-inline-flex align-items-center gap-1" style="background:#e8eaf6;color:#3949ab;font-size:.8rem;padding:.35rem .6rem">
+            ${escHtml(e.name)} <small class="opacity-75">${escHtml(e.code)}</small>
+            <i class="fas fa-times" style="cursor:pointer" onclick="removePointEmployee(${e.id})"></i>
+        </span>`
+    ).join('');
+}
+
+function removePointEmployee(id) {
+    selectedPointEmployees = selectedPointEmployees.filter(s => s.id !== id);
+    const cb = document.querySelector(`#pf_empList input[value="${id}"]`);
+    if (cb) cb.checked = false;
+    updateEmpSelectionUI();
+}
+
+function selectAllEmployees() {
+    getFilteredPointEmployees().forEach(e => {
+        if (!selectedPointEmployees.find(s => s.id === e.id)) {
+            selectedPointEmployees.push({ id: e.id, name: e.name, code: e.employee_code || '' });
+        }
+    });
+    renderEmpPicker();
+}
+
+function clearAllEmployees(ev) {
+    ev?.preventDefault();
+    selectedPointEmployees = [];
+    renderEmpPicker();
+}
+
+function clearEmpSearch() {
+    document.getElementById('pf_empSearch').value = '';
+    renderEmpPicker();
 }
 
 async function loadPoints(page = 1) {
@@ -393,25 +513,33 @@ function recalcTotal() {
 
 function openAddModal() {
     document.getElementById('addPointForm').reset();
+    document.getElementById('pf_empSearch').value = '';
+    selectedPointEmployees = [];
+    renderEmpPicker();
     document.getElementById('type_credit').checked = true;
     recalcTotal();
     new bootstrap.Modal(document.getElementById('addPointModal')).show();
 }
 
 async function savePointRecord() {
-    const empId  = document.getElementById('pf_employee_id').value;
+    const employee_ids = selectedPointEmployees.map(e => e.id);
     const pts    = document.getElementById('pf_points').value;
     const price  = document.getElementById('pf_price').value;
     const reason = document.getElementById('pf_reason').value;
 
-    if (!empId || !pts || !price || !reason.trim()) {
+    if (!employee_ids.length) {
+        showAlert('اختر موظف واحد على الأقل', 'danger');
+        return;
+    }
+
+    if (!pts || !price || !reason.trim()) {
         showAlert('يرجى ملء جميع الحقول المطلوبة', 'danger');
         return;
     }
 
     const isCredit = document.getElementById('type_credit').checked;
     const payload = {
-        employee_id: parseInt(empId),
+        employee_ids,
         type:        isCredit ? 'credit' : 'debit',
         points:      parseFloat(pts),
         point_price: parseFloat(price),
