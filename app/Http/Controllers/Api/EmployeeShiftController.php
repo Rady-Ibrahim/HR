@@ -39,11 +39,14 @@ class EmployeeShiftController
             'effective_to' => 'nullable|date|after_or_equal:effective_from',
         ]);
 
-        // End any current active assignment for this employee
-        EmployeeShift::where('employee_id', $validated['employee_id'])
-            ->whereNull('effective_to')
-            ->where('effective_from', '<', $validated['effective_from'])
-            ->update(['effective_to' => $validated['effective_from']]);
+        $conflict = $this->findOverlap($validated['employee_id'], $validated['effective_from'], $validated['effective_to'] ?? null);
+
+        if ($conflict) {
+            return response()->json([
+                'success' => false,
+                'message' => 'لا يمكن إضافة الموظف ' . $conflict->employee?->name . ' لأنه معيّن بالفعل على وردية أخرى (' . $conflict->shift?->name . '). يجب أن يكون الموظف في وردية واحدة فقط',
+            ], 422);
+        }
 
         $assignment = EmployeeShift::create($validated);
 
@@ -64,13 +67,30 @@ class EmployeeShiftController
             'effective_to' => 'nullable|date|after_or_equal:effective_from',
         ]);
 
+        $conflicts = [];
+        foreach ($validated['employee_ids'] as $empId) {
+            $conflict = $this->findOverlap($empId, $validated['effective_from'], $validated['effective_to'] ?? null);
+            if ($conflict) {
+                $conflicts[] = [
+                    'employee_id' => $empId,
+                    'employee_name' => $conflict->employee?->name,
+                    'existing_shift' => $conflict->shift?->name,
+                ];
+            }
+        }
+
+        if (count($conflicts) > 0) {
+            $names = collect($conflicts)->pluck('employee_name')->filter()->implode('، ');
+
+            return response()->json([
+                'success' => false,
+                'message' => 'لا يمكن إضافة ' . $names . ' لأنهم معيّنون بالفعل على ورديات أخرى. كل موظف يجب أن يكون في وردية واحدة فقط',
+                'conflicts' => $conflicts,
+            ], 422);
+        }
+
         $created = [];
         foreach ($validated['employee_ids'] as $empId) {
-            EmployeeShift::where('employee_id', $empId)
-                ->whereNull('effective_to')
-                ->where('effective_from', '<', $validated['effective_from'])
-                ->update(['effective_to' => $validated['effective_from']]);
-
             $created[] = EmployeeShift::create([
                 'employee_id' => $empId,
                 'shift_id' => $validated['shift_id'],
@@ -120,5 +140,19 @@ class EmployeeShiftController
         $assignment->delete();
 
         return response()->json(['success' => true, 'message' => 'تم إلغاء تعيين الوردية']);
+    }
+
+    private function findOverlap(int $employeeId, string $effectiveFrom, ?string $effectiveTo): ?EmployeeShift
+    {
+        return EmployeeShift::with(['employee', 'shift'])
+            ->where('employee_id', $employeeId)
+            ->where(function ($q) use ($effectiveTo) {
+                $q->where('effective_from', '<=', $effectiveTo ?? '9999-12-31');
+            })
+            ->where(function ($q) use ($effectiveFrom) {
+                $q->whereNull('effective_to')
+                  ->orWhere('effective_to', '>=', $effectiveFrom);
+            })
+            ->first();
     }
 }

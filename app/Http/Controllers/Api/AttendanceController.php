@@ -20,7 +20,7 @@ class AttendanceController
 
     public function index(Request $request): JsonResponse
     {
-        $query = Attendance::with('employee');
+        $query = Attendance::with(['employee', 'shift']);
 
         if ($request->filled('employee_id')) $query->where('employee_id', $request->employee_id);
         if ($request->filled('status'))      $query->where('status', $request->status);
@@ -103,7 +103,7 @@ class AttendanceController
         return response()->json([
             'success' => true,
             'message' => 'تم حفظ سجل الحضور وسيتم احتساب الخصم تلقائياً في المرتب',
-            'data' => $record->load('employee'),
+            'data' => $record->load(['employee', 'shift']),
             'penalty' => [
                 'late_minutes' => $record->late_minutes,
                 'early_exit_minutes' => $record->early_exit_minutes,
