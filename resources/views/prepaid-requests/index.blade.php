@@ -45,9 +45,23 @@
                     </div>
 
                     <div class="mb-3">
+                        <label class="form-label">قسم موظف المحضر (لتصفية الموظفين)</label>
+                        <select id="prep_dept_id" class="form-select" onchange="loadEmployeesByDept('prep_dept_id', 'prepared_by_id', 'اختر الموظف')">
+                            <option value="">كل الأقسام</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
                         <label class="form-label">اسم موظف محضر</label>
                         <select name="prepared_by_id" id="prepared_by_id" class="form-select">
                             <option value="">اختر الموظف</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">قسم موظف المراجعة (لتصفية الموظفين)</label>
+                        <select id="rev_dept_id" class="form-select" onchange="loadEmployeesByDept('rev_dept_id', 'reviewer_employee_id', 'اختر موظف المراجعة')">
+                            <option value="">كل الأقسام</option>
                         </select>
                     </div>
 
@@ -70,7 +84,12 @@
 
                     <div class="mb-3">
                         <label class="form-label">تاريخ ووقت الانتهاء</label>
-                        <input type="datetime-local" name="ended_at" id="ended_at" class="form-control">
+                        <div class="input-group">
+                            <input type="datetime-local" name="ended_at" id="ended_at" class="form-control">
+                            <button type="button" class="btn btn-outline-primary" onclick="setCurrentTime('ended_at')">
+                                <i class="fas fa-clock"></i>
+                            </button>
+                        </div>
                     </div>
 
                     <div class="mb-3">
@@ -238,9 +257,10 @@ const requestStatusBadge = {
 };
 
 async function loadLookups() {
-    const [customers, employees] = await Promise.all([
+    const [customers, employees, departments] = await Promise.all([
         apiFetch('/customers?per_page=100&status=active'),
-        apiFetch('/employees?per_page=100&status=active')
+        apiFetch('/employees?per_page=1000&status=active'),
+        apiFetch('/departments')
     ]);
 
     if (customers.success) {
@@ -251,7 +271,7 @@ async function loadLookups() {
     }
 
     if (employees.success) {
-        const empOpts = employees.data.data.map(e => `<option value="${e.id}">${e.name} - ${e.employee_code ?? e.id}</option>`).join('');
+        const empOpts = employees.data.data.map(e => `<option value="${e.id}">${escapeHtml(e.name)} - ${escapeHtml(e.employee_code ?? e.id)}</option>`).join('');
         document.getElementById('prepared_by_id').innerHTML = '<option value="">اختر الموظف</option>' + empOpts;
         document.getElementById('reviewer_employee_id').innerHTML = '<option value="">اختر موظف المراجعة</option>' + empOpts;
         const editPrep = document.getElementById('edit_prepared_by_id');
@@ -259,6 +279,24 @@ async function loadLookups() {
         if (editPrep) editPrep.innerHTML = '<option value="">اختر الموظف</option>' + empOpts;
         if (editRev) editRev.innerHTML = '<option value="">اختر موظف المراجعة</option>' + empOpts;
     }
+
+    if (departments.success) {
+        const deptOpts = (departments.data ?? []).map(d => `<option value="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`).join('');
+        const allDepts = '<option value="">كل الأقسام</option>' + deptOpts;
+        document.getElementById('prep_dept_id').innerHTML = allDepts;
+        document.getElementById('rev_dept_id').innerHTML = allDepts;
+    }
+}
+
+async function loadEmployeesByDept(deptSelectId, empSelectId, placeholder) {
+    const dept = document.getElementById(deptSelectId).value;
+    let url = '/employees?per_page=1000&status=active';
+    if (dept) url += '&department=' + encodeURIComponent(dept);
+    const r = await apiFetch(url);
+    const empOpts = r.success
+        ? (r.data.data ?? []).map(e => `<option value="${e.id}">${escapeHtml(e.name)} - ${escapeHtml(e.employee_code ?? e.id)}</option>`).join('')
+        : '';
+    document.getElementById(empSelectId).innerHTML = '<option value="">' + placeholder + '</option>' + empOpts;
 }
 
 async function loadPrepaidRequests() {
