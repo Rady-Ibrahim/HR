@@ -1503,6 +1503,11 @@
                     input.value = label || '';
                     selectedValue = id;
                 },
+                setItems: (rows) => {
+                    items = rows || [];
+                    open = false;
+                    hideDropdown();
+                },
                 reset: () => {
                     hidden.value = '';
                     input.value = '';

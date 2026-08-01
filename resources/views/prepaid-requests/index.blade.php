@@ -46,30 +46,30 @@
 
                     <div class="mb-3">
                         <label class="form-label">قسم موظف المحضر (لتصفية الموظفين)</label>
-                        <select id="prep_dept_id" class="form-select" onchange="loadEmployeesByDept('prep_dept_id', 'prepared_by_id', 'اختر الموظف')">
+                        <select id="prep_dept_id" class="form-select" onchange="filterPreparedByDept()">
                             <option value="">كل الأقسام</option>
                         </select>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">اسم موظف محضر</label>
-                        <select name="prepared_by_id" id="prepared_by_id" class="form-select">
-                            <option value="">اختر الموظف</option>
-                        </select>
+                        <div class="position-relative">
+                            <input type="text" name="prepared_by_id" id="prepared_by_search" class="form-control" placeholder="ابحث بالاسم أو الكود...">
+                        </div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">قسم موظف المراجعة (لتصفية الموظفين)</label>
-                        <select id="rev_dept_id" class="form-select" onchange="loadEmployeesByDept('rev_dept_id', 'reviewer_employee_id', 'اختر موظف المراجعة')">
+                        <select id="rev_dept_id" class="form-select" onchange="filterReviewerByDept()">
                             <option value="">كل الأقسام</option>
                         </select>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">يرحل لموظف يراجع</label>
-                        <select name="reviewer_employee_id" id="reviewer_employee_id" class="form-select">
-                            <option value="">اختر موظف المراجعة</option>
-                        </select>
+                        <div class="position-relative">
+                            <input type="text" name="reviewer_employee_id" id="reviewer_by_search" class="form-control" placeholder="ابحث بالاسم أو الكود...">
+                        </div>
                     </div>
 
                     <div class="mb-3">
@@ -183,11 +183,15 @@
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">اسم موظف محضر</label>
-                        <select id="edit_prepared_by_id" class="form-select"><option value="">اختر الموظف</option></select>
+                        <div class="position-relative">
+                            <input type="text" id="edit_prepared_by_search" class="form-control" placeholder="ابحث بالاسم أو الكود...">
+                        </div>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">يرحل لموظف يراجع</label>
-                        <select id="edit_reviewer_employee_id" class="form-select"><option value="">اختر موظف المراجعة</option></select>
+                        <div class="position-relative">
+                            <input type="text" id="edit_reviewer_by_search" class="form-control" placeholder="ابحث بالاسم أو الكود...">
+                        </div>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">تاريخ ووقت البداية</label>
@@ -256,10 +260,47 @@ const requestStatusBadge = {
     closed: 'badge-active'
 };
 
+let allActiveEmployees = [];
+let preparedSearch = null;
+let reviewerSearch = null;
+let editPreparedSearch = null;
+let editReviewerSearch = null;
+
+async function initEmployeeSearchables() {
+    preparedSearch   = createSearchableSelect(document.getElementById('prepared_by_search'), 'employees');
+    reviewerSearch   = createSearchableSelect(document.getElementById('reviewer_by_search'), 'employees');
+    editPreparedSearch = createSearchableSelect(document.getElementById('edit_prepared_by_search'), 'employees');
+    editReviewerSearch = createSearchableSelect(document.getElementById('edit_reviewer_by_search'), 'employees');
+
+    const rows = await getLookupRows('employees');
+    allActiveEmployees = rows.filter(e => e.status === 'active');
+    preparedSearch.setItems(allActiveEmployees);
+    reviewerSearch.setItems(allActiveEmployees);
+    editPreparedSearch.setItems(allActiveEmployees);
+    editReviewerSearch.setItems(allActiveEmployees);
+}
+
+function filterPreparedByDept() {
+    const dept = document.getElementById('prep_dept_id').value;
+    preparedSearch.setItems(dept ? allActiveEmployees.filter(e => (e.department || '') === dept) : allActiveEmployees);
+    preparedSearch.reset();
+}
+
+function filterReviewerByDept() {
+    const dept = document.getElementById('rev_dept_id').value;
+    reviewerSearch.setItems(dept ? allActiveEmployees.filter(e => (e.department || '') === dept) : allActiveEmployees);
+    reviewerSearch.reset();
+}
+
+function setEmployeeValue(searchable, empId) {
+    if (!empId) { searchable.reset(); return; }
+    const emp = allActiveEmployees.find(e => e.id === parseInt(empId));
+    searchable.setValue(empId, emp ? `${emp.name} - ${emp.employee_code ?? emp.id}` : String(empId));
+}
+
 async function loadLookups() {
-    const [customers, employees, departments] = await Promise.all([
+    const [customers, departments] = await Promise.all([
         apiFetch('/customers?per_page=100&status=active'),
-        apiFetch('/employees?per_page=1000&status=active'),
         apiFetch('/departments')
     ]);
 
@@ -270,33 +311,12 @@ async function loadLookups() {
         if (editCust) editCust.innerHTML = '<option value="">اختر العميل</option>' + custOpts;
     }
 
-    if (employees.success) {
-        const empOpts = employees.data.data.map(e => `<option value="${e.id}">${escapeHtml(e.name)} - ${escapeHtml(e.employee_code ?? e.id)}</option>`).join('');
-        document.getElementById('prepared_by_id').innerHTML = '<option value="">اختر الموظف</option>' + empOpts;
-        document.getElementById('reviewer_employee_id').innerHTML = '<option value="">اختر موظف المراجعة</option>' + empOpts;
-        const editPrep = document.getElementById('edit_prepared_by_id');
-        const editRev = document.getElementById('edit_reviewer_employee_id');
-        if (editPrep) editPrep.innerHTML = '<option value="">اختر الموظف</option>' + empOpts;
-        if (editRev) editRev.innerHTML = '<option value="">اختر موظف المراجعة</option>' + empOpts;
-    }
-
     if (departments.success) {
         const deptOpts = (departments.data ?? []).map(d => `<option value="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`).join('');
         const allDepts = '<option value="">كل الأقسام</option>' + deptOpts;
         document.getElementById('prep_dept_id').innerHTML = allDepts;
         document.getElementById('rev_dept_id').innerHTML = allDepts;
     }
-}
-
-async function loadEmployeesByDept(deptSelectId, empSelectId, placeholder) {
-    const dept = document.getElementById(deptSelectId).value;
-    let url = '/employees?per_page=1000&status=active';
-    if (dept) url += '&department=' + encodeURIComponent(dept);
-    const r = await apiFetch(url);
-    const empOpts = r.success
-        ? (r.data.data ?? []).map(e => `<option value="${e.id}">${escapeHtml(e.name)} - ${escapeHtml(e.employee_code ?? e.id)}</option>`).join('')
-        : '';
-    document.getElementById(empSelectId).innerHTML = '<option value="">' + placeholder + '</option>' + empOpts;
 }
 
 async function loadPrepaidRequests() {
@@ -374,8 +394,8 @@ async function openEditRequestModal(id) {
     document.getElementById('edit_customer_id').value = req.customer_id ?? '';
     document.getElementById('edit_items_count').value = req.items_count ?? '';
     document.getElementById('edit_orders_count').value = req.orders_count ?? req.total_quantity ?? '';
-    document.getElementById('edit_prepared_by_id').value = req.prepared_by_id ?? '';
-    document.getElementById('edit_reviewer_employee_id').value = req.reviewer_employee_id ?? '';
+    setEmployeeValue(editPreparedSearch, req.prepared_by_id ?? '');
+    setEmployeeValue(editReviewerSearch, req.reviewer_employee_id ?? '');
     document.getElementById('edit_started_at').value = req.started_at ? req.started_at.substring(0, 16) : '';
     document.getElementById('edit_ended_at').value = req.ended_at ? req.ended_at.substring(0, 16) : '';
     document.getElementById('edit_notes').value = req.notes ?? '';
@@ -414,8 +434,8 @@ async function saveEditRequest() {
         customer_id: document.getElementById('edit_customer_id').value || null,
         items_count: document.getElementById('edit_items_count').value ? Number(document.getElementById('edit_items_count').value) : null,
         orders_count: document.getElementById('edit_orders_count').value ? Number(document.getElementById('edit_orders_count').value) : null,
-        prepared_by_id: document.getElementById('edit_prepared_by_id').value || null,
-        reviewer_employee_id: document.getElementById('edit_reviewer_employee_id').value || null,
+        prepared_by_id: editPreparedSearch.getValue() || null,
+        reviewer_employee_id: editReviewerSearch.getValue() || null,
         started_at: document.getElementById('edit_started_at').value || null,
         ended_at: document.getElementById('edit_ended_at').value || null,
         notes: document.getElementById('edit_notes').value || null,
@@ -470,6 +490,7 @@ document.getElementById('edit_started_at').addEventListener('change', updateEdit
 document.getElementById('edit_ended_at').addEventListener('change', updateEditDuration);
 
 document.addEventListener('DOMContentLoaded', () => {
+    initEmployeeSearchables();
     loadLookups();
     loadPrepaidRequests();
     if (!document.getElementById('started_at').value) {
