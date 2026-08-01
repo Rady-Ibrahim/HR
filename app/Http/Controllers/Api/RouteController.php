@@ -107,10 +107,13 @@ class RouteController
         ]);
 
         return DB::transaction(function () use ($validated) {
+            $creatorEmployee = Employee::where('user_id', auth()->id())->first();
+            $driverId = $validated['driver_id'] ?? $creatorEmployee?->id;
+
             $route = RouteModel::create([
                 'route_code' => 'RT-' . now()->format('Ymd') . '-' . str_pad(RouteModel::whereDate('created_at', today())->count() + 1, 3, '0', STR_PAD_LEFT),
                 'route_name' => $validated['route_name'] ?? null,
-                'driver_id' => $validated['driver_id'] ?? null,
+                'driver_id' => $driverId,
                 'sales_rep_id' => $validated['sales_rep_id'] ?? null,
                 'vehicle_number' => $validated['vehicle_number'] ?? null,
                 'start_point' => $validated['start_point'] ?? null,
@@ -318,7 +321,14 @@ class RouteController
 
         $route = RouteModel::findOrFail($id);
 
-        if ($route->driver_id !== $employee->id && $route->sales_rep_id !== $employee->id) {
+        $isAssignedDriver = $route->driver_id === $employee->id
+            || $route->sales_rep_id === $employee->id
+            || Delivery::where('route_id', $route->id)
+                ->where('driver_id', $employee->id)
+                ->whereIn('status', ['pending', 'in_transit'])
+                ->exists();
+
+        if (!$isAssignedDriver) {
             return response()->json(['success' => false, 'message' => 'خط السير هذا غير مخصص لك'], 403);
         }
 
@@ -358,12 +368,12 @@ class RouteController
                 'driver_id'                    => $employee->id,
                 'packages_count'               => $validated['packages_count'] ?? $stop->packages_count,
                 'expected_collection_amount'   => $validated['expected_collection_amount'] ?? $stop->expected_amount,
-                'delivery_items'               => $validated['goods_notes'] ? ['goods_notes' => $validated['goods_notes']] : null,
+                'delivery_items'               => !empty($validated['goods_notes']) ? ['goods_notes' => $validated['goods_notes']] : null,
                 'status'                       => 'completed',
                 'end_time'                     => now(),
             ]);
 
-            $stop->update(['delivery_status' => 'completed']);
+            $stop->update(['delivery_status' => 'delivered']);
 
             if ($req && in_array($req->status, ['approved', 'ready_for_delivery', 'in_delivery'])) {
                 $req->update(['status' => 'delivered']);
@@ -379,7 +389,7 @@ class RouteController
             'total_expected_collection'     => (float) $route->deliveries()->sum('expected_collection_amount'),
             'total_packages_delivered'      => (int) $route->deliveries()->sum('packages_count'),
             'total_stops'                   => $route->stops_count,
-            'completed_stops'               => $route->stops()->where('delivery_status', 'completed')->count(),
+            'completed_stops'               => $route->stops()->where('delivery_status', 'delivered')->count(),
         ];
 
         return response()->json([
