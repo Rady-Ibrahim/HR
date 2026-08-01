@@ -76,9 +76,14 @@
         <h1><i class="fas fa-star me-2 text-warning"></i> نقاط الموظفين</h1>
         <div class="breadcrumb">إدارة إضافة وخصم النقاط وتأثيرها على الراتب الشهري</div>
     </div>
-    <button class="btn-primary-custom" onclick="openAddModal()">
-        <i class="fas fa-plus me-1"></i> إضافة نقاط لموظف
-    </button>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-primary text-nowrap" onclick="printPointsPDF()" title="طباعة PDF">
+            <i class="fas fa-file-pdf me-1"></i> طباعة PDF
+        </button>
+        <button class="btn-primary-custom" onclick="openAddModal()">
+            <i class="fas fa-plus me-1"></i> إضافة نقاط لموظف
+        </button>
+    </div>
 </div>
 
 <!-- STATS CARDS -->
@@ -603,6 +608,76 @@ function renderPagination(data) {
             <button class="btn btn-sm btn-outline-secondary" ${data.current_page === data.last_page ? 'disabled' : ''} onclick="loadPoints(${data.current_page + 1})">التالي</button>
         </div>
     `;
+}
+
+async function printPointsPDF() {
+    const empId = document.getElementById('filterEmp').value;
+    const type  = document.getElementById('filterType').value;
+    const month = document.getElementById('filterMonth').value;
+    const year  = document.getElementById('filterYear').value;
+
+    let query = '?per_page=1000';
+    if (empId) query += `&employee_id=${empId}`;
+    if (type)  query += `&type=${type}`;
+    if (month) query += `&month=${month}`;
+    if (year)  query += `&year=${year}`;
+
+    let res;
+    try {
+        res = await apiFetch('/employee-points' + query);
+    } catch (e) {
+        showAlert('حدث خطأ أثناء تحميل البيانات للطباعة', 'danger');
+        return;
+    }
+    if (!res.success) { showAlert(res.message || 'فشل تحميل البيانات', 'danger'); return; }
+
+    const data = res.data?.data || res.data || [];
+    const summary = res.summary || {};
+    const empName = empId ? (data[0]?.employee?.name || '') : '';
+
+    const rows = data.map((item, i) => {
+        const isCredit = item.type === 'credit';
+        const sign = isCredit ? '+' : '-';
+        return `
+            <tr>
+                <td>${i + 1}</td>
+                <td><b>${escHtml(item.employee?.name || '—')}</b><br><span style="color:#6b7280;font-size:11px">${escHtml(item.employee?.employee_code || '')}</span></td>
+                <td>${isCredit ? 'له (+)' : 'عليه (-)'}</td>
+                <td>${item.points}</td>
+                <td>${item.point_price}</td>
+                <td class="${isCredit ? 'pos' : 'neg'}">${sign}${Number(item.total_amount).toLocaleString()}</td>
+                <td>${escHtml(item.reason)}</td>
+                <td>${item.month} / ${item.year}</td>
+                <td>${new Date(item.created_at).toLocaleDateString('ar-EG')}</td>
+            </tr>`;
+    }).join('');
+
+    const metaParts = [
+        empName ? `الموظف: ${empName}` : 'كل الموظفين',
+        type ? (type === 'credit' ? 'نوع: له (+)' : 'نوع: عليه (-)') : null,
+        month ? `الشهر: ${month}` : null,
+        year ? `السنة: ${year}` : null,
+    ].filter(Boolean).join(' | ');
+
+    const body = `
+        <div class="ph">
+            <h1>تقرير نقاط الموظفين</h1>
+            <div class="meta">${escHtml(metaParts)}</div>
+        </div>
+        <div class="sum">
+            <div class="box"><div class="lbl">نقاط (له +)</div><div class="val pos">${summary.total_credit_points || 0} (${(summary.total_credit_amount || 0).toLocaleString()} ج.م)</div></div>
+            <div class="box"><div class="lbl">نقاط (عليه -)</div><div class="val neg">${summary.total_debit_points || 0} (${(summary.total_debit_amount || 0).toLocaleString()} ج.م)</div></div>
+            <div class="box"><div class="lbl">صافي القيمة الكلية</div><div class="val">${(summary.net_amount || 0).toLocaleString()} ج.م</div></div>
+            <div class="box"><div class="lbl">إجمالي العمليات</div><div class="val">${data.length}</div></div>
+        </div>
+        <table>
+            <thead><tr>
+                <th>#</th><th>الموظف</th><th>نوع العملية</th><th>عدد النقاط</th><th>سعر النقطة</th><th>المبلغ الإجمالي</th><th>السبب</th><th>الشهر / السنة</th><th>التاريخ</th>
+            </tr></thead>
+            <tbody>${rows || '<tr><td colspan="9" style="text-align:center;color:#6b7280">لا توجد بيانات مطابقة</td></tr>'}</tbody>
+        </table>`;
+
+    printHTML('تقرير نقاط الموظفين', body);
 }
 
 function escHtml(str) {

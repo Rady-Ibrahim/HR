@@ -5,6 +5,9 @@
 @section('content')
 <div class="page-header">
     <div><h1><i class="fas fa-file-invoice me-2 text-primary"></i> كشف حساب موظف</h1><div class="breadcrumb">عرض كشف حساب موظف لكامل المعاملات المالية</div></div>
+    <button class="btn btn-sm btn-outline-primary text-nowrap" onclick="printStatementPDF()" id="fsPrintBtn" style="display:none" title="طباعة PDF">
+        <i class="fas fa-file-pdf me-1"></i> طباعة PDF
+    </button>
 </div>
 
 <!-- FILTERS -->
@@ -117,6 +120,7 @@
 @push('scripts')
 <script>
 const salStatuses = { draft:'مسودة', pending_approval:'بانتظار الاعتماد', approved:'معتمد', paid:'مدفوع', rejected:'مرفوض' };
+let lastStatement = null;
 
 async function loadStatement() {
     const empId = document.getElementById('fs_employee_id').value;
@@ -127,6 +131,8 @@ async function loadStatement() {
     const r = await apiFetch(`/employees/${empId}/financial-statement?month=${month}&year=${year}`);
     if (!r.success) { showAlert(r.message || 'فشل تحميل البيانات', 'danger'); return; }
 
+    lastStatement = r;
+    document.getElementById('fsPrintBtn').style.display = 'inline-flex';
     document.getElementById('statementContainer').style.display = 'block';
 
     // Employee info
@@ -195,6 +201,92 @@ async function loadStatement() {
     document.getElementById('fsViolations').innerHTML = vio.length
         ? vio.map(v => `<tr><td>${v.violation_type}</td><td>${v.reason||'-'}</td><td class="text-danger">${Number(v.amount).toLocaleString()} ج.م</td><td><span class="badge-status ${v.status==='pending'?'badge-pending':v.status==='paid'?'badge-rejected':'badge-approved'}">${v.status==='pending'?'معلق':v.status==='paid'?'مدفوع':v.status==='waived'?'إعفاء':v.status}</span></td></tr>`).join('')
         : '<tr><td colspan="4" class="text-muted text-center">لا توجد مخالفات</td></tr>';
+}
+
+function printStatementPDF() {
+    const r = lastStatement;
+    if (!r) { showAlert('قم بعرض كشف الحساب أولاً', 'danger'); return; }
+
+    const s = r.summary || {};
+    const emp = r.employee || {};
+    const d = r.data || {};
+
+    const additions = (s.incentives_total||0) + (s.allowances_total||0) + (s.commissions_total||0) + (s.points_credit_total||0);
+    const deductions = (s.deductions_total||0) + (s.advances_installment_total||0) + (s.violations_total||0) + (s.points_debit_total||0);
+    const statusMap = { approved:'معتمد', rejected:'مرفوض', pending:'معلق', active:'نشط' };
+    const st = st2 => statusMap[st2] || st2;
+
+    let html = `
+        <div class="ph">
+            <h1>كشف حساب موظف</h1>
+            <div class="meta">${escapeHtml(emp.name || '')}${emp.employee_code ? ' - ' + escapeHtml(emp.employee_code) : ''}${emp.department ? ' - ' + escapeHtml(emp.department) : ''} | شهر ${r.month} / ${r.year}</div>
+        </div>
+        <div class="sum">
+            <div class="box"><div class="lbl">الراتب الأساسي</div><div class="val">${Number(s.base_salary||0).toLocaleString()} ج.م</div></div>
+            <div class="box"><div class="lbl">الإضافات</div><div class="val pos">+${Number(additions).toLocaleString()} ج.م</div></div>
+            <div class="box"><div class="lbl">الخصومات</div><div class="val neg">-${Number(deductions).toLocaleString()} ج.م</div></div>
+            <div class="box"><div class="lbl">الصافي</div><div class="val">${Number(s.estimated_net||0).toLocaleString()} ج.م</div></div>
+        </div>`;
+
+    if (d.salary) {
+        const comps = d.salary.components || [];
+        html += `<div class="h2">تفاصيل الراتب</div><table><thead><tr><th>النوع</th><th>الاسم</th><th>السبب</th><th>المبلغ</th></tr></thead><tbody>`;
+        html += comps.length
+            ? comps.map(c => `<tr><td>${escapeHtml(c.component_type)}</td><td>${escapeHtml(c.component_name)}</td><td>${escapeHtml(c.reason||'-')}</td><td class="${Number(c.amount)<0?'neg':'pos'}">${Number(c.amount).toLocaleString()} ج.م</td></tr>`).join('')
+            : '<tr><td colspan="4" style="text-align:center;color:#6b7280">لا توجد مكونات</td></tr>';
+        html += `</tbody></table>`;
+    }
+
+    const inc = d.incentives || [];
+    html += `<div class="h2">الحوافز (${inc.length})</div><table><thead><tr><th>النوع</th><th>السبب</th><th>المبلغ</th><th>الحالة</th></tr></thead><tbody>`;
+    html += inc.length
+        ? inc.map(i => `<tr><td>${escapeHtml(i.incentive_type)}</td><td>${escapeHtml(i.reason||'-')}</td><td class="pos">${Number(i.amount).toLocaleString()} ج.م</td><td>${st(i.status)}</td></tr>`).join('')
+        : '<tr><td colspan="4" style="text-align:center;color:#6b7280">لا توجد حوافز</td></tr>';
+    html += `</tbody></table>`;
+
+    const all = d.allowances || [];
+    html += `<div class="h2">البدلات (${all.length})</div><table><thead><tr><th>النوع</th><th>السبب</th><th>المبلغ</th><th>الحالة</th></tr></thead><tbody>`;
+    html += all.length
+        ? all.map(a => `<tr><td>${escapeHtml(a.allowance_type)}</td><td>${escapeHtml(a.reason||'-')}</td><td class="pos">${Number(a.amount).toLocaleString()} ج.م</td><td>${st(a.status)}</td></tr>`).join('')
+        : '<tr><td colspan="4" style="text-align:center;color:#6b7280">لا توجد بدلات</td></tr>';
+    html += `</tbody></table>`;
+
+    const com = d.commissions || [];
+    html += `<div class="h2">العمولات (${com.length})</div><table><thead><tr><th>السبب</th><th>المبلغ</th><th>الحالة</th></tr></thead><tbody>`;
+    html += com.length
+        ? com.map(c => `<tr><td>${escapeHtml(c.reason||'-')}</td><td class="pos">${Number(c.amount).toLocaleString()} ج.م</td><td>${st(c.status)}</td></tr>`).join('')
+        : '<tr><td colspan="3" style="text-align:center;color:#6b7280">لا توجد عمولات</td></tr>';
+    html += `</tbody></table>`;
+
+    const pts = d.points || [];
+    html += `<div class="h2">النقاط (${pts.length})</div><table><thead><tr><th>النوع</th><th>السبب</th><th>النقاط</th><th>المبلغ</th></tr></thead><tbody>`;
+    html += pts.length
+        ? pts.map(p => `<tr><td>${p.direction==='credit'?'له (+)':'عليه (-)'}</td><td>${escapeHtml(p.reason||'-')}</td><td>${Number(p.points).toLocaleString()}</td><td class="${p.direction==='credit'?'pos':'neg'}">${Number(p.total_amount).toLocaleString()} ج.م</td></tr>`).join('')
+        : '<tr><td colspan="4" style="text-align:center;color:#6b7280">لا توجد نقاط</td></tr>';
+    html += `</tbody></table>`;
+
+    const ded = d.deductions || [];
+    html += `<div class="h2">الخصومات (${ded.length})</div><table><thead><tr><th>النوع</th><th>السبب</th><th>المبلغ</th><th>الحالة</th></tr></thead><tbody>`;
+    html += ded.length
+        ? ded.map(x => `<tr><td>${escapeHtml(x.deduction_type)}</td><td>${escapeHtml(x.reason||'-')}</td><td class="neg">${Number(x.amount).toLocaleString()} ج.م</td><td>${st(x.status)}</td></tr>`).join('')
+        : '<tr><td colspan="4" style="text-align:center;color:#6b7280">لا توجد خصومات</td></tr>';
+    html += `</tbody></table>`;
+
+    const adv = d.advances || [];
+    html += `<div class="h2">السلف (${adv.length})</div><table><thead><tr><th>السبب</th><th>المبلغ</th><th>المتبقي</th><th>الحالة</th></tr></thead><tbody>`;
+    html += adv.length
+        ? adv.map(a => `<tr><td>${escapeHtml(a.reason||'-')}</td><td>${Number(a.amount).toLocaleString()} ج.م</td><td>${Number(a.remaining_amount).toLocaleString()} ج.م</td><td>${st(a.status)}</td></tr>`).join('')
+        : '<tr><td colspan="4" style="text-align:center;color:#6b7280">لا توجد سلف</td></tr>';
+    html += `</tbody></table>`;
+
+    const vio = d.violations || [];
+    html += `<div class="h2">المخالفات (${vio.length})</div><table><thead><tr><th>النوع</th><th>السبب</th><th>المبلغ</th><th>الحالة</th></tr></thead><tbody>`;
+    html += vio.length
+        ? vio.map(v => `<tr><td>${escapeHtml(v.violation_type)}</td><td>${escapeHtml(v.reason||'-')}</td><td class="neg">${Number(v.amount).toLocaleString()} ج.م</td><td>${v.status==='pending'?'معلق':v.status==='paid'?'مدفوع':v.status==='waived'?'إعفاء':st(v.status)}</td></tr>`).join('')
+        : '<tr><td colspan="4" style="text-align:center;color:#6b7280">لا توجد مخالفات</td></tr>';
+    html += `</tbody></table>`;
+
+    printHTML('كشف حساب موظف', html);
 }
 
 document.addEventListener('DOMContentLoaded', function() {

@@ -1183,6 +1183,51 @@
             }, 5000);
         }
 
+        function printHTML(title, bodyHtml) {
+            const w = window.open('', '_blank', 'width=980,height=720');
+            if (!w) {
+                showAlert('يرجى السماح بالنوافذ المنبثقة لطباعة PDF', 'danger');
+                return false;
+            }
+            w.document.write(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${title}</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Cairo',sans-serif;color:#1f2937;padding:28px;font-size:14px;background:#fff;}
+    .ph{text-align:center;border-bottom:2px solid #1a237e;padding-bottom:12px;margin-bottom:18px;}
+    .ph h1{font-size:20px;color:#1a237e;margin:0 0 4px;}
+    .ph .meta{font-size:12px;color:#6b7280;}
+    .sum{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:18px;}
+    .sum .box{border:1px solid #cbd5e1;border-radius:10px;padding:8px 18px;text-align:center;background:#f8fafc;}
+    .sum .lbl{font-size:11px;color:#6b7280;}
+    .sum .val{font-size:16px;font-weight:800;color:#1a237e;}
+    table{width:100%;border-collapse:collapse;font-size:12.5px;}
+    th,td{border:1px solid #94a3b8;padding:6px 8px;text-align:right;vertical-align:top;}
+    th{background:#e8eaf6;color:#1a237e;font-weight:700;}
+    tbody tr:nth-child(even){background:#f8fafc;}
+    .pos{color:#15803d;font-weight:700;}
+    .neg{color:#b91c1c;font-weight:700;}
+    .h2{font-size:15px;font-weight:700;color:#1a237e;margin:18px 0 8px;border-right:4px solid #1a237e;padding-right:8px;}
+    .foot{display:flex;justify-content:space-between;margin-top:20px;padding-top:8px;border-top:1px dashed #cbd5e1;font-size:11px;color:#9ca3af;}
+    @page{size:A4;margin:12mm;}
+    @media print{body{padding:0;}}
+</style>
+</head>
+<body>
+${bodyHtml}
+<div class="foot"><span>نظام إدارة الموارد البشرية</span><span>تم الإنشاء: ${new Date().toLocaleString('ar-EG')}</span></div>
+<script>window.addEventListener('load',function(){setTimeout(function(){window.print();window.onafterprint=function(){window.close();};},200);});<\/script>
+</body>
+</html>`);
+            w.document.close();
+            return true;
+        }
+
         function formatApiError(payload) {
             if (!payload) return 'حدث خطأ غير متوقع';
             if (payload.errors && typeof payload.errors === 'object') {
