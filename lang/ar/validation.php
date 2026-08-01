@@ -113,5 +113,6 @@ return [
         'collected_date' => 'تاريخ التحصيل',
         'actual_amount' => 'المبلغ الفعلي',
         'reason' => 'السبب',
+        'customer_id' => 'العميل',
     ],
 ];

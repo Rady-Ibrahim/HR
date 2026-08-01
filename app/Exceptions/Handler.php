@@ -86,6 +86,13 @@ class Handler extends ExceptionHandler
             ], 422);
         }
 
+        if ($this->isNotNullViolation($e)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'هناك بيانات ناقصة. راجع الحقول المطلوبة وأعد المحاولة.',
+            ], 422);
+        }
+
         if ($this->isForeignKeyViolation($sqlMessage)) {
             return response()->json([
                 'success' => false,
@@ -101,9 +108,11 @@ class Handler extends ExceptionHandler
 
     protected function isDuplicateEntry(QueryException $e, string $message): bool
     {
+        $driverCode = $e->errorInfo[1] ?? null;
         $sqlState = $e->errorInfo[0] ?? null;
 
-        return $sqlState === '23000'
+        return $driverCode === 1062
+            || $sqlState === '23505'
             || str_contains($message, 'Duplicate entry')
             || str_contains($message, 'UNIQUE constraint failed');
     }
@@ -112,6 +121,14 @@ class Handler extends ExceptionHandler
     {
         return str_contains($message, 'foreign key constraint')
             || str_contains($message, 'FOREIGN KEY');
+    }
+
+    protected function isNotNullViolation(QueryException $e): bool
+    {
+        $driverCode = $e->errorInfo[1] ?? null;
+
+        return $driverCode === 1048
+            || str_contains($e->getMessage(), 'cannot be null');
     }
 
     protected function friendlyDuplicateMessage(string $sqlMessage): string

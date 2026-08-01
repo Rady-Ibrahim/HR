@@ -112,7 +112,8 @@ class Request extends Model
 
     public static function nextPrepaidNumber(): string
     {
-        $lastNumber = self::where('request_number', 'like', 'Order-%')
+        $lastNumber = self::withTrashed()
+            ->where('request_number', 'like', 'Order-%')
             ->orderByRaw("CAST(SUBSTRING(request_number, 7) AS UNSIGNED) DESC")
             ->value(DB::raw("CAST(SUBSTRING(request_number, 7) AS UNSIGNED)"));
 

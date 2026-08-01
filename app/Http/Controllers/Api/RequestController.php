@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\Rule;
 
 class RequestController
 {
@@ -156,7 +157,11 @@ class RequestController
     public function storePrepaid(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'customer_id' => 'nullable|exists:customers,id',
+            'customer_id' => [
+                'required',
+                'integer',
+                Rule::exists('customers', 'id')->whereNull('deleted_at'),
+            ],
             'items_count' => 'nullable|integer|min:1',
             'orders_count' => 'nullable|integer|min:1',
             'prepared_by_id' => 'nullable|exists:employees,id',
@@ -194,9 +199,9 @@ class RequestController
             $payload['payment_type'] = 'prepaid';
         }
         if (Schema::hasColumn('requests', 'reviewer_employee_id')) {
-            $payload['reviewer_employee_id'] = $validated['reviewer_employee_id'];
+            $payload['reviewer_employee_id'] = $validated['reviewer_employee_id'] ?? null;
         } else {
-            $payload['assigned_employee_id'] = $validated['reviewer_employee_id'];
+            $payload['assigned_employee_id'] = $validated['reviewer_employee_id'] ?? null;
         }
 
         $requestModel = RequestModel::create($payload);
