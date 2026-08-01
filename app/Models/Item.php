@@ -14,11 +14,14 @@ class Item extends Model
 
     protected $fillable = [
         'item_code', 'name', 'description', 'category', 'unit', 'price',
-        'quantity', 'warehouse_id', 'notes', 'status'
+        'quantity', 'warehouse_id', 'notes', 'status',
+        'company_name', 'barcode', 'batch_number', 'expiry_date', 'is_available',
     ];
 
     protected $casts = [
-        'price' => 'decimal:2',
+        'price'        => 'decimal:2',
+        'expiry_date'  => 'date:Y-m-d',
+        'is_available' => 'boolean',
     ];
 
     public function warehouse(): BelongsTo

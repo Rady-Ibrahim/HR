@@ -34,8 +34,8 @@
     </div>
     <div class="table-responsive">
         <table class="data-table">
-            <thead><tr><th>الكود</th><th>الاسم</th><th>الفئة</th><th>سعر الوحدة</th><th>الوحدة</th><th>المخزن</th><th>متاح</th><th>إجراءات</th></tr></thead>
-            <tbody id="itemsTable"><tr><td colspan="8" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr></tbody>
+            <thead><tr><th>الكود</th><th>الاسم</th><th>الشركة</th><th>الفئة</th><th>الباركود</th><th>التشغيلة</th><th>الصلاحية</th><th>سعر الوحدة</th><th>الوحدة</th><th>المخزن</th><th>متاح</th><th>إجراءات</th></tr></thead>
+            <tbody id="itemsTable"><tr><td colspan="12" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr></tbody>
         </table>
     </div>
     <div class="section-body d-flex justify-content-between">
@@ -60,9 +60,13 @@
                         <div class="col-md-8"><label class="form-label">اسم الصنف *</label><input type="text" name="name" id="if_name" class="form-control" required></div>
                         <div class="col-md-4"><label class="form-label">الفئة</label><input type="text" name="category" id="if_category" class="form-control"></div>
                         <div class="col-md-4"><label class="form-label">سعر الوحدة *</label>
-                            <div class="input-group"><input type="number" name="unit_price" id="if_unit_price" class="form-control" required step="0.01"><span class="input-group-text">ج.م</span></div>
+                            <div class="input-group"><input type="number" name="price" id="if_unit_price" class="form-control" required step="0.01"><span class="input-group-text">ج.م</span></div>
                         </div>
                         <div class="col-md-4"><label class="form-label">الوحدة</label><input type="text" name="unit" id="if_unit" class="form-control" placeholder="قطعة، كيلو، لتر..."></div>
+                        <div class="col-md-4"><label class="form-label">اسم الشركة</label><input type="text" name="company_name" id="if_company_name" class="form-control" placeholder="اسم الشركة المصنعة"></div>
+                        <div class="col-md-4"><label class="form-label">الباركود</label><input type="text" name="barcode" id="if_barcode" class="form-control" placeholder="باركود الصنف"></div>
+                        <div class="col-md-4"><label class="form-label">التشغيلة</label><input type="text" name="batch_number" id="if_batch_number" class="form-control" placeholder="رقم التشغيلة / الدفعة"></div>
+                        <div class="col-md-4"><label class="form-label">الصلاحية</label><input type="date" name="expiry_date" id="if_expiry_date" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">المخزن</label><select name="warehouse_id" id="if_warehouse_id" class="form-select" data-lookup="warehouses" data-placeholder="اختر المخزن"></select></div>
                         <div class="col-md-6"><label class="form-label">متاح للبيع؟</label>
                             <select name="is_available" id="if_is_available" class="form-select"><option value="1">متاح</option><option value="0">غير متاح</option></select>
@@ -111,13 +115,17 @@ async function loadItems(page=1) {
     const { data, total, current_page, last_page } = r.data;
     document.getElementById('itemCount').textContent = `إجمالي: ${total}`;
     document.getElementById('itemPagInfo').textContent = `صفحة ${current_page} من ${last_page}`;
-    if (!data.length) { document.getElementById('itemsTable').innerHTML='<tr><td colspan="8" class="text-center py-4 text-muted">لا توجد أصناف</td></tr>'; return; }
+    if (!data.length) { document.getElementById('itemsTable').innerHTML='<tr><td colspan="12" class="text-center py-4 text-muted">لا توجد أصناف</td></tr>'; return; }
     document.getElementById('itemsTable').innerHTML = data.map(i=>`
         <tr>
             <td>${i.item_code??'-'}</td>
             <td><strong>${i.name}</strong></td>
+            <td>${i.company_name??'-'}</td>
             <td>${i.category??'-'}</td>
-            <td class="fw-bold">${Number(i.unit_price).toLocaleString()} ج.م</td>
+            <td>${i.barcode??'-'}</td>
+            <td>${i.batch_number??'-'}</td>
+            <td>${i.expiry_date??'-'}</td>
+            <td class="fw-bold">${Number(i.price).toLocaleString()} ج.م</td>
             <td>${i.unit??'وحدة'}</td>
             <td>${i.warehouse?.name??'-'}</td>
             <td><span class="badge-status ${i.is_available?'badge-active':'badge-inactive'}">${i.is_available?'متاح':'غير متاح'}</span></td>
@@ -151,8 +159,12 @@ async function openEditModal(id) {
     document.getElementById('if_code').value         = i.item_code??'';
     document.getElementById('if_name').value         = i.name??'';
     document.getElementById('if_category').value     = i.category??'';
-    document.getElementById('if_unit_price').value   = i.unit_price??'';
+    document.getElementById('if_unit_price').value   = i.price??'';
     document.getElementById('if_unit').value         = i.unit??'';
+    document.getElementById('if_company_name').value = i.company_name??'';
+    document.getElementById('if_barcode').value      = i.barcode??'';
+    document.getElementById('if_batch_number').value = i.batch_number??'';
+    document.getElementById('if_expiry_date').value  = i.expiry_date??'';
     document.getElementById('if_warehouse_id').value = i.warehouse_id??'';
     document.getElementById('if_is_available').value = i.is_available?'1':'0';
     document.getElementById('if_description').value  = i.description??'';
@@ -161,8 +173,9 @@ async function openEditModal(id) {
 async function saveItem() {
     const id   = document.getElementById('itemId').value;
     const data = Object.fromEntries(new FormData(document.getElementById('itemForm')));
-    data.unit_price = parseFloat(data.unit_price);
+    data.price = parseFloat(data.price);
     data.is_available = data.is_available==='1';
+    ['company_name','barcode','batch_number','expiry_date','description','category','unit'].forEach(k => { if (data[k] === '') data[k] = null; });
     if (data.warehouse_id) data.warehouse_id=parseInt(data.warehouse_id); else delete data.warehouse_id;
     const r = await apiFetch(id?`/items/${id}`:'/items', { method:id?'PUT':'POST', body:JSON.stringify(data) });
     if (r.success) { bootstrap.Modal.getInstance(document.getElementById('itemModal')).hide(); showAlert(id?'تم التحديث':'تم الإضافة'); loadItems(itemPage); }
