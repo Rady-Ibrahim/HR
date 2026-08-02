@@ -13,7 +13,7 @@
     <div class="col-md-3"><div class="stat-card text-center"><div class="stat-value text-primary" id="sumTotal">-</div><div class="stat-label">إجمالي اليوم</div></div></div>
     <div class="col-md-3"><div class="stat-card text-center"><div class="stat-value text-success" id="sumCash">-</div><div class="stat-label">نقدي</div></div></div>
     <div class="col-md-3"><div class="stat-card text-center"><div class="stat-value text-info" id="sumCheck">-</div><div class="stat-label">شيكات</div></div></div>
-    <div class="col-md-3"><div class="stat-card text-center"><div class="stat-value text-warning" id="sumPending">-</div><div class="stat-label">في انتظار الموافقة</div></div></div>
+    <div class="col-md-3"><div class="stat-card text-center"><div class="stat-value text-success" id="sumDeposited">-</div><div class="stat-label">معتمد اليوم</div></div></div>
 </div>
 
 <!-- FILTERS -->
@@ -141,13 +141,13 @@ async function loadDailySummary() {
     const rows = r.data || [];
     const byMethod = rows.reduce((acc, row) => {
         acc[row.payment_method] = (acc[row.payment_method] || 0) + Number(row.total || 0);
-        acc.pendingCount += row.collection_status === 'pending' ? Number(row.count || 0) : 0;
+        acc.depositedCount += row.collection_status === 'deposited' ? Number(row.count || 0) : 0;
         return acc;
-    }, { pendingCount: 0 });
+    }, { depositedCount: 0 });
     document.getElementById('sumTotal').textContent   = r.total ? Number(r.total).toLocaleString()+' ج.م' : '0 ج.م';
     document.getElementById('sumCash').textContent    = byMethod.cash ? Number(byMethod.cash).toLocaleString()+' ج.م' : '0 ج.م';
     document.getElementById('sumCheck').textContent   = byMethod.check ? Number(byMethod.check).toLocaleString()+' ج.م' : '0 ج.م';
-    document.getElementById('sumPending').textContent = byMethod.pendingCount + ' طلب';
+    document.getElementById('sumDeposited').textContent = byMethod.depositedCount + ' تحصيل';
 }
 
 async function loadCollections(page=1) {
@@ -175,10 +175,6 @@ async function loadCollections(page=1) {
             <td>
                 <div class="d-flex gap-1 flex-wrap">
                     <button class="btn btn-sm btn-outline-warning" onclick="openEditModal(${c.id})"><i class="fas fa-edit"></i></button>
-                    ${c.collection_status==='pending'?`
-                        <button class="btn btn-sm btn-success" onclick="approveCol(${c.id})"><i class="fas fa-check"></i></button>
-                        <button class="btn btn-sm btn-outline-secondary" onclick="rejectCol(${c.id})"><i class="fas fa-times"></i></button>
-                    `:''}
                     <button class="btn btn-sm btn-outline-danger" onclick="confirmDelete(${c.id})"><i class="fas fa-trash"></i></button>
                 </div>
             </td>

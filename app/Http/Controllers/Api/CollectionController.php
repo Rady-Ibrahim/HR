@@ -61,6 +61,12 @@ class CollectionController
 
     public function store(Request $request): JsonResponse
     {
+        foreach (['delivery_id', 'customer_id'] as $key) {
+            if (!$request->filled($key) || (int) $request->input($key) <= 0) {
+                $request->merge([$key => null]);
+            }
+        }
+
         $validated = $request->validate([
             'delivery_id'    => 'nullable|exists:deliveries,id',
             'customer_id'    => 'nullable|exists:customers,id',
@@ -79,7 +85,8 @@ class CollectionController
         DB::beginTransaction();
         try {
             $validated['collection_number'] = 'COL-' . now()->format('YmdHis') . '-' . str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT);
-            $validated['collection_status'] = 'pending';
+            $validated['collection_status'] = 'deposited';
+            $validated['deposited_date'] = now();
             $driverId = $validated['driver_id'] ?? $request->input('driver_id');
             if (!$driverId && auth()->id()) {
                 $driverId = Employee::where('user_id', auth()->id())->value('id');
@@ -101,6 +108,13 @@ class CollectionController
 
             $commission = app(CollectionCommissionService::class)
                 ->createFromCollection($collection->load('driver'));
+
+            if ($collection->delivery?->request) {
+                $collection->delivery->request->update(['status' => 'collected']);
+            } elseif ($collection->details()->whereNotNull('request_id')->exists()) {
+                $requestIds = $collection->details()->whereNotNull('request_id')->pluck('request_id');
+                RequestModel::whereIn('id', $requestIds)->update(['status' => 'collected']);
+            }
 
             DB::commit();
 
