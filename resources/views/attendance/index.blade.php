@@ -90,7 +90,7 @@
                 <input type="date" id="dateTo" class="form-control">
             </div>
             <div class="col-md-2">
-                <button class="btn-primary-custom w-100" onclick="loadAttendance()"><i class="fas fa-search me-1"></i> بحث</button>
+                <button class="btn-primary-custom w-100" onclick="applyFilters()"><i class="fas fa-search me-1"></i> بحث</button>
             </div>
             <div class="col-md-1">
                 <button class="btn btn-outline-secondary w-100" onclick="resetAttFilters()"><i class="fas fa-undo"></i></button>
@@ -147,6 +147,10 @@
                     <tr><td colspan="7" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>
                 </tbody>
             </table>
+        </div>
+        <div class="section-body d-flex justify-content-between">
+            <div id="leavesPagInfo" class="text-muted" style="font-size:.8rem"></div>
+            <div id="leavesPagination"></div>
         </div>
     </div>
 </div>
@@ -246,6 +250,26 @@ const deductionLabels = {
 };
 const workStartTime = '{{ config("hr.working_hours.check_in_time", "08:00") }}';
 
+let ACTIVE_TAB = 'attendance';
+const attStatusOptions = [
+    { value: '', label: 'الكل' },
+    { value: 'present', label: 'حاضر' },
+    { value: 'absent', label: 'غائب' },
+    { value: 'late', label: 'متأخر' },
+    { value: 'on_leave', label: 'إجازة' },
+];
+const leaveStatusOptions = [
+    { value: '', label: 'الكل' },
+    { value: 'pending', label: 'معلق' },
+    { value: 'approved', label: 'معتمد' },
+    { value: 'rejected', label: 'مرفوض' },
+];
+
+function setStatusOptions(options) {
+    const sel = document.getElementById('attStatus');
+    sel.innerHTML = options.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+}
+
 async function loadShiftInfo() {
     const sel = document.getElementById('activeShiftSelect');
     const val = sel.value;
@@ -330,10 +354,22 @@ async function loadAttendance(page = 1) {
 
 const LEAVE_TYPE_LABELS = { sick:'مرضية', leave:'إجازة', late:'تأخير', early:'انصراف مبكر', excuse:'عذر' };
 
-async function loadLeaves() {
-    const r = await apiFetch('/attendance/leave-requests');
+async function loadLeaves(page = 1) {
+    const params = new URLSearchParams({ per_page: 20, page });
+    const s = document.getElementById('attStatus').value;
+    const e = document.getElementById('empSearch').value;
+    const f = document.getElementById('dateFrom').value;
+    const t = document.getElementById('dateTo').value;
+    if (s) params.append('status', s);
+    if (e) params.append('search', e);
+    if (f) params.append('date_from', f);
+    if (t) params.append('date_to', t);
+
+    const r = await apiFetch('/attendance/leave-requests?' + params);
     if (!r.success) return;
-    const all = r.data?.data ?? r.data ?? [];
+    const data = r.data;
+    document.getElementById('leavesPagInfo').textContent = `إجمالي: ${data.total}`;
+    const all = data.data ?? [];
     if (!all.length) {
         document.getElementById('leavesTable').innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">لا توجد طلبات إجازة</td></tr>';
         return;
@@ -352,6 +388,11 @@ async function loadLeaves() {
             ` : '-'}</td>
         </tr>
     `).join('');
+    const pages = [];
+    for (let i = 1; i <= Math.min(data.last_page, 10); i++) {
+        pages.push(`<button class="btn btn-sm ${i === data.current_page ? 'btn-primary' : 'btn-outline-primary'} mx-1" onclick="loadLeaves(${i})">${i}</button>`);
+    }
+    document.getElementById('leavesPagination').innerHTML = pages.join('');
 }
 
 async function approveLeave(id) {
@@ -452,17 +493,24 @@ async function saveLeave() {
     else showAlert(r.message||'فشل الإرسال','danger');
 }
 
+function applyFilters() {
+    if (ACTIVE_TAB === 'leaves') loadLeaves(); else loadAttendance();
+}
+
 function showTab(tab, btn) {
+    ACTIVE_TAB = tab;
     document.getElementById('tab-attendance').style.display = tab === 'attendance' ? '' : 'none';
     document.getElementById('tab-leaves').style.display    = tab === 'leaves' ? '' : 'none';
     document.querySelectorAll('.nav-tabs .nav-link').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    if (tab === 'leaves') loadLeaves();
+    setStatusOptions(tab === 'leaves' ? leaveStatusOptions : attStatusOptions);
+    if (tab === 'leaves') loadLeaves(); else loadAttendance();
 }
 
 function resetAttFilters() {
     ['empSearch','attStatus','dateFrom','dateTo'].forEach(id => document.getElementById(id).value = '');
-    loadAttendance();
+    setStatusOptions(ACTIVE_TAB === 'leaves' ? leaveStatusOptions : attStatusOptions);
+    applyFilters();
 }
 
 function timeOnly(value) {

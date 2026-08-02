@@ -5,7 +5,10 @@
 @section('content')
 <div class="page-header">
     <div><h1><i class="fas fa-hand-holding-usd me-2 text-primary"></i> السلف</h1><div class="breadcrumb">إدارة سلف الموظفين</div></div>
-    <button class="btn-primary-custom" onclick="openAddModal()"><i class="fas fa-plus me-1"></i> إضافة سلفة</button>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary text-nowrap" onclick="printAdvancesPDF()"><i class="fas fa-file-pdf me-1"></i> طباعة PDF</button>
+        <button class="btn-primary-custom" onclick="openAddModal()"><i class="fas fa-plus me-1"></i> إضافة سلفة</button>
+    </div>
 </div>
 
 <!-- FILTERS -->
@@ -170,6 +173,58 @@ document.getElementById('advDeleteBtn').addEventListener('click', async()=>{
     advDeleteId=null;
 });
 function resetAdvFilter() { document.getElementById('advStatus').value=''; document.getElementById('advEmp').value=''; loadAdvances(); }
+
+async function printAdvancesPDF() {
+    const params = new URLSearchParams({ per_page: 1000 });
+    const s=document.getElementById('advStatus').value; if(s) params.append('status',s);
+    const e=document.getElementById('advEmp').value; if(e) params.append('search',e);
+
+    let res;
+    try { res = await apiFetch('/advances?'+params); } catch (e) { showAlert('حدث خطأ أثناء تحميل البيانات للطباعة','danger'); return; }
+    if (!res.success) { showAlert(res.message||'فشل تحميل البيانات','danger'); return; }
+
+    const data = res.data?.data || [];
+    const empName = e ? (data[0]?.employee?.name || '') : '';
+    const totalAmount = data.reduce((sum, a) => sum + Number(a.amount || 0), 0);
+    const totalRemaining = data.reduce((sum, a) => sum + Number(a.remaining_amount ?? a.amount ?? 0), 0);
+
+    const rows = data.map((a, i) => `
+        <tr>
+            <td>${i+1}</td>
+            <td><b>${escHtml(a.employee?.name || '—')}</b><br><span style="color:#6b7280;font-size:11px">${escHtml(a.employee?.employee_code || '')}</span></td>
+            <td>${Number(a.amount).toLocaleString()}</td>
+            <td>${Number(a.remaining_amount ?? a.amount ?? 0).toLocaleString()}</td>
+            <td>${a.installments_count ?? 1} شهر</td>
+            <td>${a.advance_date ? new Date(a.advance_date).toLocaleDateString('ar-EG') : '-'}</td>
+            <td>${escHtml(a.reason || '-')}</td>
+            <td>${advStatuses[a.status] || a.status || '-'}</td>
+        </tr>`).join('');
+
+    const metaParts = [
+        empName ? `الموظف: ${empName}` : 'كل الموظفين',
+        s ? `الحالة: ${advStatuses[s] || s}` : null,
+    ].filter(Boolean).join(' | ');
+
+    const body = `
+        <div class="ph"><h1>تقرير السلف</h1><div class="meta">${escHtml(metaParts)}</div></div>
+        <div class="sum">
+            <div class="box"><div class="lbl">إجمالي السجلات</div><div class="val">${data.length}</div></div>
+            <div class="box"><div class="lbl">إجمالي قيمة السلف</div><div class="val">${totalAmount.toLocaleString()} ج.م</div></div>
+            <div class="box"><div class="lbl">إجمالي المتبقي</div><div class="val neg">${totalRemaining.toLocaleString()} ج.م</div></div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>الموظف</th><th>المبلغ</th><th>المتبقي</th><th>الأقساط</th><th>تاريخ الطلب</th><th>السبب</th><th>الحالة</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="8" style="text-align:center;color:#6b7280">لا توجد بيانات مطابقة</td></tr>'}</tbody>
+        </table>`;
+
+    printHTML('تقرير السلف', body);
+}
+
+function escHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 document.addEventListener('DOMContentLoaded', loadAdvances);
 </script>
 @endpush

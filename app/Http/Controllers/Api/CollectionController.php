@@ -15,7 +15,7 @@ class CollectionController
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Collection::with(['delivery.request.customer', 'driver.manager']);
+        $query = Collection::with(['delivery.request.customer', 'driver.manager', 'customer']);
 
         if ($request->filled('status'))          $query->where('collection_status', $request->status);
         if ($request->filled('driver_id'))       $query->where('driver_id', $request->driver_id);
@@ -24,6 +24,26 @@ class CollectionController
         if ($request->filled('month') && $request->filled('year')) {
             $query->whereMonth('collected_date', $request->month)
                   ->whereYear('collected_date', $request->year);
+        }
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('collection_number', 'like', "%{$search}%")
+                  ->orWhere('notes', 'like', "%{$search}%")
+                  ->orWhereHas('driver', function ($dq) use ($search) {
+                      $dq->where('name', 'like', "%{$search}%")
+                         ->orWhere('employee_code', 'like', "%{$search}%");
+                  })
+                  ->orWhereHas('customer', function ($cq) use ($search) {
+                      $cq->where('name', 'like', "%{$search}%")
+                         ->orWhere('company_name', 'like', "%{$search}%");
+                  })
+                  ->orWhereHas('delivery.request.customer', function ($cq) use ($search) {
+                      $cq->where('name', 'like', "%{$search}%")
+                         ->orWhere('company_name', 'like', "%{$search}%");
+                  });
+            });
         }
 
         $this->scopeForApprover($query);
@@ -42,7 +62,8 @@ class CollectionController
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'delivery_id'    => 'required|exists:deliveries,id',
+            'delivery_id'    => 'nullable|exists:deliveries,id',
+            'customer_id'    => 'nullable|exists:customers,id',
             'total_amount'   => 'required|numeric|min:0',
             'driver_id'      => 'nullable|exists:employees,id',
             'payment_method' => 'required|in:cash,bank_transfer,check,instapay,fawry',
@@ -57,9 +78,13 @@ class CollectionController
 
         DB::beginTransaction();
         try {
-            $validated['collection_number'] = 'COL-' . now()->format('YmdHis');
+            $validated['collection_number'] = 'COL-' . now()->format('YmdHis') . '-' . str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT);
             $validated['collection_status'] = 'pending';
-            $validated['driver_id']         = $validated['driver_id'] ?? $request->get('driver_id', auth()->user()->employee_id ?? 1);
+            $driverId = $validated['driver_id'] ?? $request->input('driver_id');
+            if (!$driverId && auth()->id()) {
+                $driverId = Employee::where('user_id', auth()->id())->value('id');
+            }
+            $validated['driver_id'] = $driverId;
 
             $collection = Collection::create($validated);
 
@@ -82,7 +107,7 @@ class CollectionController
             return response()->json([
                 'success' => true,
                 'message' => 'تم تسجيل التحصيل بنجاح',
-                'data'    => $collection->load(['delivery.request.customer', 'details', 'commission']),
+                'data'    => $collection->load(['delivery.request.customer', 'customer', 'details', 'commission']),
                 'commission' => $commission,
             ], 201);
         } catch (\Exception $e) {
@@ -96,6 +121,7 @@ class CollectionController
         $collection = Collection::with([
             'delivery.request.customer',
             'driver',
+            'customer',
             'details.request',
         ])->findOrFail($id);
 
@@ -106,7 +132,8 @@ class CollectionController
     {
         $collection = Collection::findOrFail($id);
         $validated = $request->validate([
-            'delivery_id'    => 'sometimes|exists:deliveries,id',
+            'delivery_id'    => 'nullable|exists:deliveries,id',
+            'customer_id'    => 'nullable|exists:customers,id',
             'total_amount'   => 'sometimes|numeric|min:0',
             'driver_id'      => 'nullable|exists:employees,id',
             'payment_method' => 'sometimes|in:cash,bank_transfer,check,instapay,fawry',
@@ -121,7 +148,7 @@ class CollectionController
         return response()->json([
             'success' => true,
             'message' => 'تم تحديث التحصيل بنجاح',
-            'data' => $collection->fresh(['delivery.request.customer', 'driver']),
+            'data' => $collection->fresh(['delivery.request.customer', 'driver', 'customer']),
         ]);
     }
 
@@ -177,7 +204,7 @@ class CollectionController
         return response()->json([
             'success' => true,
             'message' => 'تم اعتماد التحصيل بنجاح',
-            'data' => $collection->fresh(['delivery.request.customer', 'driver.manager']),
+            'data' => $collection->fresh(['delivery.request.customer', 'driver.manager', 'customer']),
             'difference' => $difference,
             'matched' => $matched,
             'approved_by' => $employee?->only(['id', 'name', 'employee_code']),
@@ -216,7 +243,7 @@ class CollectionController
         return response()->json([
             'success' => true,
             'message' => 'تم رفض التحصيل',
-            'data' => $collection->fresh(['delivery.request.customer', 'driver.manager']),
+            'data' => $collection->fresh(['delivery.request.customer', 'driver.manager', 'customer']),
         ]);
     }
 

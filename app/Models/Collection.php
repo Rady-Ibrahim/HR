@@ -14,7 +14,7 @@ class Collection extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'collection_number', 'delivery_id', 'driver_id', 'total_amount', 'payment_method',
+        'collection_number', 'delivery_id', 'customer_id', 'driver_id', 'total_amount', 'payment_method',
         'collection_status', 'collected_date', 'deposited_date', 'notes', 'check_number',
         'check_due_date'
     ];
@@ -29,6 +29,11 @@ class Collection extends Model
     public function delivery(): BelongsTo
     {
         return $this->belongsTo(Delivery::class);
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class);
     }
 
     public function driver(): BelongsTo

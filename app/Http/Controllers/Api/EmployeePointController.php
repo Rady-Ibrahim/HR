@@ -37,6 +37,10 @@ class EmployeePointController
             $query->where('year', $request->year);
         }
 
+        if ($request->filled('day')) {
+            $query->whereDay('created_at', $request->day);
+        }
+
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {

@@ -22,10 +22,10 @@
         <div class="row g-2 align-items-end">
             <div class="col-md-3"><label class="form-label">بحث</label><input type="text" id="colSearch" class="form-control" placeholder="اسم المندوب، العميل..."></div>
             <div class="col-md-2"><label class="form-label">طريقة الدفع</label>
-                <select id="colPayment" class="form-select"><option value="">الكل</option><option value="cash">نقدي</option><option value="check">شيك</option><option value="bank_transfer">تحويل</option><option value="other">أخرى</option></select>
+                <select id="colPayment" class="form-select"><option value="">الكل</option><option value="cash">نقدي</option><option value="check">شيك</option><option value="bank_transfer">تحويل</option><option value="instapay">إنستاباي</option><option value="fawry">فوري</option></select>
             </div>
             <div class="col-md-2"><label class="form-label">الحالة</label>
-                <select id="colStatus" class="form-select"><option value="">الكل</option><option value="pending">معلق</option><option value="approved">معتمد</option><option value="rejected">مرفوض</option></select>
+                <select id="colStatus" class="form-select"><option value="">الكل</option><option value="pending">معلق</option><option value="deposited">معتمد</option><option value="rejected">مرفوض</option></select>
             </div>
             <div class="col-md-2"><label class="form-label">التاريخ</label><input type="date" id="colDate" class="form-control"></div>
             <div class="col-md-1"><button class="btn-primary-custom w-100 mt-4" onclick="loadCollections()"><i class="fas fa-search"></i></button></div>
@@ -66,7 +66,7 @@
                         <div class="col-md-6"><label class="form-label">المبلغ *</label><div class="input-group"><input type="number" name="amount" id="clf_amount" class="form-control" required step="0.01"><span class="input-group-text">ج.م</span></div></div>
                         <div class="col-md-6"><label class="form-label">طريقة الدفع *</label>
                             <select name="payment_method" id="clf_method" class="form-select" required>
-                                <option value="cash">نقدي</option><option value="check">شيك</option><option value="bank_transfer">تحويل بنكي</option><option value="other">أخرى</option>
+                                <option value="cash">نقدي</option><option value="check">شيك</option><option value="bank_transfer">تحويل بنكي</option><option value="instapay">إنستاباي</option><option value="fawry">فوري</option>
                             </select>
                         </div>
                         <div class="col-md-6"><label class="form-label">تاريخ التحصيل *</label><input type="date" name="collection_date" id="clf_date" class="form-control" required value="{{ date('Y-m-d') }}"></div>
@@ -192,7 +192,7 @@ async function saveCollection() {
     data.driver_id=parseInt(data.employee_id); delete data.employee_id;
     data.collected_date=data.collection_date; delete data.collection_date;
     if(data.delivery_id) data.delivery_id=parseInt(data.delivery_id); else delete data.delivery_id;
-    delete data.customer_id;
+    if(data.customer_id) data.customer_id=parseInt(data.customer_id); else delete data.customer_id;
     if(!data.check_number) delete data.check_number;
     if(!data.reference_number) delete data.reference_number;
     const r=await apiFetch(id?`/collections/${id}`:'/collections',{method:id?'PUT':'POST',body:JSON.stringify(data)});

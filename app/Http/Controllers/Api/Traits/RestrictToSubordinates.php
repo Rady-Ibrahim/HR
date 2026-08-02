@@ -24,7 +24,7 @@ trait RestrictToSubordinates
             if ($user->hasRole($role)) return true;
         }
 
-        if (method_exists($user, 'can') && $user->can('manage_team_financials')) return true;
+        if (method_exists($user, 'hasPermission') && $user->hasPermission('manage_team_financials')) return true;
 
         return false;
     }

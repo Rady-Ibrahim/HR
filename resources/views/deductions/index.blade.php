@@ -5,7 +5,10 @@
 @section('content')
 <div class="page-header">
     <div><h1><i class="fas fa-minus-circle me-2 text-danger"></i> الخصومات</h1><div class="breadcrumb">إدارة خصومات الموظفين</div></div>
-    <button class="btn-primary-custom" onclick="openAddModal()"><i class="fas fa-plus me-1"></i> إضافة خصم</button>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary text-nowrap" onclick="printDeductionsPDF()"><i class="fas fa-file-pdf me-1"></i> طباعة PDF</button>
+        <button class="btn-primary-custom" onclick="openAddModal()"><i class="fas fa-plus me-1"></i> إضافة خصم</button>
+    </div>
 </div>
 
 <!-- FILTERS -->
@@ -176,6 +179,59 @@ function resetDedFilter() {
     document.getElementById('dedMonth').value='{{ date("n") }}'; document.getElementById('dedYear').value='{{ date("Y") }}';
     loadDeductions();
 }
+
+async function printDeductionsPDF() {
+    const params = new URLSearchParams({ per_page: 1000 });
+    const t=document.getElementById('dedType').value; if(t) params.append('deduction_type',t);
+    const m=document.getElementById('dedMonth').value; if(m) params.append('month',m);
+    const y=document.getElementById('dedYear').value; if(y) params.append('year',y);
+    const e=document.getElementById('dedEmp').value; if(e) params.append('search',e);
+
+    let res;
+    try { res = await apiFetch('/deductions?'+params); } catch (e) { showAlert('حدث خطأ أثناء تحميل البيانات للطباعة','danger'); return; }
+    if (!res.success) { showAlert(res.message||'فشل تحميل البيانات','danger'); return; }
+
+    const data = res.data?.data || [];
+    const empName = e ? (data[0]?.employee?.name || '') : '';
+    const totalAmount = data.reduce((s, d) => s + Number(d.amount || 0), 0);
+
+    const rows = data.map((d, i) => `
+        <tr>
+            <td>${i+1}</td>
+            <td><b>${escHtml(d.employee?.name || '—')}</b><br><span style="color:#6b7280;font-size:11px">${escHtml(d.employee?.employee_code || '')}</span></td>
+            <td>${dedTypes[d.deduction_type] || d.deduction_type || '-'}</td>
+            <td class="neg">${Number(d.amount).toLocaleString()}</td>
+            <td>${d.month}/${d.year}</td>
+            <td>${escHtml(d.reason || '-')}</td>
+            <td>${d.status==='approved'?'معتمد':d.status==='rejected'?'مرفوض':'معلق'}</td>
+        </tr>`).join('');
+
+    const metaParts = [
+        empName ? `الموظف: ${empName}` : 'كل الموظفين',
+        t ? `النوع: ${dedTypes[t] || t}` : null,
+        m ? `الشهر: ${m}` : null,
+        y ? `السنة: ${y}` : null,
+    ].filter(Boolean).join(' | ');
+
+    const body = `
+        <div class="ph"><h1>تقرير الخصومات</h1><div class="meta">${escHtml(metaParts)}</div></div>
+        <div class="sum">
+            <div class="box"><div class="lbl">إجمالي السجلات</div><div class="val">${data.length}</div></div>
+            <div class="box"><div class="lbl">إجمالي قيمة الخصومات</div><div class="val neg">${totalAmount.toLocaleString()} ج.م</div></div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>الموظف</th><th>النوع</th><th>المبلغ</th><th>الشهر/السنة</th><th>السبب</th><th>الحالة</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="7" style="text-align:center;color:#6b7280">لا توجد بيانات مطابقة</td></tr>'}</tbody>
+        </table>`;
+
+    printHTML('تقرير الخصومات', body);
+}
+
+function escHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 document.addEventListener('DOMContentLoaded', loadDeductions);
 </script>
 @endpush

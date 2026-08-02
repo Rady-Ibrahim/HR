@@ -149,6 +149,13 @@
                 <option value="debit">عليه (-)</option>
             </select>
 
+            <select id="filterDay" class="form-select form-select-sm" style="width:100px" onchange="loadPoints()" title="فلترة باليوم">
+                <option value="">كل الأيام</option>
+                @for($d=1;$d<=31;$d++)
+                    <option value="{{ $d }}">يوم {{ $d }}</option>
+                @endfor
+            </select>
+
             <select id="filterMonth" class="form-select form-select-sm" style="width:110px" onchange="loadPoints()">
                 <option value="">كل الشهور</option>
                 @for($m=1;$m<=12;$m++)
@@ -434,12 +441,14 @@ async function loadPoints(page = 1) {
     const type  = document.getElementById('filterType').value;
     const month = document.getElementById('filterMonth').value;
     const year  = document.getElementById('filterYear').value;
+    const day   = document.getElementById('filterDay').value;
 
     let query = `?page=${page}&per_page=15`;
     if (empId) query += `&employee_id=${empId}`;
     if (type)  query += `&type=${type}`;
     if (month) query += `&month=${month}`;
     if (year)  query += `&year=${year}`;
+    if (day)   query += `&day=${day}`;
 
     try {
         const res = await apiFetch(`/employee-points${query}`);
@@ -615,12 +624,14 @@ async function printPointsPDF() {
     const type  = document.getElementById('filterType').value;
     const month = document.getElementById('filterMonth').value;
     const year  = document.getElementById('filterYear').value;
+    const day   = document.getElementById('filterDay').value;
 
     let query = '?per_page=1000';
     if (empId) query += `&employee_id=${empId}`;
     if (type)  query += `&type=${type}`;
     if (month) query += `&month=${month}`;
     if (year)  query += `&year=${year}`;
+    if (day)   query += `&day=${day}`;
 
     let res;
     try {
@@ -657,6 +668,7 @@ async function printPointsPDF() {
         type ? (type === 'credit' ? 'نوع: له (+)' : 'نوع: عليه (-)') : null,
         month ? `الشهر: ${month}` : null,
         year ? `السنة: ${year}` : null,
+        day ? `اليوم: ${day}` : null,
     ].filter(Boolean).join(' | ');
 
     const body = `

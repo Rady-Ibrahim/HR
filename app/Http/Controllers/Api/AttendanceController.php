@@ -503,7 +503,18 @@ class AttendanceController
     {
         $query = AttendanceRequest::with('employee');
 
-        if ($request->filled('status')) $query->where('approval_status', $request->status);
+        if ($request->filled('status'))    $query->where('approval_status', $request->status);
+        if ($request->filled('date_from')) $query->whereDate('from_date', '>=', $request->date_from);
+        if ($request->filled('date_to'))   $query->whereDate('to_date', '<=', $request->date_to);
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->whereHas('employee', function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('employee_code', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%");
+            });
+        }
 
         $this->scopeSubordinates($query);
 

@@ -5,7 +5,10 @@
 @section('content')
 <div class="page-header">
     <div><h1><i class="fas fa-star me-2 text-primary"></i> الحوافز</h1><div class="breadcrumb">إدارة حوافز الموظفين</div></div>
-    <button class="btn-primary-custom" onclick="openAddModal()"><i class="fas fa-plus me-1"></i> إضافة حافز</button>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary text-nowrap" onclick="printIncentivesPDF()"><i class="fas fa-file-pdf me-1"></i> طباعة PDF</button>
+        <button class="btn-primary-custom" onclick="openAddModal()"><i class="fas fa-plus me-1"></i> إضافة حافز</button>
+    </div>
 </div>
 
 <!-- FILTERS -->
@@ -186,6 +189,59 @@ document.getElementById('incDeleteBtn').addEventListener('click', async()=>{
 });
 
 function resetIncFilter() { ['incEmp','incStatus'].forEach(id=>document.getElementById(id).value=''); loadIncentives(); }
+
+async function printIncentivesPDF() {
+    const params = new URLSearchParams({ per_page: 1000 });
+    const s = document.getElementById('incStatus').value; if (s) params.append('status',s);
+    const m = document.getElementById('incMonth').value;   if (m) params.append('month',m);
+    const y = document.getElementById('incYear').value;    if (y) params.append('year',y);
+    const e = document.getElementById('incEmp').value;     if (e) params.append('search',e);
+
+    let res;
+    try { res = await apiFetch('/incentives?'+params); } catch (e) { showAlert('حدث خطأ أثناء تحميل البيانات للطباعة','danger'); return; }
+    if (!res.success) { showAlert(res.message||'فشل تحميل البيانات','danger'); return; }
+
+    const data = res.data?.data || [];
+    const empName = e ? (data[0]?.employee?.name || '') : '';
+    const totalAmount = data.reduce((sum, i) => sum + Number(i.amount || 0), 0);
+
+    const rows = data.map((i, idx) => `
+        <tr>
+            <td>${idx+1}</td>
+            <td><b>${escHtml(i.employee?.name || '—')}</b><br><span style="color:#6b7280;font-size:11px">${escHtml(i.employee?.employee_code || '')}</span></td>
+            <td>${incTypes[i.incentive_type] || i.incentive_type || '-'}</td>
+            <td class="pos">${Number(i.amount).toLocaleString()}</td>
+            <td>${i.month}/${i.year}</td>
+            <td>${escHtml(i.reason || '-')}</td>
+            <td>${i.status==='approved'?'معتمد':i.status==='rejected'?'مرفوض':'معلق'}</td>
+        </tr>`).join('');
+
+    const metaParts = [
+        empName ? `الموظف: ${empName}` : 'كل الموظفين',
+        s ? `الحالة: ${s==='approved'?'معتمد':s==='rejected'?'مرفوض':'معلق'}` : null,
+        m ? `الشهر: ${m}` : null,
+        y ? `السنة: ${y}` : null,
+    ].filter(Boolean).join(' | ');
+
+    const body = `
+        <div class="ph"><h1>تقرير الحوافز</h1><div class="meta">${escHtml(metaParts)}</div></div>
+        <div class="sum">
+            <div class="box"><div class="lbl">إجمالي السجلات</div><div class="val">${data.length}</div></div>
+            <div class="box"><div class="lbl">إجمالي قيمة الحوافز</div><div class="val pos">${totalAmount.toLocaleString()} ج.م</div></div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>الموظف</th><th>النوع</th><th>المبلغ</th><th>الشهر/السنة</th><th>السبب</th><th>الحالة</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="7" style="text-align:center;color:#6b7280">لا توجد بيانات مطابقة</td></tr>'}</tbody>
+        </table>`;
+
+    printHTML('تقرير الحوافز', body);
+}
+
+function escHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 document.addEventListener('DOMContentLoaded', loadIncentives);
 </script>
 @endpush

@@ -59,7 +59,8 @@
     <div class="section-header">
         <i class="fas fa-table text-primary"></i>
         <h5 class="section-title">كشف الرواتب</h5>
-        <div class="ms-auto">
+        <div class="ms-auto d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" onclick="printSalariesPDF()"><i class="fas fa-file-pdf me-1"></i> طباعة PDF</button>
             <button class="btn btn-sm btn-outline-secondary" onclick="exportSalaries()"><i class="fas fa-download me-1"></i> تصدير</button>
         </div>
     </div>
@@ -337,6 +338,79 @@ function componentLabel(type) {
 }
 
 function exportSalaries() { window.location = `/reports/salaries?month=${document.getElementById('salMonth').value}&year=${document.getElementById('salYear').value}`; }
+
+async function printSalariesPDF() {
+    const params = new URLSearchParams({ per_page: 1000 });
+    params.append('month', document.getElementById('salMonth').value);
+    params.append('year',  document.getElementById('salYear').value);
+    const s = document.getElementById('salStatus').value;
+    const e = document.getElementById('salEmpSearch').value;
+    if (s) params.append('status', s);
+    if (e) params.append('search', e);
+
+    let res;
+    try { res = await apiFetch('/salaries?'+params); } catch (err) { showAlert('حدث خطأ أثناء تحميل البيانات للطباعة','danger'); return; }
+    if (!res.success) { showAlert(res.message||'فشل تحميل البيانات','danger'); return; }
+
+    const data = res.data?.data || [];
+    const month = document.getElementById('salMonth').value;
+    const year  = document.getElementById('salYear').value;
+
+    let totalGross = 0, totalNet = 0;
+    const rows = data.map((s, i) => {
+        const incentives = Number(s.total_incentives ?? 0);
+        const deductions = Number(s.total_deductions ?? 0);
+        const ptsCredit  = Number(s.total_points_credit ?? 0);
+        const ptsDebit   = Number(s.total_points_debit ?? 0);
+        const realIncentives = incentives - ptsCredit;
+        const realDeductions = deductions - ptsDebit;
+        totalGross += Number(s.base_salary ?? 0) + realIncentives + Number(s.total_allowances ?? 0) + Number(s.total_commissions ?? 0) + ptsCredit;
+        totalNet   += Number(s.net_salary ?? 0);
+        return `
+        <tr>
+            <td>${i+1}</td>
+            <td><b>${escHtml(s.employee?.name || '—')}</b><br><span style="color:#6b7280;font-size:11px">${escHtml(s.employee?.employee_code || '')}</span></td>
+            <td>${Number(s.base_salary).toLocaleString()}</td>
+            <td class="pos">+${realIncentives.toLocaleString()}</td>
+            <td class="pos">+${Number(s.total_allowances ?? 0).toLocaleString()}</td>
+            <td class="pos">+${Number(s.total_commissions ?? 0).toLocaleString()}</td>
+            <td class="pos">${ptsCredit > 0 ? '+'+ptsCredit.toLocaleString() : '-'}</td>
+            <td class="neg">${ptsDebit > 0 ? '-'+ptsDebit.toLocaleString() : '-'}</td>
+            <td class="neg">-${realDeductions.toLocaleString()}</td>
+            <td class="neg">-${Number(s.total_advances ?? 0).toLocaleString()}</td>
+            <td><b>${Number(s.net_salary).toLocaleString()}</b></td>
+            <td>${salLabel[s.status] || s.status || '-'}</td>
+        </tr>`;
+    }).join('');
+
+    const metaParts = [
+        `الشهر: ${month}`,
+        `السنة: ${year}`,
+        s ? `الحالة: ${salLabel[s] || s}` : null,
+        e ? `الموظف: ${e}` : null,
+    ].filter(Boolean).join(' | ');
+
+    const body = `
+        <div class="ph"><h1>كشف الرواتب</h1><div class="meta">${escHtml(metaParts)}</div></div>
+        <div class="sum">
+            <div class="box"><div class="lbl">عدد الرواتب</div><div class="val">${data.length}</div></div>
+            <div class="box"><div class="lbl">إجمالي الرواتب</div><div class="val">${totalGross.toLocaleString()} ج.م</div></div>
+            <div class="box"><div class="lbl">صافي الرواتب</div><div class="val">${totalNet.toLocaleString()} ج.م</div></div>
+        </div>
+        <table>
+            <thead><tr>
+                <th>#</th><th>الموظف</th><th>الأساسي</th><th>الحوافز</th><th>البدلات</th><th>العمولات</th><th>نقاط (له)</th><th>نقاط (عليه)</th><th>خصومات</th><th>سلف</th><th>الصافي</th><th>الحالة</th>
+            </tr></thead>
+            <tbody>${rows || '<tr><td colspan="12" style="text-align:center;color:#6b7280">لا توجد بيانات مطابقة</td></tr>'}</tbody>
+        </table>`;
+
+    printHTML('كشف الرواتب', body);
+}
+
+function escHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 document.addEventListener('DOMContentLoaded', () => { loadSummary(); loadSalaries(); });
 </script>

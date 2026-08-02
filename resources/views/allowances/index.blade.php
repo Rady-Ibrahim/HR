@@ -5,7 +5,10 @@
 @section('content')
 <div class="page-header">
     <div><h1><i class="fas fa-plus-circle me-2 text-success"></i> البدلات</h1><div class="breadcrumb">إدارة بدلات الموظفين</div></div>
-    <button class="btn-primary-custom" onclick="openAddModal()"><i class="fas fa-plus me-1"></i> إضافة بدل</button>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary text-nowrap" onclick="printAllowancesPDF()"><i class="fas fa-file-pdf me-1"></i> طباعة PDF</button>
+        <button class="btn-primary-custom" onclick="openAddModal()"><i class="fas fa-plus me-1"></i> إضافة بدل</button>
+    </div>
 </div>
 
 <!-- FILTERS -->
@@ -191,6 +194,60 @@ function resetAllFilter() {
     document.getElementById('allMonth').value='{{ date("n") }}'; document.getElementById('allYear').value='{{ date("Y") }}';
     loadAllowances();
 }
+
+async function printAllowancesPDF() {
+    const params = new URLSearchParams({ per_page: 1000 });
+    const t=document.getElementById('allType').value.trim(); if(t) params.append('allowance_type',t);
+    const m=document.getElementById('allMonth').value; if(m) params.append('month',m);
+    const y=document.getElementById('allYear').value; if(y) params.append('year',y);
+    const e=document.getElementById('allEmp').value; if(e) params.append('search',e);
+
+    let res;
+    try { res = await apiFetch('/allowances?'+params); } catch (e) { showAlert('حدث خطأ أثناء تحميل البيانات للطباعة','danger'); return; }
+    if (!res.success) { showAlert(res.message||'فشل تحميل البيانات','danger'); return; }
+
+    const data = res.data?.data || [];
+    const empName = e ? (data[0]?.employee?.name || '') : '';
+    const totalAmount = data.reduce((sum, a) => sum + Number(a.amount || 0), 0);
+
+    const rows = data.map((a, i) => `
+        <tr>
+            <td>${i+1}</td>
+            <td><b>${escHtml(a.employee?.name || '—')}</b><br><span style="color:#6b7280;font-size:11px">${escHtml(a.employee?.employee_code || '')}</span></td>
+            <td>${escHtml(a.allowance_type || '-')}</td>
+            <td class="pos">${Number(a.amount).toLocaleString()}</td>
+            <td>${a.month}/${a.year}</td>
+            <td>${a.is_recurring ? 'نعم' : '-'}</td>
+            <td>${escHtml(a.notes || a.reason || '-')}</td>
+            <td>${a.status==='active'?'نشط':a.status==='inactive'?'غير نشط':(a.status??'-')}</td>
+        </tr>`).join('');
+
+    const metaParts = [
+        empName ? `الموظف: ${empName}` : 'كل الموظفين',
+        t ? `النوع: ${t}` : null,
+        m ? `الشهر: ${m}` : null,
+        y ? `السنة: ${y}` : null,
+    ].filter(Boolean).join(' | ');
+
+    const body = `
+        <div class="ph"><h1>تقرير البدلات</h1><div class="meta">${escHtml(metaParts)}</div></div>
+        <div class="sum">
+            <div class="box"><div class="lbl">إجمالي السجلات</div><div class="val">${data.length}</div></div>
+            <div class="box"><div class="lbl">إجمالي قيمة البدلات</div><div class="val pos">${totalAmount.toLocaleString()} ج.م</div></div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>الموظف</th><th>النوع</th><th>المبلغ</th><th>الشهر/السنة</th><th>متكرر</th><th>ملاحظات</th><th>الحالة</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="8" style="text-align:center;color:#6b7280">لا توجد بيانات مطابقة</td></tr>'}</tbody>
+        </table>`;
+
+    printHTML('تقرير البدلات', body);
+}
+
+function escHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 document.addEventListener('DOMContentLoaded', () => { loadAllowanceTypeSuggestions(); loadAllowances(); });
 </script>
 @endpush
