@@ -194,6 +194,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{id}/submit-reviewer-review', [RequestController::class, 'submitReviewerReview']);
         Route::post('/{id}/transfer-to-employee', [RequestController::class, 'transferToEmployee']);
         Route::post('/{id}/reviewer-approve',  [RequestController::class, 'reviewerApprove']);
+        Route::post('/{id}/reviewer-approve-final', [RequestController::class, 'reviewerApproveFinal']);
         Route::post('/{id}/reviewer-reject',   [RequestController::class, 'reviewerReject']);
         Route::post('/{id}/submit-manager-review', [RequestController::class, 'submitManagerReview']);
         Route::post('/{id}/manager-approve',   [RequestController::class, 'managerApprove']);

@@ -509,6 +509,49 @@ class RequestController
         ]);
     }
 
+    public function reviewerApproveFinal(Request $request, $id): JsonResponse
+    {
+        $requestModel = RequestModel::with(['createdBy.manager', 'preparedBy'])->findOrFail($id);
+        $validated = $request->validate(['notes' => 'nullable|string']);
+        $reviewerId = $this->currentEmployeeId();
+
+        Approval::where('approvable_type', RequestModel::class)
+            ->where('approvable_id', $requestModel->id)
+            ->where('approval_type', 'reviewer_request_review')
+            ->where('status', 'pending')
+            ->update([
+                'status' => 'approved',
+                'approved_by_id' => $reviewerId,
+                'notes' => $validated['notes'] ?? null,
+                'approved_at' => now(),
+            ]);
+
+        $requestModel->update([
+            'status' => 'approved',
+            'reviewed_by_id' => $reviewerId,
+            'reviewed_at' => now(),
+            'approved_by_id' => $reviewerId,
+            'approved_at' => now(),
+            'notes' => $validated['notes'] ?? $requestModel->notes,
+        ]);
+
+        if ($requestModel->prepared_by_id) {
+            $this->notifyEmployee(
+                $requestModel->prepared_by_id,
+                'تم اعتماد الطلب',
+                'تم اعتماد الطلب ' . $requestModel->request_number . ' نهائياً بواسطة المراجع (بدون مراجعة المدير)',
+                $requestModel,
+                'prepaid_approved'
+            );
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تمت مراجعة الطلب واعتماده نهائياً بدون مراجعة المدير',
+            'data' => $requestModel->fresh(['customer', 'createdBy', 'preparedBy', 'reviewerEmployee', 'reviewedBy', 'approvedBy']),
+        ]);
+    }
+
     public function reviewerReject(Request $request, $id): JsonResponse
     {
         $requestModel = RequestModel::findOrFail($id);
