@@ -63,7 +63,7 @@
                     <div class="mb-2 d-flex justify-content-between align-items-center">
                         <label class="form-label mb-0">المستلمون *</label>
                         <div class="d-flex gap-2">
-                            <input type="text" id="nf_search" class="form-control form-control-sm" placeholder="بحث..." style="width:180px" oninput="filterEmployeeChecks()">
+                            <input type="text" id="nf_search" class="form-control form-control-sm" placeholder="بحث..." style="width:180px" oninput="searchEmployees()">
                             <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleAllEmployees(true)">تحديد الكل</button>
                             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllEmployees(false)">إلغاء</button>
                         </div>
@@ -86,6 +86,7 @@
 @push('scripts')
 <script>
 let allEmployeesForNotif = [];
+let nfSearchTimer = null;
 let currentTab = 'inbox';
 
 function switchTab(tab) {
@@ -229,6 +230,26 @@ async function loadEmployeesForNotif() {
     renderEmployeeChecks(allEmployeesForNotif);
 }
 
+function searchEmployees() {
+    clearTimeout(nfSearchTimer);
+    nfSearchTimer = setTimeout(async () => {
+        const q = (document.getElementById('nf_search').value || '').trim();
+        if (!q) { await loadEmployeesForNotif(); return; }
+
+        const box = document.getElementById('nf_employees');
+        box.innerHTML = '<div class="text-center text-muted py-3">جاري البحث...</div>';
+        const r = await apiFetch('/employees?per_page=1000&status=active&search=' + encodeURIComponent(q));
+        if (!r.success) { box.innerHTML = '<div class="text-danger p-2">فشل البحث</div>'; return; }
+        const matches = r.data?.data ?? r.data ?? [];
+
+        if (!matches.length) {
+            box.innerHTML = '<div class="text-muted p-2">لا توجد نتائج مطابقة</div>';
+            return;
+        }
+        renderEmployeeChecks(matches);
+    }, 300);
+}
+
 function renderEmployeeChecks(list) {
     const box = document.getElementById('nf_employees');
     if (!list.length) {
@@ -236,20 +257,13 @@ function renderEmployeeChecks(list) {
         return;
     }
     box.innerHTML = list.map(e => `
-        <label class="d-flex align-items-center gap-2 py-1 px-1 emp-check-row" data-name="${(e.name || '').toLowerCase()}" style="cursor:pointer;border-bottom:1px solid #f0f0f0">
+        <label class="d-flex align-items-center gap-2 py-1 px-1 emp-check-row" data-name="${escapeHtml((e.name || '').toLowerCase())}" style="cursor:pointer;border-bottom:1px solid #f0f0f0">
             <input type="checkbox" class="nf-emp-check" value="${e.id}" onchange="updateSelectedCount()">
-            <span class="fw-semibold">${e.name}</span>
-            <small class="text-muted ms-auto">${e.employee_code ?? ''} · ${e.employee_type_label || e.employee_type || ''}</small>
+            <span class="fw-semibold">${escapeHtml(e.name)}</span>
+            <small class="text-muted ms-auto">${escapeHtml(e.employee_code ?? '')} · ${escapeHtml(e.employee_type_label || e.employee_type || '')}</small>
         </label>
     `).join('');
     updateSelectedCount();
-}
-
-function filterEmployeeChecks() {
-    const q = (document.getElementById('nf_search').value || '').toLowerCase().trim();
-    document.querySelectorAll('.emp-check-row').forEach(row => {
-        row.style.display = !q || row.dataset.name.includes(q) ? '' : 'none';
-    });
 }
 
 function toggleAllEmployees(checked) {

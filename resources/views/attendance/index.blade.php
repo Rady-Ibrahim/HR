@@ -17,10 +17,10 @@
 
 <!-- TODAY SUMMARY -->
 <div class="row g-3 mb-4" id="todaySummary">
-    <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-icon mx-auto" style="background:#e8f5e9;color:#2e7d32"><i class="fas fa-user-check"></i></div><div class="stat-value" id="attPresent">-</div><div class="stat-label">حاضر</div></div></div>
-    <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-icon mx-auto" style="background:#fce4ec;color:#c62828"><i class="fas fa-user-times"></i></div><div class="stat-value" id="attAbsent">-</div><div class="stat-label">غائب</div></div></div>
-    <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-icon mx-auto" style="background:#fff3e0;color:#e65100"><i class="fas fa-clock"></i></div><div class="stat-value" id="attLate">-</div><div class="stat-label">متأخر</div></div></div>
-    <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-icon mx-auto" style="background:#e3f2fd;color:#1565c0"><i class="fas fa-umbrella-beach"></i></div><div class="stat-value" id="attLeave">-</div><div class="stat-label">إجازة</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card text-center" style="cursor:pointer" onclick="filterByStatus('present')" title="عرض الحاضرين"><div class="stat-icon mx-auto" style="background:#e8f5e9;color:#2e7d32"><i class="fas fa-user-check"></i></div><div class="stat-value" id="attPresent">-</div><div class="stat-label">حاضر</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card text-center" style="cursor:pointer" onclick="filterByStatus('absent')" title="عرض الغائبين"><div class="stat-icon mx-auto" style="background:#fce4ec;color:#c62828"><i class="fas fa-user-times"></i></div><div class="stat-value" id="attAbsent">-</div><div class="stat-label">غائب</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card text-center" style="cursor:pointer" onclick="filterByStatus('late')" title="عرض المتأخرين"><div class="stat-icon mx-auto" style="background:#fff3e0;color:#e65100"><i class="fas fa-clock"></i></div><div class="stat-value" id="attLate">-</div><div class="stat-label">متأخر</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card text-center" style="cursor:pointer" onclick="filterByStatus('on_leave')" title="عرض في إجازة"><div class="stat-icon mx-auto" style="background:#e3f2fd;color:#1565c0"><i class="fas fa-umbrella-beach"></i></div><div class="stat-value" id="attLeave">-</div><div class="stat-label">إجازة</div></div></div>
 </div>
 
 <!-- DEDUCTION POLICY (DYNAMIC) -->
@@ -67,7 +67,7 @@
 <div class="section-card mb-4">
     <div class="section-body">
         <div class="row g-2 align-items-end">
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label">الموظف</label>
                 <input type="text" id="empSearch" class="form-control" placeholder="بحث باسم الموظف">
             </div>
@@ -82,6 +82,12 @@
                 </select>
             </div>
             <div class="col-md-2">
+                <label class="form-label">الوردية</label>
+                <select id="shiftFilter" class="form-select">
+                    <option value="">الكل</option>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label">التاريخ من</label>
                 <input type="date" id="dateFrom" class="form-control">
             </div>
@@ -89,7 +95,7 @@
                 <label class="form-label">إلى</label>
                 <input type="date" id="dateTo" class="form-control">
             </div>
-            <div class="col-md-2">
+            <div class="col-md-1">
                 <button class="btn-primary-custom w-100" onclick="applyFilters()"><i class="fas fa-search me-1"></i> بحث</button>
             </div>
             <div class="col-md-1">
@@ -287,11 +293,13 @@ async function loadShiftSelect() {
     const all = r.data?.data ?? r.data ?? [];
     const sel = document.getElementById('activeShiftSelect');
     const sel2 = document.getElementById('atf_shift');
+    const sel3 = document.getElementById('shiftFilter');
     const opts = '<option value="">اختر الوردية</option>' + all.filter(s => s.is_active).map(s =>
         `<option value="${s.id}">${s.name} (${s.start_time?.substring(0,5)} - ${s.end_time?.substring(0,5)})</option>`
     ).join('');
     sel.innerHTML = '<option value="">عرض الوردية</option>' + opts.substring(22);
     sel2.innerHTML = '<option value="">الوردية الافتراضية</option>' + opts.substring(22);
+    sel3.innerHTML = '<option value="">الكل</option>' + opts.substring(22);
     if (all.length) { sel.value = all[0].id; loadShiftInfo(); }
 }
 
@@ -311,10 +319,12 @@ async function loadAttendance(page = 1) {
     const e = document.getElementById('empSearch').value;
     const f = document.getElementById('dateFrom').value;
     const t = document.getElementById('dateTo').value;
+    const sh = document.getElementById('shiftFilter').value;
     if (s) params.append('status', s);
     if (e) params.append('search', e);
     if (f) params.append('date_from', f);
     if (t) params.append('date_to', t);
+    if (sh) params.append('shift_id', sh);
 
     const r = await apiFetch('/attendance?' + params);
     if (!r.success) return;
@@ -329,7 +339,7 @@ async function loadAttendance(page = 1) {
         <tr>
             <td>${a.employee?.name ?? '-'}</td>
             <td>${a.attendance_date ? a.attendance_date.substring(0,10) : '-'}</td>
-            <td>${a.shift_id ? `<span class="badge bg-light text-dark">${a.shift?.name || 'وردية'}</span>` : '-'}</td>
+            <td>${a.shift?.name ? `<span class="badge bg-light text-dark">${a.shift.name}</span>` : '-'}</td>
             <td>${a.check_in_time ?? '-'}</td>
             <td>${a.check_out_time ?? '-'}</td>
             <td>${lateText(a.late_minutes ?? 0, a.applied_late_deduction_type)}</td>
@@ -497,6 +507,48 @@ function applyFilters() {
     if (ACTIVE_TAB === 'leaves') loadLeaves(); else loadAttendance();
 }
 
+function filterByStatus(status) {
+    if (ACTIVE_TAB !== 'attendance') {
+        const btn = document.querySelector('.nav-tabs .nav-link[onclick*="attendance"]');
+        showTab('attendance', btn);
+    }
+    setStatusOptions(attStatusOptions);
+    document.getElementById('empSearch').value = '';
+    document.getElementById('attStatus').value = status;
+    document.getElementById('shiftFilter').value = '';
+    document.getElementById('dateFrom').value = '';
+    document.getElementById('dateTo').value = '';
+    loadTodayList(status);
+}
+
+async function loadTodayList(status) {
+    const r = await apiFetch('/attendance/today-summary');
+    if (!r.success) return;
+    const list = r.data.lists?.[status] ?? [];
+    document.getElementById('attPagInfo').textContent = `إجمالي اليوم: ${list.length}`;
+    document.getElementById('attPagination').innerHTML = '';
+    if (!list.length) {
+        document.getElementById('attTable').innerHTML = '<tr><td colspan="11" class="text-center py-4 text-muted">لا توجد سجلات</td></tr>';
+        return;
+    }
+    document.getElementById('attTable').innerHTML = list.map(a => `
+        <tr>
+            <td>${a.name ?? '-'}</td>
+            <td>${'{{ date("Y-m-d") }}'}</td>
+            <td>-</td>
+            <td>${a.check_in_time ?? '-'}</td>
+            <td>${a.check_out_time ?? '-'}</td>
+            <td>${a.late_minutes != null ? `${a.late_minutes} دقيقة` : '-'}</td>
+            <td>-</td>
+            <td>-</td>
+            <td><span class="badge-status ${attBadge[status] || 'badge-draft'}">${attLabel[status] || status}</span></td>
+            <td>-</td>
+            <td>-</td>
+        </tr>
+    `).join('');
+    document.getElementById('tab-attendance').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function showTab(tab, btn) {
     ACTIVE_TAB = tab;
     document.getElementById('tab-attendance').style.display = tab === 'attendance' ? '' : 'none';
@@ -508,7 +560,7 @@ function showTab(tab, btn) {
 }
 
 function resetAttFilters() {
-    ['empSearch','attStatus','dateFrom','dateTo'].forEach(id => document.getElementById(id).value = '');
+    ['empSearch','attStatus','shiftFilter','dateFrom','dateTo'].forEach(id => document.getElementById(id).value = '');
     setStatusOptions(ACTIVE_TAB === 'leaves' ? leaveStatusOptions : attStatusOptions);
     applyFilters();
 }

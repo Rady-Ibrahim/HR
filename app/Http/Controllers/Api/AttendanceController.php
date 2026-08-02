@@ -20,7 +20,7 @@ class AttendanceController
 
     public function index(Request $request): JsonResponse
     {
-        $query = Attendance::with(['employee', 'shift']);
+        $query = Attendance::with(['employee', 'shift', 'employee.shiftAssignments.shift']);
 
         if ($request->filled('employee_id')) $query->where('employee_id', $request->employee_id);
         if ($request->filled('status'))      $query->where('status', $request->status);
@@ -39,8 +39,39 @@ class AttendanceController
             $query->whereMonth('attendance_date', $request->month)
                   ->whereYear('attendance_date', $request->year);
         }
+        if ($request->filled('shift_id')) {
+            $shiftId = (int) $request->shift_id;
+            $query->where(function ($q) use ($shiftId) {
+                $q->where('shift_id', $shiftId)
+                    ->orWhereHas('employee.shiftAssignments', function ($q) use ($shiftId) {
+                        $q->where('shift_id', $shiftId)
+                            ->whereColumn('employee_shift.effective_from', '<=', 'attendances.attendance_date')
+                            ->where(function ($q) {
+                                $q->whereNull('employee_shift.effective_to')
+                                    ->orWhereColumn('employee_shift.effective_to', '>=', 'attendances.attendance_date');
+                            });
+                    });
+            });
+        }
 
         $records = $query->orderByDesc('attendance_date')->paginate($request->get('per_page', 15));
+
+        $records->getCollection()->each(function (Attendance $attendance) {
+            if (!$attendance->shift) {
+                $date = Carbon::parse($attendance->attendance_date)->toDateString();
+                $assignment = $attendance->employee?->shiftAssignments
+                    ->filter(function ($assignment) use ($date) {
+                        $from = Carbon::parse($assignment->effective_from)->toDateString();
+                        $to = $assignment->effective_to
+                            ? Carbon::parse($assignment->effective_to)->toDateString()
+                            : null;
+                        return $from <= $date && ($to === null || $to >= $date);
+                    })
+                    ->sortByDesc(fn ($a) => Carbon::parse($a->effective_from)->toDateString())
+                    ->first();
+                $attendance->setRelation('shift', $assignment?->shift);
+            }
+        });
 
         return response()->json(['success' => true, 'data' => $records]);
     }
@@ -416,12 +447,50 @@ class AttendanceController
         $today = today()->toDateString();
         $total = Employee::where('status', 'active')->count();
 
+        $todayRecords = Attendance::with('employee')
+            ->where('attendance_date', $today)
+            ->get();
+
+        $present = $todayRecords->where('status', 'present')->values();
+        $late    = $todayRecords->where('status', 'late')->values();
+        $onLeave = $todayRecords->where('status', 'on_leave')->values();
+
+        $absentEmployees = Employee::where('status', 'active')
+            ->whereDoesntHave('attendances', function ($q) use ($today) {
+                $q->where('attendance_date', $today);
+            })
+            ->get();
+
+        $list = function ($records) {
+            return $records->map(fn ($a) => [
+                'id' => $a->id,
+                'name' => $a->employee?->name,
+                'employee_code' => $a->employee?->employee_code,
+                'check_in_time' => $a->check_in_time,
+                'check_out_time' => $a->check_out_time,
+                'late_minutes' => $a->late_minutes,
+            ])->values();
+        };
+
         $summary = [
             'total_employees' => $total,
-            'present'         => Attendance::where('attendance_date', $today)->where('status', 'present')->count(),
-            'late'            => Attendance::where('attendance_date', $today)->where('status', 'late')->count(),
-            'absent'          => $total - Attendance::where('attendance_date', $today)->count(),
-            'no_checkout'     => Attendance::where('attendance_date', $today)->whereNotNull('check_in_time')->whereNull('check_out_time')->count(),
+            'present'         => $present->count(),
+            'late'            => $late->count(),
+            'absent'          => $total - $todayRecords->count(),
+            'no_checkout'     => $todayRecords->whereNotNull('check_in_time')->whereNull('check_out_time')->count(),
+            'lists' => [
+                'present'  => $list($present),
+                'late'     => $list($late),
+                'on_leave' => $list($onLeave),
+                'absent'   => $absentEmployees->map(fn ($e) => [
+                    'id' => $e->id,
+                    'name' => $e->name,
+                    'employee_code' => $e->employee_code,
+                    'check_in_time' => null,
+                    'check_out_time' => null,
+                    'late_minutes' => null,
+                ])->values(),
+            ],
         ];
 
         return response()->json(['success' => true, 'data' => $summary]);

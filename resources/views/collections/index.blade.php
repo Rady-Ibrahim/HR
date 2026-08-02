@@ -60,6 +60,7 @@
                 <form id="colForm">
                     <input type="hidden" id="colId">
                     <div class="row g-3">
+                        <div class="col-md-6"><label class="form-label">القسم</label><select id="clf_dept" class="form-select" onchange="filterEmpByDept()"><option value="">كل الأقسام</option></select></div>
                         <div class="col-md-6"><label class="form-label">المندوب *</label><select name="employee_id" id="clf_emp" class="form-select" data-lookup="employees" data-placeholder="اختر المندوب" required></select></div>
                         <div class="col-md-6"><label class="form-label">التسليمة</label><select name="delivery_id" id="clf_delivery" class="form-select" data-lookup="deliveries" data-placeholder="اختر التسليمة"></select></div>
                         <div class="col-md-6"><label class="form-label">العميل</label><select name="customer_id" id="clf_customer" class="form-select" data-lookup="customers" data-placeholder="اختر العميل"></select></div>
@@ -101,6 +102,33 @@
 <script>
 let colDeleteId=null, colPage=1;
 const paymentLabels = { cash:'نقدي', check:'شيك', bank_transfer:'تحويل بنكي', instapay:'إنستاباي', fawry:'فوري', other:'أخرى' };
+
+let colEmployees = [];
+
+async function loadColDepts() {
+    try {
+        const r = await apiFetch('/employees?per_page=1000');
+        colEmployees = r.data?.data ?? r.data ?? [];
+    } catch (_) { colEmployees = []; }
+    const depts = [...new Set(colEmployees.map(e => e.department).filter(Boolean))].sort();
+    const sel = document.getElementById('clf_dept');
+    sel.innerHTML = '<option value="">كل الأقسام</option>' + depts.map(d => `<option value="${d}">${d}</option>`).join('');
+}
+
+function filterEmpByDept() {
+    const dept = document.getElementById('clf_dept').value;
+    const empSel = document.getElementById('clf_emp');
+    const filtered = dept ? colEmployees.filter(e => e.department === dept) : colEmployees;
+    empSel.innerHTML = '<option value="">اختر المندوب</option>' + filtered.map(e =>
+        `<option value="${e.id}">${escHtml(e.name)}${e.employee_code ? ' - ' + escHtml(e.employee_code) : ''}</option>`
+    ).join('');
+    empSel.dataset.lookupReady = '1';
+}
+
+function escHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 document.getElementById('clf_method').addEventListener('change', function() {
     document.getElementById('checkFields').style.display = this.value==='check' ? '' : 'none';
@@ -166,6 +194,8 @@ function openAddModal() {
     document.getElementById('clf_date').value='{{ date("Y-m-d") }}';
     document.getElementById('clf_method').value='cash';
     document.getElementById('checkFields').style.display='none'; document.getElementById('bankFields').style.display='none';
+    document.getElementById('clf_dept').value='';
+    filterEmpByDept();
     new bootstrap.Modal(document.getElementById('colModal')).show();
 }
 async function openEditModal(id) {
@@ -173,6 +203,8 @@ async function openEditModal(id) {
     new bootstrap.Modal(document.getElementById('colModal')).show();
     const r=await apiFetch('/collections/'+id); if(!r.success) return; const c=r.data;
     document.getElementById('colId').value=c.id;
+    document.getElementById('clf_dept').value='';
+    filterEmpByDept();
     document.getElementById('clf_emp').value=c.driver_id??'';
     document.getElementById('clf_delivery').value=c.delivery_id??'';
     document.getElementById('clf_customer').value=c.customer_id??'';
@@ -224,6 +256,6 @@ function resetColFilter() { ['colSearch','colPayment','colStatus','colDate'].for
 function collectionLabel(status) { return { pending:'معلق', collected:'محصل تلقائي', deposited:'معتمد', rejected:'مرفوض' }[status] || status; }
 function collectionBadge(status) { return { pending:'badge-pending', collected:'badge-approved', deposited:'badge-active', rejected:'badge-rejected' }[status] || 'badge-pending'; }
 document.getElementById('colSearch').addEventListener('keypress', e=>{ if(e.key==='Enter') loadCollections(); });
-document.addEventListener('DOMContentLoaded', ()=>{ loadDailySummary(); loadCollections(); });
+document.addEventListener('DOMContentLoaded', ()=>{ loadDailySummary(); loadCollections(); loadColDepts(); });
 </script>
 @endpush
