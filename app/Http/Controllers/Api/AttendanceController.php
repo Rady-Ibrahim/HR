@@ -429,22 +429,29 @@ class AttendanceController
 
     public function requestLeave(Request $request): JsonResponse
     {
-        $employee = $this->getCurrentEmployee();
-        if (!$employee) {
+        $currentEmployee = $this->getCurrentEmployee();
+        if (!$currentEmployee) {
             return response()->json(['success' => false, 'message' => 'غير مصرح - لا يوجد ملف موظف مرتبط'], 401);
         }
 
         $validated = $request->validate([
+            'employee_id'  => 'nullable|exists:employees,id',
             'request_type' => 'required|in:sick,leave,late,early,excuse',
             'from_date'    => 'required|date',
             'to_date'      => 'required|date|after_or_equal:from_date',
             'reason'       => 'required|string',
         ]);
 
+        $employeeId = $validated['employee_id'] ?? $currentEmployee->id;
+
+        if ((int) $employeeId !== (int) $currentEmployee->id && !$this->isAdminUser()) {
+            return response()->json(['success' => false, 'message' => 'غير مصرح بإنشاء طلب إجازة بالنيابة عن موظف آخر'], 403);
+        }
+
         $from = Carbon::parse($validated['from_date']);
         $to   = Carbon::parse($validated['to_date']);
         $validated['days_count'] = $from->diffInDays($to) + 1;
-        $validated['employee_id'] = $employee->id;
+        $validated['employee_id'] = (int) $employeeId;
 
         $leaveRequest = AttendanceRequest::create($validated);
 

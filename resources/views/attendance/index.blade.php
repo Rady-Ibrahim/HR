@@ -202,16 +202,16 @@
             <div class="modal-body">
                 <form id="leaveForm">
                     <div class="row g-3">
-                        <div class="col-12"><label class="form-label">الموظف *</label><select name="employee_id" id="lf_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select></div>
+                        <div class="col-12" id="lf_emp_wrap"><label class="form-label">الموظف *</label><select name="employee_id" id="lf_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف"></select></div>
                         <div class="col-md-6"><label class="form-label">نوع الإجازة *</label>
-                            <select name="leave_type" id="lf_type" class="form-select" required>
-                                <option value="annual">سنوية</option><option value="sick">مرضية</option>
-                                <option value="emergency">طارئة</option><option value="unpaid">بدون أجر</option><option value="other">أخرى</option>
+                            <select name="request_type" id="lf_type" class="form-select" required>
+                                <option value="sick">مرضية</option><option value="leave">إجازة</option>
+                                <option value="late">تأخير</option><option value="early">انصراف مبكر</option><option value="excuse">عذر</option>
                             </select>
                         </div>
-                        <div class="col-md-6"><label class="form-label">من تاريخ *</label><input type="date" name="start_date" id="lf_start" class="form-control" required value="{{ date('Y-m-d') }}"></div>
-                        <div class="col-md-6"><label class="form-label">إلى تاريخ *</label><input type="date" name="end_date" id="lf_end" class="form-control" required value="{{ date('Y-m-d') }}"></div>
-                        <div class="col-12"><label class="form-label">السبب</label><textarea name="reason" id="lf_reason" class="form-control" rows="2"></textarea></div>
+                        <div class="col-md-6"><label class="form-label">من تاريخ *</label><input type="date" name="from_date" id="lf_start" class="form-control" required value="{{ date('Y-m-d') }}"></div>
+                        <div class="col-md-6"><label class="form-label">إلى تاريخ *</label><input type="date" name="to_date" id="lf_end" class="form-control" required value="{{ date('Y-m-d') }}"></div>
+                        <div class="col-12"><label class="form-label">السبب *</label><textarea name="reason" id="lf_reason" class="form-control" rows="2" required></textarea></div>
                     </div>
                 </form>
             </div>
@@ -328,6 +328,8 @@ async function loadAttendance(page = 1) {
     document.getElementById('attPagination').innerHTML = pages.join('');
 }
 
+const LEAVE_TYPE_LABELS = { sick:'مرضية', leave:'إجازة', late:'تأخير', early:'انصراف مبكر', excuse:'عذر' };
+
 async function loadLeaves() {
     const r = await apiFetch('/attendance/leave-requests');
     if (!r.success) return;
@@ -339,12 +341,12 @@ async function loadLeaves() {
     document.getElementById('leavesTable').innerHTML = all.map(l => `
         <tr>
             <td>${l.employee?.name ?? '-'}</td>
-            <td>${l.leave_type ?? '-'}</td>
-            <td>${l.start_date}</td>
-            <td>${l.end_date}</td>
+            <td>${LEAVE_TYPE_LABELS[l.request_type] ?? l.request_type ?? '-'}</td>
+            <td>${l.from_date}</td>
+            <td>${l.to_date}</td>
             <td>${l.reason ?? '-'}</td>
-            <td><span class="badge-status ${l.status === 'approved' ? 'badge-active' : l.status === 'rejected' ? 'badge-rejected' : 'badge-pending'}">${l.status === 'approved' ? 'معتمد' : l.status === 'rejected' ? 'مرفوض' : 'معلق'}</span></td>
-            <td>${l.status === 'pending' ? `
+            <td><span class="badge-status ${l.approval_status === 'approved' ? 'badge-active' : l.approval_status === 'rejected' ? 'badge-rejected' : 'badge-pending'}">${l.approval_status === 'approved' ? 'معتمد' : l.approval_status === 'rejected' ? 'مرفوض' : 'معلق'}</span></td>
+            <td>${l.approval_status === 'pending' ? `
                 <button class="btn btn-sm btn-outline-success" onclick="approveLeave(${l.id})"><i class="fas fa-check"></i></button>
                 <button class="btn btn-sm btn-outline-danger" onclick="rejectLeave(${l.id})"><i class="fas fa-times"></i></button>
             ` : '-'}</td>
@@ -360,7 +362,7 @@ async function approveLeave(id) {
 
 async function rejectLeave(id) {
     const reason=prompt('سبب رفض الإجازة:'); if(!reason) return;
-    const r = await apiFetch(`/attendance/leave-requests/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) });
+    const r = await apiFetch(`/attendance/leave-requests/${id}/approve`, { method: 'POST', body: JSON.stringify({ status: 'rejected', notes: reason }) });
     if (r.success) { showAlert('تم رفض الإجازة','warning'); loadLeaves(); }
     else showAlert(r.message, 'danger');
 }
@@ -422,16 +424,30 @@ document.getElementById('attDeleteBtn').addEventListener('click', async()=>{
 });
 
 // ─── ADD LEAVE ───────────────────────────────────────────
+let CAN_MANAGE_LEAVES = false;
+async function detectLeaveRole() {
+    try {
+        const r = await apiFetch('/auth/me');
+        if (!r.success || !r.data?.user) return;
+        const roles = r.data.user.roles?.map(x => x.name) ?? [];
+        CAN_MANAGE_LEAVES = roles.some(n => ['super_admin','admin','hr_manager','manager','finance_manager','operations_manager','delivery_manager','warehouse_manager','approver_level_1','approver_level_2','approver_level_3'].includes(n));
+    } catch (e) { CAN_MANAGE_LEAVES = false; }
+    document.getElementById('lf_emp_wrap').style.display = CAN_MANAGE_LEAVES ? '' : 'none';
+    if (!CAN_MANAGE_LEAVES) document.getElementById('lf_emp').value = '';
+}
+
 function openLeaveModal() {
     document.getElementById('leaveForm').reset();
     document.getElementById('lf_start').value='{{ date("Y-m-d") }}';
     document.getElementById('lf_end').value='{{ date("Y-m-d") }}';
+    detectLeaveRole();
     new bootstrap.Modal(document.getElementById('leaveAddModal')).show();
 }
 async function saveLeave() {
     const data=Object.fromEntries(new FormData(document.getElementById('leaveForm')));
-    data.employee_id=parseInt(data.employee_id);
-    const r=await apiFetch('/attendance/leave-requests',{method:'POST',body:JSON.stringify(data)});
+    if(data.employee_id) data.employee_id=parseInt(data.employee_id);
+    else delete data.employee_id;
+    const r=await apiFetch('/attendance/request-leave',{method:'POST',body:JSON.stringify(data)});
     if(r.success){bootstrap.Modal.getInstance(document.getElementById('leaveAddModal')).hide();showAlert('تم إرسال طلب الإجازة');loadLeaves();}
     else showAlert(r.message||'فشل الإرسال','danger');
 }
