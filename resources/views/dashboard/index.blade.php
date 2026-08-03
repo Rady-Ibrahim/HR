@@ -214,8 +214,8 @@ async function loadCharts() {
         empChart = new Chart(document.getElementById('employeeChart'), {
             type: 'doughnut',
             data: {
-                labels: ['نشط', 'غير نشط', 'في إجازة', 'موقوف'],
-                datasets: [{ data: [d.active, d.inactive, d.on_leave, d.suspended], backgroundColor: ['#2e7d32','#f57f17','#1565c0','#c62828'], borderWidth: 0 }]
+                labels: ['نشط', 'غير نشط', 'في إجازة', 'موقوف', 'استقالة'],
+                datasets: [{ data: [d.active, d.inactive, d.on_leave, d.suspended, d.resigned], backgroundColor: ['#2e7d32','#f57f17','#1565c0','#c62828','#757575'], borderWidth: 0 }]
             },
             options: { plugins: { legend: { position: 'bottom', labels: { font: { family: 'Cairo' } } } }, cutout: '65%' }
         });
