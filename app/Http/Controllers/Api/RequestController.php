@@ -874,7 +874,7 @@ class RequestController
 
         if ($employee->user->onesignal_player_id) {
             app(OneSignalService::class)->sendNotification(
-                [$employee->user->id],
+                [$employee->user->onesignal_player_id],
                 $title,
                 $message,
                 [

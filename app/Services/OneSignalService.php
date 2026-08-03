@@ -21,7 +21,15 @@ class OneSignalService
         return !empty($this->appId) && !empty($this->restApiKey);
     }
 
-    public function sendNotification(array $userIds, string $title, string $message, array $data = []): void
+    /**
+     * Send a push notification to specific OneSignal Player IDs (Subscription IDs).
+     *
+     * @param string[] $playerIds OneSignal Player IDs (Subscription IDs) of registered devices.
+     * @param string $title Notification title.
+     * @param string $message Notification body.
+     * @param array<string,mixed> $data Extra payload delivered to the device.
+     */
+    public function sendNotification(array $playerIds, string $title, string $message, array $data = []): void
     {
         if (!$this->isEnabled()) {
             return;
@@ -33,14 +41,14 @@ class OneSignalService
                 'Content-Type' => 'application/json',
             ])->post('https://onesignal.com/api/v1/notifications', [
                 'app_id' => $this->appId,
-                'include_external_user_ids' => array_map('strval', $userIds),
+                'include_player_ids' => array_map('strval', $playerIds),
                 'headings' => ['en' => $title, 'ar' => $title],
                 'contents' => ['en' => $message, 'ar' => $message],
                 'data' => $data,
             ]);
         } catch (\Exception $e) {
             Log::error('OneSignal notification failed', [
-                'user_ids' => $userIds,
+                'player_ids' => $playerIds,
                 'error' => $e->getMessage(),
             ]);
         }

@@ -17,7 +17,7 @@
                 <input type="text" id="custSearch" class="form-control" placeholder="اسم، هاتف، عنوان..."></div>
             </div>
             <div class="col-md-2"><label class="form-label">الحالة</label>
-                <select id="custStatus" class="form-select"><option value="">الكل</option><option value="1">نشط</option><option value="0">غير نشط</option></select>
+                <select id="custStatus" class="form-select"><option value="">الكل</option><option value="active">نشط</option><option value="inactive">غير نشط</option></select>
             </div>
             <div class="col-md-2"><button class="btn-primary-custom w-100" onclick="loadCustomers()"><i class="fas fa-search me-1"></i> بحث</button></div>
             <div class="col-md-2"><button class="btn btn-outline-secondary w-100" onclick="resetCust()"><i class="fas fa-undo me-1"></i> إعادة</button></div>
@@ -31,8 +31,8 @@
         <span class="ms-auto text-muted" style="font-size:.8rem" id="custCount"></span></div>
     <div class="table-responsive">
         <table class="data-table">
-            <thead><tr><th>#</th><th>اسم العميل</th><th>الهاتف</th><th>البريد</th><th>العنوان</th><th>حد الائتمان</th><th>الحالة</th><th>إجراءات</th></tr></thead>
-            <tbody id="custTable"><tr><td colspan="8" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr></tbody>
+            <thead><tr><th>كود العميل</th><th>اسم العميل</th><th>الهاتف</th><th>البريد</th><th>العنوان</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+            <tbody id="custTable"><tr><td colspan="7" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr></tbody>
         </table>
     </div>
     <div class="section-body d-flex justify-content-between">
@@ -56,11 +56,10 @@
                         <div class="col-md-6"><label class="form-label">اسم العميل *</label><input type="text" name="name" id="cf_name" class="form-control" required></div>
                         <div class="col-md-6"><label class="form-label">رقم الهاتف</label><input type="text" name="phone" id="cf_phone" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">البريد الإلكتروني</label><input type="email" name="email" id="cf_email" class="form-control"></div>
-                        <div class="col-md-6"><label class="form-label">رقم هاتف إضافي</label><input type="text" name="phone2" id="cf_phone2" class="form-control"></div>
-                        <div class="col-md-6"><label class="form-label">حد الائتمان (ج.م)</label><input type="number" name="credit_limit" id="cf_credit_limit" class="form-control" placeholder="0.00"></div>
+                        <div class="col-md-6"><label class="form-label">رقم هاتف إضافي</label><input type="text" name="phone_alternative" id="cf_phone2" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">الحالة</label>
-                            <select name="is_active" id="cf_is_active" class="form-select">
-                                <option value="1">نشط</option><option value="0">غير نشط</option>
+                            <select name="status" id="cf_status" class="form-select">
+                                <option value="active">نشط</option><option value="inactive">غير نشط</option>
                             </select>
                         </div>
                         <div class="col-12"><label class="form-label">العنوان</label><textarea name="address" id="cf_address" class="form-control" rows="2"></textarea></div>
@@ -104,7 +103,7 @@ async function loadCustomers(page = 1) {
         search: document.getElementById('custSearch').value,
     });
     const s = document.getElementById('custStatus').value;
-    if (s !== '') params.append('is_active', s);
+    if (s !== '') params.append('status', s);
 
     const r = await apiFetch('/customers?' + params);
     if (!r.success) return;
@@ -112,16 +111,15 @@ async function loadCustomers(page = 1) {
     document.getElementById('custCount').textContent = `إجمالي: ${total}`;
     document.getElementById('custPagInfo').textContent = `صفحة ${current_page} من ${last_page}`;
 
-    if (!data.length) { document.getElementById('custTable').innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">لا يوجد عملاء</td></tr>'; return; }
+    if (!data.length) { document.getElementById('custTable').innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">لا يوجد عملاء</td></tr>'; return; }
     document.getElementById('custTable').innerHTML = data.map((c,i) => `
         <tr>
-            <td>${(page-1)*15+i+1}</td>
+            <td><span class="badge bg-light text-primary">${c.customer_code ?? 'CUS-' + String(c.id).padStart(5,'0')}</span></td>
             <td><strong>${c.name}</strong></td>
             <td>${c.phone??'-'}</td>
             <td>${c.email??'-'}</td>
             <td>${c.address ? c.address.substring(0,40)+(c.address.length>40?'…':'') : '-'}</td>
-            <td>${c.credit_limit ? Number(c.credit_limit).toLocaleString('ar-EG')+' ج.م' : '-'}</td>
-            <td><span class="badge-status ${c.is_active?'badge-active':'badge-inactive'}">${c.is_active?'نشط':'غير نشط'}</span></td>
+            <td><span class="badge-status ${c.status==='active'?'badge-active':'badge-inactive'}">${c.status==='active'?'نشط':(c.status==='blacklisted'?'محظور':'غير نشط')}</span></td>
             <td>
                 <div class="d-flex gap-1">
                     <button class="btn btn-sm btn-outline-warning" onclick="openEditModal(${c.id})" title="تعديل"><i class="fas fa-edit"></i></button>
@@ -140,7 +138,7 @@ function openAddModal() {
     document.getElementById('custId').value = '';
     document.getElementById('customerForm').reset();
     document.getElementById('custModalTitle').innerHTML = '<i class="fas fa-store me-2"></i> إضافة عميل جديد';
-    document.getElementById('cf_is_active').value = '1';
+    document.getElementById('cf_status').value = 'active';
     new bootstrap.Modal(document.getElementById('customerModal')).show();
 }
 
@@ -153,10 +151,9 @@ async function openEditModal(id) {
     document.getElementById('custId').value       = c.id;
     document.getElementById('cf_name').value      = c.name ?? '';
     document.getElementById('cf_phone').value     = c.phone ?? '';
-    document.getElementById('cf_phone2').value    = c.phone2 ?? '';
+    document.getElementById('cf_phone2').value    = c.phone_alternative ?? '';
     document.getElementById('cf_email').value     = c.email ?? '';
-    document.getElementById('cf_credit_limit').value = c.credit_limit ?? '';
-    document.getElementById('cf_is_active').value = c.is_active ? '1' : '0';
+    document.getElementById('cf_status').value    = c.status ?? 'active';
     document.getElementById('cf_address').value   = c.address ?? '';
     document.getElementById('cf_notes').value     = c.notes ?? '';
 }
@@ -164,8 +161,6 @@ async function openEditModal(id) {
 async function saveCustomer() {
     const id   = document.getElementById('custId').value;
     const data = Object.fromEntries(new FormData(document.getElementById('customerForm')));
-    if (data.credit_limit) data.credit_limit = parseFloat(data.credit_limit);
-    data.is_active = data.is_active === '1';
 
     const r = await apiFetch(id ? `/customers/${id}` : '/customers', { method: id ? 'PUT' : 'POST', body: JSON.stringify(data) });
     if (r.success) {
