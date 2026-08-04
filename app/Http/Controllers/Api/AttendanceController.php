@@ -71,6 +71,10 @@ class AttendanceController
                     ->first();
                 $attendance->setRelation('shift', $assignment?->shift);
             }
+
+            $deduction = $this->penaltyService->calculateRecordDeduction($attendance);
+            $attendance->setAttribute('salary_deduction_amount', $deduction['amount']);
+            $attendance->setAttribute('salary_deduction_label', $deduction['label']);
         });
 
         return response()->json(['success' => true, 'data' => $records]);
@@ -226,8 +230,8 @@ class AttendanceController
     {
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
-            'latitude'    => 'required|numeric',
-            'longitude'   => 'required|numeric',
+            'latitude'    => 'nullable|numeric',
+            'longitude'   => 'nullable|numeric',
             'photo'       => 'nullable|image|max:3072',
         ]);
 
@@ -251,9 +255,7 @@ class AttendanceController
         if ($shift) {
             $lateResult = $this->penaltyService->calculateLatePenalty($shift, $now, $date);
         } else {
-            $workStartTime = Config::get('hr.working_hours.check_in_time', '08:00');
-            $scheduled = Carbon::parse($today . ' ' . $workStartTime);
-            $lateResult['late_minutes'] = max(0, (int) $now->diffInMinutes($scheduled, false) * -1);
+            $lateResult = $this->penaltyService->calculateLateFromConfig($now, $date);
         }
 
         $lateThreshold = (int) Config::get('hr.working_hours.late_threshold_minutes', 15);
@@ -264,14 +266,16 @@ class AttendanceController
             $photoPath = $request->file('photo')->store('attendance/checkin', 'public');
         }
 
-        $locationData = $this->detectLocation($validated['latitude'], $validated['longitude']);
+        $locationData = ($validated['latitude'] ?? null) !== null && ($validated['longitude'] ?? null) !== null
+            ? $this->detectLocation((float) $validated['latitude'], (float) $validated['longitude'])
+            : ['id' => null, 'name' => null, 'within' => false, 'distance' => null];
 
         $record = Attendance::updateOrCreate(
             ['employee_id' => $validated['employee_id'], 'attendance_date' => $today],
             [
                 'check_in_time'              => $now->toTimeString(),
-                'check_in_latitude'          => $validated['latitude'],
-                'check_in_longitude'         => $validated['longitude'],
+                'check_in_latitude'          => $validated['latitude'] ?? null,
+                'check_in_longitude'         => $validated['longitude'] ?? null,
                 'check_in_photo'             => $photoPath,
                 'status'                     => $status,
                 'late_minutes'               => $lateResult['late_minutes'],
@@ -299,8 +303,8 @@ class AttendanceController
     {
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
-            'latitude'    => 'required|numeric',
-            'longitude'   => 'required|numeric',
+            'latitude'    => 'nullable|numeric',
+            'longitude'   => 'nullable|numeric',
             'photo'       => 'nullable|image|max:3072',
         ]);
 
@@ -328,8 +332,8 @@ class AttendanceController
 
         $record->update([
             'check_out_time'      => $checkOut->toTimeString(),
-            'check_out_latitude'  => $validated['latitude'],
-            'check_out_longitude' => $validated['longitude'],
+            'check_out_latitude'  => $validated['latitude'] ?? null,
+            'check_out_longitude' => $validated['longitude'] ?? null,
             'check_out_photo'     => $photoPath,
         ]);
 

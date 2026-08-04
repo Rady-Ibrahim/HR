@@ -132,6 +132,35 @@ class AttendancePenaltyService
         ];
     }
 
+    public function calculateLateFromConfig(Carbon $checkInTime, Carbon $date): array
+    {
+        $start = Carbon::parse($date->toDateString() . ' ' . Config::get('hr.working_hours.check_in_time', '08:00'));
+        $lateMinutes = max(0, (int) $start->diffInMinutes($checkInTime, false));
+
+        return [
+            'late_minutes' => $lateMinutes,
+            'deduction_type' => $lateMinutes > 0 ? 'minutes' : null,
+            'deduction_amount' => 0.0,
+        ];
+    }
+
+    public function calculateEarlyExitFromConfig(Carbon $checkInTime, Carbon $checkOutTime, Carbon $date): array
+    {
+        $start = Carbon::parse($date->toDateString() . ' ' . Config::get('hr.working_hours.check_in_time', '08:00'));
+        $end = Carbon::parse($date->toDateString() . ' ' . Config::get('hr.working_hours.check_out_time', '17:00'));
+
+        $workedMinutes = (int) $checkInTime->diffInMinutes($checkOutTime);
+        $expectedMinutes = (int) $start->diffInMinutes($end);
+        $earlyMinutes = max(0, $expectedMinutes - $workedMinutes);
+
+        return [
+            'early_exit_minutes' => $earlyMinutes,
+            'actual_worked_hours' => round($workedMinutes / 60, 2),
+            'deduction_type' => $earlyMinutes > 0 ? 'minutes' : null,
+            'deduction_amount' => 0.0,
+        ];
+    }
+
     public function processAttendance(Attendance $attendance): Attendance
     {
         $date = $attendance->attendance_date instanceof Carbon
@@ -146,11 +175,9 @@ class AttendancePenaltyService
 
         $shift = $attendance->shift ?? $this->resolveShift($employee, $date);
 
-        if (!$shift) {
-            return $attendance;
+        if ($shift) {
+            $attendance->shift_id = $shift->id;
         }
-
-        $attendance->shift_id = $shift->id;
 
         $lateResult = ['late_minutes' => 0, 'deduction_type' => null, 'deduction_amount' => 0.0];
         $earlyResult = ['early_exit_minutes' => 0, 'actual_worked_hours' => 0.0, 'deduction_type' => null, 'deduction_amount' => 0.0];
@@ -160,14 +187,18 @@ class AttendancePenaltyService
                 ? $attendance->check_in_time
                 : Carbon::parse($date->toDateString() . ' ' . $attendance->check_in_time);
 
-            $lateResult = $this->calculateLatePenalty($shift, $checkIn, $date);
+            $lateResult = $shift
+                ? $this->calculateLatePenalty($shift, $checkIn, $date)
+                : $this->calculateLateFromConfig($checkIn, $date);
 
             if ($attendance->check_out_time) {
                 $checkOut = $attendance->check_out_time instanceof Carbon
                     ? $attendance->check_out_time
                     : Carbon::parse($date->toDateString() . ' ' . $attendance->check_out_time);
 
-                $earlyResult = $this->calculateEarlyExitPenalty($shift, $checkIn, $checkOut, $date);
+                $earlyResult = $shift
+                    ? $this->calculateEarlyExitPenalty($shift, $checkIn, $checkOut, $date)
+                    : $this->calculateEarlyExitFromConfig($checkIn, $checkOut, $date);
             }
         }
 
@@ -272,6 +303,76 @@ class AttendancePenaltyService
             default => 0.0,
         };
     }
+
+    public function calculateRecordDeduction(Attendance $attendance): array
+    {
+        $date = $attendance->attendance_date instanceof Carbon
+            ? $attendance->attendance_date
+            : Carbon::parse($attendance->attendance_date);
+
+        $baseSalary = (float) ($attendance->employee?->base_salary ?? 0);
+        $workingDays = $this->getWorkingDaysInMonth((int) $date->month, (int) $date->year);
+
+        if ($baseSalary <= 0 || $workingDays === 0) {
+            return ['amount' => 0.0, 'label' => '-'];
+        }
+
+        $dailyRate = $baseSalary / $workingDays;
+        $hourlyRate = $dailyRate / 8;
+        $minuteRate = $hourlyRate / 60;
+
+        $amount = 0.0;
+        $halfDays = 0;
+        $lateMinutes = (int) ($attendance->late_minutes ?? 0);
+        $earlyMinutes = (int) ($attendance->early_exit_minutes ?? 0);
+
+        $lateType = $attendance->applied_late_deduction_type;
+        if ($lateType === 'half_day') {
+            $halfDays += 1;
+        } elseif ($lateType === 'full_day') {
+            $amount += $dailyRate;
+        } elseif ($lateType === 'quarter_day') {
+            $halfDays += 0.5;
+        } elseif ($lateType === 'fixed_amount') {
+            $amount += (float) ($attendance->deduction_amount ?? 0);
+        } else {
+            $amount += $lateMinutes * $minuteRate;
+        }
+
+        $earlyType = $attendance->applied_early_deduction_type;
+        if ($earlyType === 'half_day') {
+            $halfDays += 1;
+        } elseif ($earlyType === 'full_day') {
+            $amount += $dailyRate;
+        } elseif ($earlyType === 'quarter_day') {
+            $halfDays += 0.5;
+        } elseif ($earlyType === 'fixed_amount') {
+            if ($lateType !== 'fixed_amount') {
+                $amount += (float) ($attendance->deduction_amount ?? 0);
+            }
+        } else {
+            $amount += $earlyMinutes * $minuteRate;
+        }
+
+        $amount += $halfDays * ($dailyRate / 2);
+
+        $label = [];
+        if ($lateMinutes > 0) {
+            $label[] = "{$lateMinutes} دقيقة تأخير";
+        }
+        if ($earlyMinutes > 0) {
+            $label[] = "{$earlyMinutes} دقيقة انصراف مبكر";
+        }
+        if (empty($label)) {
+            $label[] = $amount > 0 ? 'خصم تأخير/انصراف مبكر' : '-';
+        }
+
+        return [
+            'amount' => round($amount, 2),
+            'label' => implode('، ', $label),
+        ];
+    }
+
 
     private function getWorkingDaysInMonth(int $month, int $year): int
     {

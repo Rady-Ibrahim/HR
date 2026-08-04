@@ -158,7 +158,7 @@ class SalaryCalculationService
                     'component_name' => $comp['name'],
                     'component_id'   => $comp['id'],
                     'amount'         => $comp['amount'],
-                    'reason'         => $comp['reason'] ?? null,
+                    'notes'          => $comp['reason'] ?? null,
                 ]);
             }
 

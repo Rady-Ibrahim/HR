@@ -10,12 +10,19 @@ class SalaryComponentLog extends Model
     protected $table = 'salary_components_log';
 
     protected $fillable = [
-        'salary_id', 'component_type', 'component_name', 'component_id', 'amount', 'notes', 'reason'
+        'salary_id', 'component_type', 'component_name', 'component_id', 'amount', 'notes'
     ];
+
+    protected $appends = ['reason'];
 
     protected $casts = [
         'amount' => 'decimal:2',
     ];
+
+    public function getReasonAttribute(): ?string
+    {
+        return $this->notes;
+    }
 
     public function salary(): BelongsTo
     {

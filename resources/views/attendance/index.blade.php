@@ -124,6 +124,7 @@
                         <th>الانصراف</th>
                         <th>تأخير</th>
                         <th>انصراف مبكر</th>
+                        <th>الخصم</th>
                         <th>ساعات العمل</th>
                         <th>الحالة</th>
                         <th>الموقع</th>
@@ -131,7 +132,7 @@
                     </tr>
                 </thead>
                 <tbody id="attTable">
-                    <tr><td colspan="11" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>
+                    <tr><td colspan="12" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>
                 </tbody>
             </table>
         </div>
@@ -332,7 +333,7 @@ async function loadAttendance(page = 1) {
     document.getElementById('attPagInfo').textContent = `إجمالي: ${data.total}`;
     const all = data.data;
     if (!all.length) {
-        document.getElementById('attTable').innerHTML = '<tr><td colspan="11" class="text-center py-4 text-muted">لا توجد سجلات</td></tr>';
+        document.getElementById('attTable').innerHTML = '<tr><td colspan="12" class="text-center py-4 text-muted">لا توجد سجلات</td></tr>';
         return;
     }
     document.getElementById('attTable').innerHTML = all.map(a => `
@@ -343,7 +344,10 @@ async function loadAttendance(page = 1) {
             <td>${a.check_in_time ?? '-'}</td>
             <td>${a.check_out_time ?? '-'}</td>
             <td>${lateText(a.late_minutes ?? 0, a.applied_late_deduction_type)}</td>
-            <td>${a.early_exit_minutes ? `${a.early_exit_minutes} د` : '-'}</td>
+            <td>${a.early_exit_minutes ? earlyText(a.early_exit_minutes, a.applied_early_deduction_type) : '-'}</td>
+            <td>${a.salary_deduction_amount > 0
+                ? `<span class="fw-bold text-danger">-${Number(a.salary_deduction_amount).toLocaleString()} ج.م</span><br><small class="text-muted">${a.salary_deduction_label ?? ''}</small>`
+                : '-'}</td>
             <td>${a.actual_worked_hours ? Number(a.actual_worked_hours).toFixed(2) : (a.working_hours ?? '-')}</td>
             <td><span class="badge-status ${attBadge[a.status] || 'badge-draft'}">${attLabel[a.status] || a.status}</span></td>
             <td>${a.check_in_latitude ? `<span class="badge bg-info"><i class="fas fa-map-marker-alt"></i> GPS</span>` : '-'}</td>
@@ -528,7 +532,7 @@ async function loadTodayList(status) {
     document.getElementById('attPagInfo').textContent = `إجمالي اليوم: ${list.length}`;
     document.getElementById('attPagination').innerHTML = '';
     if (!list.length) {
-        document.getElementById('attTable').innerHTML = '<tr><td colspan="11" class="text-center py-4 text-muted">لا توجد سجلات</td></tr>';
+        document.getElementById('attTable').innerHTML = '<tr><td colspan="12" class="text-center py-4 text-muted">لا توجد سجلات</td></tr>';
         return;
     }
     document.getElementById('attTable').innerHTML = list.map(a => `
@@ -539,6 +543,7 @@ async function loadTodayList(status) {
             <td>${a.check_in_time ?? '-'}</td>
             <td>${a.check_out_time ?? '-'}</td>
             <td>${a.late_minutes != null ? `${a.late_minutes} دقيقة` : '-'}</td>
+            <td>-</td>
             <td>-</td>
             <td>-</td>
             <td><span class="badge-status ${attBadge[status] || 'badge-draft'}">${attLabel[status] || status}</span></td>
@@ -579,6 +584,14 @@ function minutesBetween(start, actual) {
 }
 
 function lateText(minutes, deductionType) {
+    const value = Number(minutes || 0);
+    if (deductionType && deductionType !== 'minutes') {
+        return `${value} د - ${deductionLabels[deductionType] || deductionType}`;
+    }
+    return `${value} دقيقة`;
+}
+
+function earlyText(minutes, deductionType) {
     const value = Number(minutes || 0);
     if (deductionType && deductionType !== 'minutes') {
         return `${value} د - ${deductionLabels[deductionType] || deductionType}`;
