@@ -209,7 +209,8 @@ class AttendancePenaltyService
 
         $halfDayCount = 0;
         $regularLateMinutes = 0;
-        $earlyExitDeduction = 0.0;
+        $regularEarlyMinutes = 0;
+        $fixedAmountDeduction = 0.0;
 
         foreach ($records as $record) {
             $deductionType = $record->applied_late_deduction_type;
@@ -221,38 +222,44 @@ class AttendancePenaltyService
             } elseif ($deductionType === 'quarter_day') {
                 $halfDayCount += 0.5;
             } elseif ($deductionType === 'fixed_amount') {
-                $regularLateMinutes += $record->late_minutes ?? 0;
+                $fixedAmountDeduction += (float) ($record->deduction_amount ?? 0);
             } else {
                 $regularLateMinutes += $record->late_minutes ?? 0;
             }
 
-            if ($record->applied_early_deduction_type === 'half_day') {
+            $earlyType = $record->applied_early_deduction_type;
+
+            if ($earlyType === 'half_day') {
                 $halfDayCount++;
-            } elseif ($record->applied_early_deduction_type === 'full_day') {
+            } elseif ($earlyType === 'full_day') {
                 $absentDeduction += $dailyRate;
-            } elseif ($record->applied_early_deduction_type === 'quarter_day') {
+            } elseif ($earlyType === 'quarter_day') {
                 $halfDayCount += 0.5;
-            } elseif ($record->applied_early_deduction_type === 'fixed_amount') {
-                $earlyExitDeduction += (float) $record->deduction_amount;
+            } elseif ($earlyType === 'fixed_amount') {
+                if ($deductionType !== 'fixed_amount') {
+                    $fixedAmountDeduction += (float) ($record->deduction_amount ?? 0);
+                }
+            } else {
+                $regularEarlyMinutes += $record->early_exit_minutes ?? 0;
             }
         }
 
         $halfDayDeduction = $halfDayCount * ($dailyRate / 2);
-        $lateDeduction = $regularLateMinutes * $minuteRate;
+        $lateDeduction = ($regularLateMinutes + $regularEarlyMinutes) * $minuteRate;
 
-        $totalAmount = round($absentDeduction + $halfDayDeduction + $lateDeduction + $earlyExitDeduction, 2);
+        $totalAmount = round($absentDeduction + $halfDayDeduction + $lateDeduction + $fixedAmountDeduction, 2);
 
         return [
             'amount' => $totalAmount,
             'label' => sprintf(
-                'خصم حضور: %d غياب، %d نصف يوم، %d دقيقة تأخير',
+                'خصم حضور: %d غياب، %d نصف يوم، %d دقيقة تأخير/انصراف مبكر',
                 $absentDays,
                 (int) $halfDayCount,
-                $regularLateMinutes
+                $regularLateMinutes + $regularEarlyMinutes
             ),
             'absent' => $absentDays,
             'half_days' => (int) $halfDayCount,
-            'late_minutes' => $regularLateMinutes,
+            'late_minutes' => $regularLateMinutes + $regularEarlyMinutes,
         ];
     }
 

@@ -295,7 +295,7 @@ async function saveGroup() {
     };
 
     const url = id ? '/chat-groups/' + id : '/chat-groups';
-    const r = await apiFetch(url, { method: id ? 'PUT' : 'POST', body: JSON.stringify(id ? { name: data.name, description: data.description } : data) });
+    const r = await apiFetch(url, { method: id ? 'PUT' : 'POST', body: JSON.stringify(data) });
     if (r.success) {
         bootstrap.Modal.getInstance(document.getElementById('groupModal')).hide();
         showAlert(id ? 'تم تحديث المجموعة' : 'تم إنشاء المجموعة');

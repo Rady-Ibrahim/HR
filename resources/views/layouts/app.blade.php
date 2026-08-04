@@ -847,7 +847,7 @@
             background: #fff;
             border: 1.5px solid #e8ebf5;
             border-radius: 10px;
-            max-height: 220px;
+            max-height: 320px;
             overflow-y: auto;
             box-shadow: 0 6px 20px rgba(0, 0, 0, .12);
             display: none;
@@ -1522,6 +1522,7 @@ ${bodyHtml}
                 dropdown.innerHTML = filtered.map((item, i) =>
                     `<div class="ac-option${i === 0 ? ' ac-active' : ''}" data-value="${item.id}">${escapeLookupHtml(lookupConfig[lookupType].label(item))}</div>`
                 ).join('');
+                positionDropdown();
                 dropdown.classList.add('show');
                 open = true;
                 dropdown.querySelectorAll('.ac-option').forEach(opt => {
@@ -1535,6 +1536,49 @@ ${bodyHtml}
                     });
                 });
             }
+
+            function positionDropdown() {
+                if (!dropdown) return;
+                const rect = container.getBoundingClientRect();
+                const vw = window.innerWidth;
+                const vh = window.innerHeight;
+                const ddMaxHeight = 320;
+                let width = Math.max(rect.width, 300);
+                if (width > vw - 16) width = vw - 16;
+
+                const isRTL = getComputedStyle(document.documentElement).direction === 'rtl';
+
+                if (isRTL) {
+                    let right = vw - rect.right;
+                    if (right + width > vw - 8) right = Math.max(8, vw - width - 8);
+                    if (right < 8) right = 8;
+                    dropdown.style.right = right + 'px';
+                    dropdown.style.left = 'auto';
+                } else {
+                    let left = rect.left;
+                    if (left + width > vw - 8) left = Math.max(8, vw - width - 8);
+                    if (left < 8) left = 8;
+                    dropdown.style.left = left + 'px';
+                    dropdown.style.right = 'auto';
+                }
+
+                const spaceBelow = vh - rect.bottom;
+                const spaceAbove = rect.top;
+                const openUp = spaceBelow < 180 && spaceAbove > spaceBelow;
+
+                dropdown.style.position = 'fixed';
+                dropdown.style.width = width + 'px';
+                dropdown.style.maxHeight = Math.max(120, Math.min(ddMaxHeight, (openUp ? spaceAbove : spaceBelow) - 8)) + 'px';
+                dropdown.style.top = openUp ? 'auto' : (rect.bottom + 2) + 'px';
+                dropdown.style.bottom = openUp ? (vh - rect.top + 2) + 'px' : 'auto';
+            }
+
+            window.addEventListener('scroll', e => {
+                if (open && dropdown && e.target !== dropdown) positionDropdown();
+            }, true);
+            window.addEventListener('resize', () => {
+                if (open && dropdown) positionDropdown();
+            });
 
             function hideDropdown() {
                 if (dropdown) dropdown.classList.remove('show');

@@ -187,9 +187,40 @@ class ChatGroupController
             'description' => 'nullable|string|max:2000',
             'avatar' => 'nullable|string|max:255',
             'status' => 'sometimes|in:active,archived',
+            'member_ids' => 'sometimes|array',
+            'member_ids.*' => 'exists:employees,id',
         ]);
 
+        $memberIds = $validated['member_ids'] ?? null;
+        unset($validated['member_ids']);
+
         $group->update($validated);
+
+        if (is_array($memberIds)) {
+            if (!in_array($group->created_by_id, $memberIds)) {
+                $memberIds[] = $group->created_by_id;
+            }
+
+            $existingMembers = $group->employees()->pluck('employee_id')->toArray();
+
+            $toAttach = array_diff($memberIds, $existingMembers);
+            if (!empty($toAttach)) {
+                $now = now();
+                $pivotData = [];
+                foreach ($toAttach as $empId) {
+                    $pivotData[$empId] = [
+                        'role' => $empId === $group->created_by_id ? 'admin' : 'member',
+                        'joined_at' => $now,
+                    ];
+                }
+                $group->employees()->attach($pivotData);
+            }
+
+            $toDetach = array_diff($existingMembers, $memberIds);
+            if (!empty($toDetach)) {
+                $group->employees()->detach($toDetach);
+            }
+        }
 
         return response()->json([
             'success' => true,

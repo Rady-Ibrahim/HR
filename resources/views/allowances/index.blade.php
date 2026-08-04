@@ -53,7 +53,11 @@
                 <form id="allForm">
                     <input type="hidden" id="allId">
                     <div class="row g-3">
-                        <div class="col-12"><label class="form-label">الموظف *</label><select name="employee_id" id="alf_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select></div>
+                        <div class="col-12"><label class="form-label">الموظف *</label>
+                            <div class="position-relative">
+                                <input type="text" name="employee_id" id="alf_emp" class="form-control" placeholder="ابحث بالاسم أو الكود..." required>
+                            </div>
+                        </div>
                         <div class="col-md-6"><label class="form-label">نوع البدل / اسم الخدمة *</label>
                             <input type="text" name="allowance_type" id="alf_type" class="form-control" list="allowanceTypeSuggestions" required placeholder="مثال: بدل إجازات، ساعات إضافية، مواصلات">
                             <small class="text-muted">اكتب نوعًا جديدًا أو اختر من المقترحات</small>
@@ -97,6 +101,7 @@
 @push('scripts')
 <script>
 let allDeleteId=null, allPage=1;
+let allEmpSearch=null, allEmployees=[];
 const defaultAllowanceTypes = ['مواصلات', 'سكن', 'وجبات', 'هاتف', 'بدل إجازات', 'ساعات إضافية', 'بدل انتقال', 'أخرى'];
 
 async function loadAllowanceTypeSuggestions() {
@@ -151,8 +156,13 @@ function openAddModal() {
     document.getElementById('alf_month').value='{{ date("n") }}';
     document.getElementById('alf_year').value='{{ date("Y") }}';
     document.getElementById('alf_type').value='';
+    allEmpSearch.reset();
     loadAllowanceTypeSuggestions();
     new bootstrap.Modal(document.getElementById('allModal')).show();
+}
+function setAllEmpValue(empId) {
+    const emp = allEmployees.find(e => e.id === parseInt(empId));
+    allEmpSearch.setValue(empId, emp ? `${emp.name}${emp.employee_code ? ' - ' + emp.employee_code : ''}` : String(empId));
 }
 async function openEditModal(id) {
     document.getElementById('allModalTitle').innerHTML='<i class="fas fa-edit me-2"></i> تعديل البدل';
@@ -160,7 +170,7 @@ async function openEditModal(id) {
     new bootstrap.Modal(document.getElementById('allModal')).show();
     const r=await apiFetch('/allowances/'+id); if(!r.success) return; const a=r.data;
     document.getElementById('allId').value=a.id;
-    document.getElementById('alf_emp').value=a.employee_id;
+    setAllEmpValue(a.employee_id);
     document.getElementById('alf_type').value=a.allowance_type??'';
     document.getElementById('alf_amount').value=a.amount;
     document.getElementById('alf_month').value=a.month;
@@ -248,6 +258,12 @@ function escHtml(str) {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-document.addEventListener('DOMContentLoaded', () => { loadAllowanceTypeSuggestions(); loadAllowances(); });
+async function initAllEmpSearch() {
+    allEmpSearch = createSearchableSelect(document.getElementById('alf_emp'), 'employees');
+    allEmployees = await getLookupRows('employees');
+    allEmpSearch.setItems(allEmployees);
+}
+
+document.addEventListener('DOMContentLoaded', () => { initAllEmpSearch(); loadAllowanceTypeSuggestions(); loadAllowances(); });
 </script>
 @endpush

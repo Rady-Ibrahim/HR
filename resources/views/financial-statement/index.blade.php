@@ -16,7 +16,9 @@
         <div class="row g-2 align-items-end">
             <div class="col-md-4">
                 <label class="form-label">الموظف *</label>
-                <select id="fs_employee_id" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select>
+                <div class="position-relative">
+                    <input type="text" name="employee_id" id="fs_emp_search" class="form-control" placeholder="ابحث بالاسم أو الكود..." required>
+                </div>
             </div>
             <div class="col-md-3">
                 <label class="form-label">الشهر</label>
@@ -121,9 +123,23 @@
 <script>
 const salStatuses = { draft:'مسودة', pending_approval:'بانتظار الاعتماد', approved:'معتمد', paid:'مدفوع', rejected:'مرفوض' };
 let lastStatement = null;
+let fsEmpSearch = null;
+let fsEmployees = [];
+
+async function initFsEmpSearch() {
+    fsEmpSearch = createSearchableSelect(document.getElementById('fs_emp_search'), 'employees');
+    fsEmployees = await getLookupRows('employees');
+    fsEmpSearch.setItems(fsEmployees);
+}
+
+function setFsEmpValue(empId) {
+    if (!empId) { fsEmpSearch.reset(); return; }
+    const emp = fsEmployees.find(e => e.id === parseInt(empId));
+    fsEmpSearch.setValue(empId, emp ? `${emp.name}${emp.employee_code ? ' - ' + emp.employee_code : ''}` : String(empId));
+}
 
 async function loadStatement() {
-    const empId = document.getElementById('fs_employee_id').value;
+    const empId = fsEmpSearch.getValue();
     if (!empId) { showAlert('اختر الموظف أولاً', 'danger'); return; }
     const month = document.getElementById('fs_month').value;
     const year = document.getElementById('fs_year').value;
@@ -139,7 +155,7 @@ async function loadStatement() {
     document.getElementById('fsEmpName').textContent = `${r.employee.name} (${r.employee.employee_code}) - ${r.employee.department??''}`;
     document.getElementById('fsBaseSalary').textContent = Number(r.employee.base_salary).toLocaleString() + ' ج.م';
     const additions = (r.summary.incentives_total||0) + (r.summary.allowances_total||0) + (r.summary.commissions_total||0) + (r.summary.points_credit_total||0);
-    const deductions = (r.summary.deductions_total||0) + (r.summary.advances_installment_total||0) + (r.summary.violations_total||0) + (r.summary.points_debit_total||0);
+    const deductions = (r.summary.deductions_total||0) + (r.summary.advances_installment_total||0) + (r.summary.violations_total||0) + (r.summary.points_debit_total||0) + (r.summary.attendance_deduction_total||0);
     document.getElementById('fsTotalAdditions').textContent = '+' + Number(additions).toLocaleString() + ' ج.م';
     document.getElementById('fsTotalDeductions').textContent = '-' + Number(deductions).toLocaleString() + ' ج.م';
     document.getElementById('fsNet').textContent = Number(r.summary.estimated_net||0).toLocaleString() + ' ج.م';
@@ -185,7 +201,9 @@ async function loadStatement() {
     const ded = r.data.deductions || [];
     document.getElementById('fsDedCount').textContent = `(${ded.length})`;
     document.getElementById('fsDeductions').innerHTML = ded.length
-        ? ded.map(d => `<tr><td>${d.deduction_type}</td><td>${d.reason||'-'}</td><td class="text-danger">${Number(d.amount).toLocaleString()} ج.م</td><td><span class="badge-status ${d.status==='approved'?'badge-active':d.status==='rejected'?'badge-rejected':'badge-pending'}">${d.status==='approved'?'معتمد':d.status==='rejected'?'مرفوض':'معلق'}</span></td></tr>`).join('')
+        ? ded.map(d => `<tr><td>${d.deduction_type}</td><td>${d.reason||'-'}</td><td class="text-danger">${Number(d.amount).toLocaleString()} ج.م</td><td>${d.status==='computed'
+            ? '<span class="badge-status badge-active">محسوب</span>'
+            : `<span class="badge-status ${d.status==='approved'?'badge-active':d.status==='rejected'?'badge-rejected':'badge-pending'}">${d.status==='approved'?'معتمد':d.status==='rejected'?'مرفوض':'معلق'}</span>`}</td></tr>`).join('')
         : '<tr><td colspan="4" class="text-muted text-center">لا توجد خصومات</td></tr>';
 
     // Advances
@@ -212,8 +230,8 @@ function printStatementPDF() {
     const d = r.data || {};
 
     const additions = (s.incentives_total||0) + (s.allowances_total||0) + (s.commissions_total||0) + (s.points_credit_total||0);
-    const deductions = (s.deductions_total||0) + (s.advances_installment_total||0) + (s.violations_total||0) + (s.points_debit_total||0);
-    const statusMap = { approved:'معتمد', rejected:'مرفوض', pending:'معلق', active:'نشط' };
+    const deductions = (s.deductions_total||0) + (s.advances_installment_total||0) + (s.violations_total||0) + (s.points_debit_total||0) + (s.attendance_deduction_total||0);
+    const statusMap = { approved:'معتمد', rejected:'مرفوض', pending:'معلق', active:'نشط', computed:'محسوب' };
     const st = st2 => statusMap[st2] || st2;
 
     let html = `
@@ -289,15 +307,14 @@ function printStatementPDF() {
     printHTML('كشف حساب موظف', html);
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
+    await initFsEmpSearch();
     // Auto-load if employee_id is pre-selected (from URL param)
     const params = new URLSearchParams(window.location.search);
     const empId = params.get('employee_id');
     if (empId) {
-        setTimeout(() => {
-            const sel = document.getElementById('fs_employee_id');
-            if (sel) { sel.value = empId; loadStatement(); }
-        }, 500);
+        setFsEmpValue(empId);
+        loadStatement();
     }
 });
 </script>

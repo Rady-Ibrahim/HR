@@ -11,12 +11,15 @@ use App\Models\Employee;
 use App\Models\EmployeePoint;
 use App\Models\Incentive;
 use App\Models\Salary;
+use App\Services\AttendancePenaltyService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class FinancialController
 {
+    public function __construct(private AttendancePenaltyService $attendancePenaltyService) {}
+
     /**
      * Mobile: financial transactions for the logged-in employee.
      * GET /api/me/financials?month=7&year=2026
@@ -144,6 +147,22 @@ class FinancialController
                 'direction' => $p->type,
             ]);
 
+        $attendanceSummary = $this->attendancePenaltyService
+            ->calculateAttendanceDeductionForSalary($employee, $month, $year, (float) $employee->base_salary);
+        $attendanceDeduction = (float) $attendanceSummary['amount'];
+
+        if ($attendanceDeduction > 0) {
+            $deductions->push([
+                'id' => null,
+                'type' => 'attendance_deduction',
+                'deduction_type' => 'خصم تأخير / انصراف مبكر',
+                'amount' => $attendanceDeduction,
+                'reason' => $attendanceSummary['label'],
+                'date' => null,
+                'status' => 'computed',
+            ]);
+        }
+
         $pointsCreditTotal = (float) EmployeePoint::where('employee_id', $employee->id)
             ->where('month', $month)->where('year', $year)
             ->where('type', 'credit')->sum('total_amount');
@@ -166,6 +185,7 @@ class FinancialController
                 ->where('remaining_installments', '>', 0)
                 ->sum('installment_amount'),
             'violations_total' => (float) collect($violations)->where('status', 'pending')->sum('amount'),
+            'attendance_deduction_total' => $attendanceDeduction,
             'salary_net' => $salary ? (float) $salary->net_salary : null,
             'salary_gross' => $salary ? (float) $salary->gross_salary : null,
             'salary_status' => $salary?->status,
@@ -181,7 +201,8 @@ class FinancialController
                 - $summary['deductions_total']
                 - $summary['advances_installment_total']
                 - $summary['violations_total']
-                - $summary['points_debit_total'];
+                - $summary['points_debit_total']
+                - $summary['attendance_deduction_total'];
             $summary['estimated_net'] = max(0, round($estimatedNet, 2));
         } else {
             $summary['estimated_net'] = (float) $salary->net_salary;

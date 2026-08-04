@@ -56,14 +56,14 @@
                                 <input type="text" name="employee_id" id="cvf_emp" class="form-control" placeholder="ابحث بالاسم أو الكود..." required>
                             </div>
                         </div>
-                        <div class="col-md-6"><label class="form-label">رقم السيارة</label><input type="text" name="car_number" id="cvf_car" class="form-control"></div>
+                        <div class="col-md-6"><label class="form-label">رقم السيارة</label><input type="text" name="vehicle_number" id="cvf_car" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">نوع المخالفة *</label>
                             <select name="violation_type" id="cvf_type" class="form-select" required>
                                 <option value="speeding">سرعة زائدة</option><option value="parking">مخالفة وقوف</option>
                                 <option value="accident">حادث</option><option value="red_light">إشارة حمراء</option><option value="other">أخرى</option>
                             </select>
                         </div>
-                        <div class="col-md-6"><label class="form-label">مبلغ المخالفة *</label><div class="input-group"><input type="number" name="amount" id="cvf_amount" class="form-control" required><span class="input-group-text">ج.م</span></div></div>
+                        <div class="col-md-6"><label class="form-label">مبلغ المخالفة *</label><div class="input-group"><input type="number" name="fine_amount" id="cvf_amount" class="form-control" required><span class="input-group-text">ج.م</span></div></div>
                         <div class="col-md-6"><label class="form-label">تاريخ المخالفة *</label><input type="date" name="violation_date" id="cvf_date" class="form-control" required value="{{ date('Y-m-d') }}"></div>
                         <div class="col-md-6"><label class="form-label">موقع المخالفة</label><input type="text" name="location" id="cvf_location" class="form-control"></div>
                         <div class="col-12"><label class="form-label">السبب</label><textarea name="reason" id="cvf_reason" class="form-control" rows="2"></textarea></div>
@@ -114,9 +114,9 @@ async function loadViolations(page=1) {
     document.getElementById('violationsTable').innerHTML = data.map(v=>`
         <tr>
             <td>${v.employee?.name??'-'}</td>
-            <td><span class="fw-bold">${v.car_number??v.employee?.car_number??'-'}</span></td>
+            <td><span class="fw-bold">${v.vehicle_number??v.employee?.car_number??'-'}</span></td>
             <td>${cvTypes[v.violation_type]||v.violation_type}</td>
-            <td class="fw-bold text-danger">${Number(v.amount).toLocaleString()} ج.م</td>
+            <td class="fw-bold text-danger">${Number(v.fine_amount).toLocaleString()} ج.م</td>
             <td>${v.violation_date?new Date(v.violation_date).toLocaleDateString('ar-EG'):'-'}</td>
             <td>${v.reason?v.reason.substring(0,40)+(v.reason.length>40?'…':''):'-'}</td>
             <td><span class="badge-status ${cvBadges[v.status]||'badge-pending'}">${cvStatuses[v.status]||v.status}</span></td>
@@ -153,9 +153,9 @@ async function openEditModal(id) {
     const r=await apiFetch('/car-violations/'+id); if(!r.success) return; const v=r.data;
     document.getElementById('cvId').value=v.id;
     setCvEmpValue(v.employee_id);
-    document.getElementById('cvf_car').value=v.car_number??'';
+    document.getElementById('cvf_car').value=v.vehicle_number??'';
     document.getElementById('cvf_type').value=v.violation_type;
-    document.getElementById('cvf_amount').value=v.amount;
+    document.getElementById('cvf_amount').value=v.fine_amount;
     document.getElementById('cvf_date').value=v.violation_date?v.violation_date.substring(0,10):'';
     document.getElementById('cvf_location').value=v.location??'';
     document.getElementById('cvf_reason').value=v.reason??'';
@@ -163,8 +163,8 @@ async function openEditModal(id) {
 async function saveViolation() {
     const id=document.getElementById('cvId').value;
     const data=Object.fromEntries(new FormData(document.getElementById('cvForm')));
-    data.amount=parseFloat(data.amount); data.employee_id=parseInt(data.employee_id);
-    if(!data.car_number) delete data.car_number;
+    data.fine_amount=parseFloat(data.fine_amount); data.employee_id=parseInt(data.employee_id);
+    if(!data.vehicle_number) delete data.vehicle_number;
     const r=await apiFetch(id?`/car-violations/${id}`:'/car-violations',{method:id?'PUT':'POST',body:JSON.stringify(data)});
     if(r.success){bootstrap.Modal.getInstance(document.getElementById('cvModal')).hide();showAlert(id?'تم التحديث':'تم الإضافة');loadViolations(cvPage);}
     else showAlert(r.message||'فشل الحفظ','danger');
