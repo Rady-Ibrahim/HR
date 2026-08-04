@@ -51,7 +51,11 @@
                 <form id="cvForm">
                     <input type="hidden" id="cvId">
                     <div class="row g-3">
-                        <div class="col-md-6"><label class="form-label">الموظف *</label><select name="employee_id" id="cvf_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select></div>
+                        <div class="col-md-6"><label class="form-label">الموظف *</label>
+                            <div class="position-relative">
+                                <input type="text" name="employee_id" id="cvf_emp" class="form-control" placeholder="ابحث بالاسم أو الكود..." required>
+                            </div>
+                        </div>
                         <div class="col-md-6"><label class="form-label">رقم السيارة</label><input type="text" name="car_number" id="cvf_car" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">نوع المخالفة *</label>
                             <select name="violation_type" id="cvf_type" class="form-select" required>
@@ -90,6 +94,7 @@
 @push('scripts')
 <script>
 let cvDeleteId=null, cvPage=1;
+let cvEmpSearch=null, cvEmployees=[];
 const cvTypes   = { speeding:'سرعة زائدة', parking:'وقوف خاطئ', accident:'حادث', red_light:'إشارة حمراء', other:'أخرى' };
 const cvStatuses = { pending:'معلق', deducted:'تم الخصم', waived:'إعفاء' };
 const cvBadges   = { pending:'badge-pending', deducted:'badge-rejected', waived:'badge-approved' };
@@ -135,14 +140,19 @@ function openAddModal() {
     document.getElementById('cvId').value=''; document.getElementById('cvForm').reset();
     document.getElementById('cvModalTitle').innerHTML='<i class="fas fa-car-crash me-2 text-danger"></i> إضافة مخالفة جديدة';
     document.getElementById('cvf_date').value='{{ date("Y-m-d") }}';
+    cvEmpSearch.reset();
     new bootstrap.Modal(document.getElementById('cvModal')).show();
+}
+function setCvEmpValue(empId) {
+    const emp = cvEmployees.find(e => e.id === parseInt(empId));
+    cvEmpSearch.setValue(empId, emp ? `${emp.name}${emp.employee_code ? ' - ' + emp.employee_code : ''}` : String(empId));
 }
 async function openEditModal(id) {
     document.getElementById('cvModalTitle').innerHTML='<i class="fas fa-edit me-2"></i> تعديل المخالفة';
     new bootstrap.Modal(document.getElementById('cvModal')).show();
     const r=await apiFetch('/car-violations/'+id); if(!r.success) return; const v=r.data;
     document.getElementById('cvId').value=v.id;
-    document.getElementById('cvf_emp').value=v.employee_id;
+    setCvEmpValue(v.employee_id);
     document.getElementById('cvf_car').value=v.car_number??'';
     document.getElementById('cvf_type').value=v.violation_type;
     document.getElementById('cvf_amount').value=v.amount;
@@ -178,6 +188,13 @@ document.getElementById('cvDeleteBtn').addEventListener('click', async()=>{
     cvDeleteId=null;
 });
 function resetCvFilter() { ['cvSearch','cvType','cvStatus'].forEach(id=>document.getElementById(id).value=''); loadViolations(); }
-document.addEventListener('DOMContentLoaded', loadViolations);
+
+async function initCvEmpSearch() {
+    cvEmpSearch = createSearchableSelect(document.getElementById('cvf_emp'), 'employees');
+    cvEmployees = await getLookupRows('employees');
+    cvEmpSearch.setItems(cvEmployees);
+}
+
+document.addEventListener('DOMContentLoaded', () => { initCvEmpSearch(); loadViolations(); });
 </script>
 @endpush

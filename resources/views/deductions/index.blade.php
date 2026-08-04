@@ -53,7 +53,11 @@
                 <form id="dedForm">
                     <input type="hidden" id="dedId">
                     <div class="row g-3">
-                        <div class="col-12"><label class="form-label">الموظف *</label><select name="employee_id" id="df_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select></div>
+                        <div class="col-12"><label class="form-label">الموظف *</label>
+                            <div class="position-relative">
+                                <input type="text" name="employee_id" id="df_emp" class="form-control" placeholder="ابحث بالاسم أو الكود..." required>
+                            </div>
+                        </div>
                         <div class="col-md-6"><label class="form-label">نوع الخصم *</label>
                             <select name="deduction_type" id="df_type" class="form-select" required>
                                 <option value="absence">غياب</option><option value="late">تأخر</option>
@@ -91,6 +95,7 @@
 @push('scripts')
 <script>
 let dedDeleteId=null, dedPage=1;
+let dedEmpSearch=null, dedEmployees=[];
 const dedTypes = { absence:'غياب', late:'تأخر', penalty:'جزاء', other:'أخرى' };
 
 async function loadDeductions(page=1) {
@@ -135,14 +140,19 @@ function openAddModal() {
     document.getElementById('dedModalTitle').innerHTML='<i class="fas fa-minus-circle me-2 text-danger"></i> إضافة خصم جديد';
     document.getElementById('df_month').value='{{ date("n") }}';
     document.getElementById('df_year').value='{{ date("Y") }}';
+    dedEmpSearch.reset();
     new bootstrap.Modal(document.getElementById('dedModal')).show();
+}
+function setDedEmpValue(empId) {
+    const emp = dedEmployees.find(e => e.id === parseInt(empId));
+    dedEmpSearch.setValue(empId, emp ? `${emp.name}${emp.employee_code ? ' - ' + emp.employee_code : ''}` : String(empId));
 }
 async function openEditModal(id) {
     document.getElementById('dedModalTitle').innerHTML='<i class="fas fa-edit me-2"></i> تعديل الخصم';
     new bootstrap.Modal(document.getElementById('dedModal')).show();
     const r=await apiFetch('/deductions/'+id); if(!r.success) return; const d=r.data;
     document.getElementById('dedId').value=d.id;
-    document.getElementById('df_emp').value=d.employee_id;
+    setDedEmpValue(d.employee_id);
     document.getElementById('df_type').value=d.deduction_type;
     document.getElementById('df_amount').value=d.amount;
     document.getElementById('df_month').value=d.month;
@@ -232,6 +242,12 @@ function escHtml(str) {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-document.addEventListener('DOMContentLoaded', loadDeductions);
+async function initDedEmpSearch() {
+    dedEmpSearch = createSearchableSelect(document.getElementById('df_emp'), 'employees');
+    dedEmployees = await getLookupRows('employees');
+    dedEmpSearch.setItems(dedEmployees);
+}
+
+document.addEventListener('DOMContentLoaded', () => { initDedEmpSearch(); loadDeductions(); });
 </script>
 @endpush

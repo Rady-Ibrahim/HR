@@ -51,7 +51,11 @@
                 <form id="advForm">
                     <input type="hidden" id="advId">
                     <div class="row g-3">
-                        <div class="col-12"><label class="form-label">الموظف *</label><select name="employee_id" id="af_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select></div>
+                        <div class="col-12"><label class="form-label">الموظف *</label>
+                            <div class="position-relative">
+                                <input type="text" name="employee_id" id="af_emp" class="form-control" placeholder="ابحث بالاسم أو الكود..." required>
+                            </div>
+                        </div>
                         <div class="col-md-6"><label class="form-label">المبلغ *</label><div class="input-group"><input type="number" name="amount" id="af_amount" class="form-control" required><span class="input-group-text">ج.م</span></div></div>
                         <div class="col-md-6"><label class="form-label">عدد الأقساط (شهر)</label><input type="number" name="installments" id="af_installments" class="form-control" min="1" value="1"></div>
                         <div class="col-md-6"><label class="form-label">تاريخ الطلب</label><input type="date" name="request_date" id="af_request_date" class="form-control" value="{{ date('Y-m-d') }}"></div>
@@ -84,6 +88,7 @@
 @push('scripts')
 <script>
 let advDeleteId=null, advPage=1;
+let advEmpSearch=null, advEmployees=[];
 const advStatuses = { pending:'معلق', active:'معتمد', paid:'مسدد', partially_paid:'مسدد جزئياً' };
 const advBadges   = { pending:'badge-pending', active:'badge-active', paid:'badge-approved', partially_paid:'badge-approved' };
 
@@ -128,14 +133,19 @@ function openAddModal() {
     document.getElementById('advModalTitle').innerHTML='<i class="fas fa-hand-holding-usd me-2"></i> إضافة سلفة جديدة';
     document.getElementById('af_request_date').value='{{ date("Y-m-d") }}';
     document.getElementById('af_installments').value='1';
+    advEmpSearch.reset();
     new bootstrap.Modal(document.getElementById('advModal')).show();
+}
+function setAdvEmpValue(empId) {
+    const emp = advEmployees.find(e => e.id === parseInt(empId));
+    advEmpSearch.setValue(empId, emp ? `${emp.name}${emp.employee_code ? ' - ' + emp.employee_code : ''}` : String(empId));
 }
 async function openEditModal(id) {
     document.getElementById('advModalTitle').innerHTML='<i class="fas fa-edit me-2"></i> تعديل السلفة';
     new bootstrap.Modal(document.getElementById('advModal')).show();
     const r=await apiFetch('/advances/'+id); if(!r.success) return; const a=r.data;
     document.getElementById('advId').value=a.id;
-    document.getElementById('af_emp').value=a.employee_id;
+    setAdvEmpValue(a.employee_id);
     document.getElementById('af_amount').value=a.amount;
     document.getElementById('af_installments').value=a.installments_count??1;
     document.getElementById('af_request_date').value=a.advance_date?a.advance_date.substring(0,10):'';
@@ -225,6 +235,12 @@ function escHtml(str) {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-document.addEventListener('DOMContentLoaded', loadAdvances);
+async function initAdvEmpSearch() {
+    advEmpSearch = createSearchableSelect(document.getElementById('af_emp'), 'employees');
+    advEmployees = await getLookupRows('employees');
+    advEmpSearch.setItems(advEmployees);
+}
+
+document.addEventListener('DOMContentLoaded', () => { initAdvEmpSearch(); loadAdvances(); });
 </script>
 @endpush

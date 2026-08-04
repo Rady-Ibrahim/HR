@@ -388,8 +388,8 @@ async function loadLeaves(page = 1) {
         <tr>
             <td>${l.employee?.name ?? '-'}</td>
             <td>${LEAVE_TYPE_LABELS[l.request_type] ?? l.request_type ?? '-'}</td>
-            <td>${l.from_date}</td>
-            <td>${l.to_date}</td>
+            <td>${l.from_date ? l.from_date.substring(0,10) : '-'}</td>
+            <td>${l.to_date ? l.to_date.substring(0,10) : '-'}</td>
             <td>${l.reason ?? '-'}</td>
             <td><span class="badge-status ${l.approval_status === 'approved' ? 'badge-active' : l.approval_status === 'rejected' ? 'badge-rejected' : 'badge-pending'}">${l.approval_status === 'approved' ? 'معتمد' : l.approval_status === 'rejected' ? 'مرفوض' : 'معلق'}</span></td>
             <td>${l.approval_status === 'pending' ? `

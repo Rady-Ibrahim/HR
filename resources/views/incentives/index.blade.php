@@ -53,7 +53,11 @@
                 <form id="incForm">
                     <input type="hidden" id="incId">
                     <div class="row g-3">
-                        <div class="col-12"><label class="form-label">الموظف *</label><select name="employee_id" id="if2_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select></div>
+                        <div class="col-12"><label class="form-label">الموظف *</label>
+                            <div class="position-relative">
+                                <input type="text" name="employee_id" id="if2_emp" class="form-control" placeholder="ابحث بالاسم أو الكود..." required>
+                            </div>
+                        </div>
                         <div class="col-md-6"><label class="form-label">نوع الحافز *</label>
                             <select name="incentive_type" id="if2_type" class="form-select" required>
                                 <option value="performance">أداء</option><option value="attendance">حضور</option>
@@ -93,6 +97,7 @@
 @push('scripts')
 <script>
 let incDeleteId=null, incPage=1;
+let incEmpSearch=null, incEmployees=[];
 const incTypes = { performance:'أداء', attendance:'حضور', sales:'مبيعات', overtime:'إضافي', other:'أخرى' };
 
 async function loadIncentives(page=1) {
@@ -142,7 +147,13 @@ function openAddModal() {
     document.getElementById('incModalTitle').innerHTML='<i class="fas fa-star me-2"></i> إضافة حافز جديد';
     document.getElementById('if2_month').value='{{ date("n") }}';
     document.getElementById('if2_year').value='{{ date("Y") }}';
+    incEmpSearch.reset();
     new bootstrap.Modal(document.getElementById('incModal')).show();
+}
+
+function setIncEmpValue(empId) {
+    const emp = incEmployees.find(e => e.id === parseInt(empId));
+    incEmpSearch.setValue(empId, emp ? `${emp.name}${emp.employee_code ? ' - ' + emp.employee_code : ''}` : String(empId));
 }
 
 async function openEditModal(id) {
@@ -152,7 +163,7 @@ async function openEditModal(id) {
     if (!r.success) return;
     const i = r.data;
     document.getElementById('incId').value       = i.id;
-    document.getElementById('if2_emp').value     = i.employee_id;
+    setIncEmpValue(i.employee_id);
     document.getElementById('if2_type').value    = i.incentive_type;
     document.getElementById('if2_amount').value  = i.amount;
     document.getElementById('if2_month').value   = i.month;
@@ -242,6 +253,12 @@ function escHtml(str) {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-document.addEventListener('DOMContentLoaded', loadIncentives);
+async function initIncEmpSearch() {
+    incEmpSearch = createSearchableSelect(document.getElementById('if2_emp'), 'employees');
+    incEmployees = await getLookupRows('employees');
+    incEmpSearch.setItems(incEmployees);
+}
+
+document.addEventListener('DOMContentLoaded', () => { initIncEmpSearch(); loadIncentives(); });
 </script>
 @endpush
