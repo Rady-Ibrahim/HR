@@ -109,6 +109,7 @@
 <ul class="nav nav-tabs mb-3">
     <li class="nav-item"><button class="nav-link active" onclick="showTab('attendance', this)"><i class="fas fa-list me-1"></i> سجل الحضور</button></li>
     <li class="nav-item"><button class="nav-link" onclick="showTab('leaves', this)"><i class="fas fa-calendar-times me-1"></i> طلبات الإجازات</button></li>
+    <li class="nav-item"><button class="nav-link" onclick="showTab('early', this)"><i class="fas fa-sign-out-alt me-1"></i> طلبات الانصراف المبكر</button></li>
 </ul>
 
 <div id="tab-attendance">
@@ -158,6 +159,25 @@
         <div class="section-body d-flex justify-content-between">
             <div id="leavesPagInfo" class="text-muted" style="font-size:.8rem"></div>
             <div id="leavesPagination"></div>
+        </div>
+    </div>
+</div>
+
+<div id="tab-early" style="display:none">
+    <div class="section-card">
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr><th>الموظف</th><th>نوع الطلب</th><th>من</th><th>إلى</th><th>السبب</th><th>الحالة</th><th>إجراءات</th></tr>
+                </thead>
+                <tbody id="earlyTable">
+                    <tr><td colspan="7" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="section-body d-flex justify-content-between">
+            <div id="earlyPagInfo" class="text-muted" style="font-size:.8rem"></div>
+            <div id="earlyPagination"></div>
         </div>
     </div>
 </div>
@@ -368,12 +388,17 @@ async function loadAttendance(page = 1) {
 
 const LEAVE_TYPE_LABELS = { sick:'مرضية', leave:'إجازة', late:'تأخير', early:'انصراف مبكر', excuse:'عذر' };
 
-async function loadLeaves(page = 1) {
+async function loadLeaves(page = 1, requestType = null) {
+    const isEarly = requestType === 'early';
+    const tableId = isEarly ? 'earlyTable' : 'leavesTable';
+    const pagInfoId = isEarly ? 'earlyPagInfo' : 'leavesPagInfo';
+    const paginationId = isEarly ? 'earlyPagination' : 'leavesPagination';
     const params = new URLSearchParams({ per_page: 20, page });
     const s = document.getElementById('attStatus').value;
     const e = document.getElementById('empSearch').value;
     const f = document.getElementById('dateFrom').value;
     const t = document.getElementById('dateTo').value;
+    if (requestType) params.append('request_type', requestType);
     if (s) params.append('status', s);
     if (e) params.append('search', e);
     if (f) params.append('date_from', f);
@@ -382,13 +407,13 @@ async function loadLeaves(page = 1) {
     const r = await apiFetch('/attendance/leave-requests?' + params);
     if (!r.success) return;
     const data = r.data;
-    document.getElementById('leavesPagInfo').textContent = `إجمالي: ${data.total}`;
+    document.getElementById(pagInfoId).textContent = `إجمالي: ${data.total}`;
     const all = data.data ?? [];
     if (!all.length) {
-        document.getElementById('leavesTable').innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">لا توجد طلبات إجازة</td></tr>';
+        document.getElementById(tableId).innerHTML = `<tr><td colspan="7" class="text-center py-4 text-muted">لا توجد ${isEarly ? 'طلبات انصراف مبكر' : 'طلبات إجازة'}</td></tr>`;
         return;
     }
-    document.getElementById('leavesTable').innerHTML = all.map(l => `
+    document.getElementById(tableId).innerHTML = all.map(l => `
         <tr>
             <td>${l.employee?.name ?? '-'}</td>
             <td>${LEAVE_TYPE_LABELS[l.request_type] ?? l.request_type ?? '-'}</td>
@@ -404,22 +429,26 @@ async function loadLeaves(page = 1) {
     `).join('');
     const pages = [];
     for (let i = 1; i <= Math.min(data.last_page, 10); i++) {
-        pages.push(`<button class="btn btn-sm ${i === data.current_page ? 'btn-primary' : 'btn-outline-primary'} mx-1" onclick="loadLeaves(${i})">${i}</button>`);
+        pages.push(`<button class="btn btn-sm ${i === data.current_page ? 'btn-primary' : 'btn-outline-primary'} mx-1" onclick="loadLeaves(${i}, '${requestType ?? ''}')">${i}</button>`);
     }
-    document.getElementById('leavesPagination').innerHTML = pages.join('');
+    document.getElementById(paginationId).innerHTML = pages.join('');
 }
 
 async function approveLeave(id) {
     const r = await apiFetch(`/attendance/leave-requests/${id}/approve`, { method: 'POST', body: JSON.stringify({ status: 'approved' }) });
-    if (r.success) { showAlert('تم اعتماد الإجازة'); loadLeaves(); }
+    if (r.success) { showAlert('تم اعتماد الإجازة'); reloadRequests(); }
     else showAlert(r.message, 'danger');
 }
 
 async function rejectLeave(id) {
     const reason=prompt('سبب رفض الإجازة:'); if(!reason) return;
     const r = await apiFetch(`/attendance/leave-requests/${id}/approve`, { method: 'POST', body: JSON.stringify({ status: 'rejected', notes: reason }) });
-    if (r.success) { showAlert('تم رفض الإجازة','warning'); loadLeaves(); }
+    if (r.success) { showAlert('تم رفض الإجازة','warning'); reloadRequests(); }
     else showAlert(r.message, 'danger');
+}
+
+function reloadRequests() {
+    if (ACTIVE_TAB === 'early') loadLeaves(1, 'early'); else loadLeaves();
 }
 
 // ─── ADD/EDIT ATTENDANCE ────────────────────────────────
@@ -503,12 +532,14 @@ async function saveLeave() {
     if(data.employee_id) data.employee_id=parseInt(data.employee_id);
     else delete data.employee_id;
     const r=await apiFetch('/attendance/request-leave',{method:'POST',body:JSON.stringify(data)});
-    if(r.success){bootstrap.Modal.getInstance(document.getElementById('leaveAddModal')).hide();showAlert('تم إرسال طلب الإجازة');loadLeaves();}
+    if(r.success){bootstrap.Modal.getInstance(document.getElementById('leaveAddModal')).hide();showAlert('تم إرسال طلب الإجازة');reloadRequests();}
     else showAlert(r.message||'فشل الإرسال','danger');
 }
 
 function applyFilters() {
-    if (ACTIVE_TAB === 'leaves') loadLeaves(); else loadAttendance();
+    if (ACTIVE_TAB === 'leaves') loadLeaves();
+    else if (ACTIVE_TAB === 'early') loadLeaves(1, 'early');
+    else loadAttendance();
 }
 
 function filterByStatus(status) {
@@ -558,15 +589,18 @@ function showTab(tab, btn) {
     ACTIVE_TAB = tab;
     document.getElementById('tab-attendance').style.display = tab === 'attendance' ? '' : 'none';
     document.getElementById('tab-leaves').style.display    = tab === 'leaves' ? '' : 'none';
+    document.getElementById('tab-early').style.display    = tab === 'early' ? '' : 'none';
     document.querySelectorAll('.nav-tabs .nav-link').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    setStatusOptions(tab === 'leaves' ? leaveStatusOptions : attStatusOptions);
-    if (tab === 'leaves') loadLeaves(); else loadAttendance();
+    setStatusOptions(tab === 'attendance' ? attStatusOptions : leaveStatusOptions);
+    if (tab === 'attendance') loadAttendance();
+    else if (tab === 'early') loadLeaves(1, 'early');
+    else loadLeaves();
 }
 
 function resetAttFilters() {
     ['empSearch','attStatus','shiftFilter','dateFrom','dateTo'].forEach(id => document.getElementById(id).value = '');
-    setStatusOptions(ACTIVE_TAB === 'leaves' ? leaveStatusOptions : attStatusOptions);
+    setStatusOptions(ACTIVE_TAB === 'attendance' ? attStatusOptions : leaveStatusOptions);
     applyFilters();
 }
 

@@ -97,6 +97,12 @@
                     </div>
 
                     <h6 class="text-primary fw-bold mb-2"><i class="fas fa-gavel me-1"></i> قواعد خصم التأخير</h6>
+                    <div class="alert alert-info py-2 px-3 small mb-2" style="font-size:.8rem">
+                        <i class="fas fa-info-circle me-1"></i>
+                        بداية حساب الخصم على التأخير تكون <strong>بعد فترة السماح</strong>.
+                        لو السماح <span id="graceValInNote">15</span> دقيقة، الخصم يبدأ من الدقيقة <span id="graceStartInNote">16</span>
+                        — الحد الأدنى (من دقيقة) لازم يكون <span id="graceMinInNote">16</span> أو أكثر.
+                    </div>
                     <div class="table-responsive mb-3">
                         <table class="data-table" id="lateRulesTable">
                             <thead>
@@ -293,7 +299,11 @@ function addLateRuleRow() {
     const t = document.querySelector('#lateRulesBody .late-rule-row');
     const clone = t.cloneNode(true);
     clone.querySelectorAll('input').forEach(i => i.value = '');
-    clone.querySelector('.lr-min').value = '1';
+    const grace = parseInt(document.getElementById('sf_grace').value) || 0;
+    const minAllowed = grace + 1;
+    const minInput = clone.querySelector('.lr-min');
+    minInput.value = String(minAllowed);
+    minInput.min = minAllowed;
     clone.querySelector('.lr-type').value = 'minutes';
     document.getElementById('lateRulesBody').appendChild(clone);
 }
@@ -318,16 +328,29 @@ function collectRuleRows(containerSelector, prefix) {
     }));
 }
 
+function updateLateGraceNote() {
+    const grace = parseInt(document.getElementById('sf_grace').value) || 0;
+    const minAllowed = grace + 1;
+    document.getElementById('graceValInNote').textContent = grace;
+    document.getElementById('graceStartInNote').textContent = minAllowed;
+    document.getElementById('graceMinInNote').textContent = minAllowed;
+    document.querySelectorAll('.lr-min').forEach(i => {
+        i.min = minAllowed;
+        if (i.value && parseInt(i.value) < minAllowed) i.value = minAllowed;
+    });
+}
+
 function openAddShiftModal() {
     document.getElementById('sf_id').value = '';
     document.getElementById('shiftForm').reset();
     document.getElementById('sf_start').value = '08:00';
     document.getElementById('sf_end').value = '17:00';
-    document.getElementById('sf_grace').value = '15';
+    document.getElementById('sf_grace').value = '20';
     document.getElementById('sf_active').value = '1';
     document.getElementById('shiftModalTitle').innerHTML = '<i class="fas fa-clock me-2"></i> إضافة وردية جديدة';
     resetLateRules();
     resetEarlyRules();
+    updateLateGraceNote();
     new bootstrap.Modal(document.getElementById('shiftModal')).show();
 }
 
@@ -344,6 +367,7 @@ async function openEditShift(id) {
     document.getElementById('sf_end').value = s.end_time?.substring(0,5);
     document.getElementById('sf_grace').value = s.grace_period_minutes;
     document.getElementById('sf_active').value = s.is_active ? '1' : '0';
+    updateLateGraceNote();
 
     // Late rules
     document.getElementById('lateRulesBody').innerHTML = '';
@@ -382,13 +406,22 @@ function clearEndTime() {
 
 async function saveShift() {
     const id = document.getElementById('sf_id').value;
+    const grace = parseInt(document.getElementById('sf_grace').value) || 0;
+    const minAllowed = grace + 1;
+    const lateRules = collectRuleRows('#lateRulesTable', 'lr');
+    for (let i = 0; i < lateRules.length; i++) {
+        if (lateRules[i].min_delay_minutes < minAllowed) {
+            showAlert(`قاعدة التأخير رقم ${i+1}: الحد الأدنى (من دقيقة) لا يمكن أن يقل عن ${minAllowed} — الحساب يبدأ بعد فترة السماح`, 'danger');
+            return;
+        }
+    }
     const data = {
         name: document.getElementById('sf_name').value,
         start_time: document.getElementById('sf_start').value,
         end_time: document.getElementById('sf_end').value,
-        grace_period_minutes: parseInt(document.getElementById('sf_grace').value) || 0,
+        grace_period_minutes: grace,
         is_active: document.getElementById('sf_active').value === '1',
-        late_rules: collectRuleRows('#lateRulesTable', 'lr'),
+        late_rules: lateRules,
         early_exit_rules: collectRuleRows('#earlyRulesTable', 'er'),
     };
     if (!data.name || !data.start_time) { showAlert('يرجى ملء الحقول المطلوبة', 'warning'); return; }
@@ -574,6 +607,7 @@ async function saveAssignment() {
 
 // ─── INIT ────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('sf_grace').addEventListener('input', updateLateGraceNote);
     loadShifts();
     loadAssignments();
     loadShiftSelect();

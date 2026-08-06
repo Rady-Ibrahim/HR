@@ -43,6 +43,18 @@ class ShiftController
             'early_exit_rules.*.deduction_value' => 'nullable|numeric|min:0',
         ]);
 
+        if (!empty($validated['late_rules'])) {
+            $graceMin = (int) ($validated['grace_period_minutes'] ?? 20) + 1;
+            foreach ($validated['late_rules'] as $index => $rule) {
+                if ((int) $rule['min_delay_minutes'] < $graceMin) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "قاعدة التأخير رقم " . ($index + 1) . ": الحد الأدنى للتأخير لا يمكن أن يقل عن {$graceMin} دقيقة — الحساب يبدأ بعد فترة السماح",
+                    ], 422);
+                }
+            }
+        }
+
         $shift = Shift::create([
             'name' => $validated['name'],
             'start_time' => $validated['start_time'],
@@ -102,6 +114,18 @@ class ShiftController
             'early_exit_rules.*.deduction_type' => 'required|string|max:50',
             'early_exit_rules.*.deduction_value' => 'nullable|numeric|min:0',
         ]);
+
+        if ($request->has('late_rules') && !empty($validated['late_rules'])) {
+            $graceMin = (int) ($validated['grace_period_minutes'] ?? $shift->grace_period_minutes) + 1;
+            foreach ($validated['late_rules'] as $index => $rule) {
+                if ((int) $rule['min_delay_minutes'] < $graceMin) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "قاعدة التأخير رقم " . ($index + 1) . ": الحد الأدنى للتأخير لا يمكن أن يقل عن {$graceMin} دقيقة — الحساب يبدأ بعد فترة السماح",
+                    ], 422);
+                }
+            }
+        }
 
         $shift->update($validated);
 

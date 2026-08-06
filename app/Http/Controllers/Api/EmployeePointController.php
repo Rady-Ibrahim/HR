@@ -180,17 +180,19 @@ class EmployeePointController
             ], 404);
         }
 
-        $query = EmployeePoint::where('employee_id', $employee->id);
+        $month = $request->filled('month') ? $request->month : now()->month;
+        $year  = $request->filled('year')  ? $request->year  : now()->year;
 
-        if ($request->filled('month')) $query->where('month', $request->month);
-        if ($request->filled('year'))  $query->where('year', $request->year);
+        $query = EmployeePoint::where('employee_id', $employee->id)
+            ->where('month', $month)
+            ->where('year', $year);
 
         $records = $query->orderByDesc('id')->paginate($request->get('per_page', 20));
 
-        $totalCreditPoints = (float) EmployeePoint::where('employee_id', $employee->id)->where('type', 'credit')->sum('points');
-        $totalDebitPoints  = (float) EmployeePoint::where('employee_id', $employee->id)->where('type', 'debit')->sum('points');
-        $totalCreditAmount = (float) EmployeePoint::where('employee_id', $employee->id)->where('type', 'credit')->sum('total_amount');
-        $totalDebitAmount  = (float) EmployeePoint::where('employee_id', $employee->id)->where('type', 'debit')->sum('total_amount');
+        $totalCreditPoints = (float) (clone $query)->where('type', 'credit')->sum('points');
+        $totalDebitPoints  = (float) (clone $query)->where('type', 'debit')->sum('points');
+        $totalCreditAmount = (float) (clone $query)->where('type', 'credit')->sum('total_amount');
+        $totalDebitAmount  = (float) (clone $query)->where('type', 'debit')->sum('total_amount');
 
         return response()->json([
             'success' => true,
