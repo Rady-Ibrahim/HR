@@ -75,7 +75,7 @@ class AttendanceDeductionTest extends TestCase
             'employee_id'     => $emp->id,
             'attendance_date' => now()->toDateString(),
             'check_in_time'   => '08:30:00',  // 30 min late → minutes
-            'check_out_time'  => '15:00:00',  // 150 min early → half_day
+            'check_out_time'  => '15:00:00',  // 120 min before end (17:00) → half_day
             'status'          => 'present',
         ]);
 
@@ -83,7 +83,7 @@ class AttendanceDeductionTest extends TestCase
 
         $this->assertSame(30, $processed->late_minutes);
         $this->assertSame('minutes', $processed->applied_late_deduction_type);
-        $this->assertSame(150, $processed->early_exit_minutes);
+        $this->assertSame(120, $processed->early_exit_minutes);
         $this->assertSame('half_day', $processed->applied_early_deduction_type);
         $this->assertEquals($shift->id, $processed->shift_id);
     }
@@ -147,7 +147,7 @@ class AttendanceDeductionTest extends TestCase
 
         $this->assertSame(30, $processed->late_minutes);
         $this->assertSame('minutes', $processed->applied_late_deduction_type);
-        $this->assertSame(150, $processed->early_exit_minutes);
+        $this->assertSame(120, $processed->early_exit_minutes);
         $this->assertSame('minutes', $processed->applied_early_deduction_type);
     }
 
@@ -156,6 +156,9 @@ class AttendanceDeductionTest extends TestCase
         $emp   = $this->makeEmployee();
         $shift = $this->makeShift();
         $this->assignShift($emp, $shift);
+
+        $shift->end_time = '23:59:00';
+        $shift->save();
 
         Attendance::create([
             'employee_id'     => $emp->id,

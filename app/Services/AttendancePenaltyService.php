@@ -87,8 +87,7 @@ class AttendancePenaltyService
 
         $expectedEnd = Carbon::parse($date->toDateString() . ' ' . $shift->end_time);
         $workedMinutes = (int) $checkInTime->diffInMinutes($checkOutTime);
-        $expectedMinutes = (int) Carbon::parse($shift->start_time)->diffInMinutes(Carbon::parse($shift->end_time));
-        $earlyMinutes = max(0, $expectedMinutes - $workedMinutes);
+        $earlyMinutes = max(0, (int) $checkOutTime->diffInMinutes($expectedEnd, false));
 
         $actualWorkedHours = round($workedMinutes / 60, 2);
 
@@ -146,12 +145,10 @@ class AttendancePenaltyService
 
     public function calculateEarlyExitFromConfig(Carbon $checkInTime, Carbon $checkOutTime, Carbon $date): array
     {
-        $start = Carbon::parse($date->toDateString() . ' ' . Config::get('hr.working_hours.check_in_time', '08:00'));
         $end = Carbon::parse($date->toDateString() . ' ' . Config::get('hr.working_hours.check_out_time', '17:00'));
 
         $workedMinutes = (int) $checkInTime->diffInMinutes($checkOutTime);
-        $expectedMinutes = (int) $start->diffInMinutes($end);
-        $earlyMinutes = max(0, $expectedMinutes - $workedMinutes);
+        $earlyMinutes = max(0, (int) $checkOutTime->diffInMinutes($end, false));
 
         return [
             'early_exit_minutes' => $earlyMinutes,
