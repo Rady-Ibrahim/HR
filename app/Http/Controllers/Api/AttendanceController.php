@@ -577,6 +577,7 @@ class AttendanceController
         $query = AttendanceRequest::with('employee');
 
         if ($request->filled('request_type')) $query->where('request_type', $request->request_type);
+        else $query->where('request_type', '!=', 'early');
         if ($request->filled('status'))    $query->where('approval_status', $request->status);
         if ($request->filled('date_from')) $query->whereDate('from_date', '>=', $request->date_from);
         if ($request->filled('date_to'))   $query->whereDate('to_date', '<=', $request->date_to);
