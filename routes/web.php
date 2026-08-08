@@ -60,6 +60,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/advances',     fn() => view('advances.index'));
     Route::get('/allowances',   fn() => view('allowances.index'));
     Route::get('/employee-points', fn() => view('employee-points.index'));
+    Route::get('/ideal-employee',  fn() => view('ideal-employee.index'));
 
     // Operations
     Route::get('/requests',     fn() => view('requests.index'));

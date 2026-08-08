@@ -34,6 +34,7 @@ use App\Http\Controllers\Api\EmployeeShiftController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\CustomerExpectedAmountController;
 use App\Http\Controllers\Api\ChatGroupController;
+use App\Http\Controllers\Api\IdealEmployeeController;
 
 
 // Public
@@ -69,6 +70,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}',    [EmployeePointController::class, 'show']);
         Route::delete('/{id}', [EmployeePointController::class, 'destroy']);
     });
+
+    // Ideal Employee / الموظف المثالي (Dashboard)
+    Route::get('/ideal',    [IdealEmployeeController::class, 'index']);
+    Route::post('/ideal',   [IdealEmployeeController::class, 'store']);
+    Route::delete('/ideal', [IdealEmployeeController::class, 'destroy']);
 
     // ── Employee Messaging ──────────────────────────────────────────────────
     Route::prefix('messages')->group(function () {

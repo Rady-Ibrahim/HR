@@ -989,6 +989,11 @@
                     <span class="icon"><i class="fas fa-star"></i></span> نقاط الموظفين
                 </a>
             @endif
+            @if ($hasP('view_ideal_employees'))
+                <a href="/ideal-employee" class="nav-link {{ request()->is('ideal-employee*') ? 'active' : '' }}">
+                    <span class="icon"><i class="fas fa-trophy"></i></span> الموظف المثالي
+                </a>
+            @endif
             @if ($hasP('view_salaries'))
                 <a href="/financial-statement"
                     class="nav-link {{ request()->is('financial-statement*') ? 'active' : '' }}">

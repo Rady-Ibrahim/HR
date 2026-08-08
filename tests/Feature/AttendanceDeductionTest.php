@@ -38,11 +38,16 @@ class AttendanceDeductionTest extends TestCase
 
     private function makeShift(): Shift
     {
+        return $this->makeShiftAt('08:00:00', 15);
+    }
+
+    private function makeShiftAt(string $startTime, int $graceMinutes): Shift
+    {
         $shift = Shift::create([
             'name'                => 'Test Shift',
-            'start_time'          => '08:00:00',
+            'start_time'          => $startTime,
             'end_time'            => '17:00:00',
-            'grace_period_minutes' => 15,
+            'grace_period_minutes' => $graceMinutes,
             'is_active'           => true,
         ]);
 
@@ -53,6 +58,18 @@ class AttendanceDeductionTest extends TestCase
         ShiftEarlyExitRule::create(['shift_id' => $shift->id, 'min_early_minutes' => 60, 'max_early_minutes' => null, 'deduction_type' => 'half_day', 'deduction_value' => null]);
 
         return $shift;
+    }
+
+    private function processEmpCheckIn(Employee $emp, string $checkIn): Attendance
+    {
+        $att = Attendance::create([
+            'employee_id'     => $emp->id,
+            'attendance_date' => now()->toDateString(),
+            'check_in_time'   => $checkIn,
+            'status'          => 'present',
+        ]);
+
+        return app(AttendancePenaltyService::class)->processAttendance($att);
     }
 
     private function assignShift(Employee $employee, Shift $shift): void
@@ -188,6 +205,52 @@ class AttendanceDeductionTest extends TestCase
         $this->assertNotNull($saved->early_exit_minutes);
         $this->assertNotNull($saved->applied_early_deduction_type);
         $this->assertSame($saved->early_exit_minutes, $payload['penalty']['early_exit_minutes']);
+    }
+
+    public function test_late_within_grace_period_is_not_penalized(): void
+    {
+        $emp = $this->makeEmployee(5000);
+        $shift = $this->makeShiftAt('09:00:00', 10);
+        $this->assignShift($emp, $shift);
+
+        $att = $this->processEmpCheckIn($emp, '09:02:29'); // 2 minutes late, within 10-min grace
+
+        $this->assertSame(0, $att->late_minutes);
+        $this->assertNull($att->applied_late_deduction_type);
+        $this->assertEquals(0.0, (float) $att->deduction_amount);
+
+        $result = app(AttendancePenaltyService::class)->calculateRecordDeduction($att);
+        $this->assertEquals(0.0, $result['amount']);
+        $this->assertSame('-', $result['label']);
+    }
+
+    public function test_late_exactly_at_grace_boundary_is_not_penalized(): void
+    {
+        $emp = $this->makeEmployee(5000);
+        $shift = $this->makeShiftAt('09:00:00', 10);
+        $this->assignShift($emp, $shift);
+
+        $att = $this->processEmpCheckIn($emp, '09:10:00'); // exactly 10 minutes late = grace
+
+        $this->assertSame(0, $att->late_minutes);
+        $this->assertNull($att->applied_late_deduction_type);
+        $this->assertEquals(0.0, app(AttendancePenaltyService::class)->calculateRecordDeduction($att)['amount']);
+    }
+
+    public function test_late_beyond_grace_period_is_penalized(): void
+    {
+        $emp = $this->makeEmployee(5000);
+        $shift = $this->makeShiftAt('09:00:00', 10);
+        $this->assignShift($emp, $shift);
+
+        $att = $this->processEmpCheckIn($emp, '09:20:00'); // 20 minutes late, 10 beyond grace
+
+        $this->assertSame(20, $att->late_minutes);
+        $this->assertSame('minutes', $att->applied_late_deduction_type);
+
+        $dailyRate  = 5000 / $this->workingDays((int) now()->month, (int) now()->year);
+        $minuteRate = $dailyRate / 8 / 60;
+        $this->assertEqualsWithDelta(20 * $minuteRate, app(AttendancePenaltyService::class)->calculateRecordDeduction($att)['amount'], 0.01);
     }
 
     public function test_salary_deduction_includes_early_exit(): void

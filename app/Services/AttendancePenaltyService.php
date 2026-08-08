@@ -36,7 +36,7 @@ class AttendancePenaltyService
 
         if ($effectiveDelay <= 0) {
             return [
-                'late_minutes' => max(0, $actualDelayMinutes),
+                'late_minutes' => 0,
                 'effective_delay' => 0,
                 'deduction_type' => null,
                 'deduction_amount' => 0.0,
