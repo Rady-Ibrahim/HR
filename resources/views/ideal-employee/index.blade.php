@@ -47,6 +47,9 @@
         font-size: .75rem;
         font-weight: 700;
     }
+    .ideal-search {
+        max-width: 240px;
+    }
 </style>
 
 <div class="page-header">
@@ -85,7 +88,7 @@
 
 @push('scripts')
 <script>
-let idealEmployees = [];
+let idealSelects = {};
 
 function escHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -93,10 +96,13 @@ function escHtml(value) {
     }[char]));
 }
 
-function idealEmpOptions(selectedId) {
-    return '<option value="">— اختر الموظف —</option>' + idealEmployees.map(e =>
-        `<option value="${e.id}" ${String(e.id) === String(selectedId) ? 'selected' : ''}>${escHtml(e.name)}${e.employee_code ? ' - ' + escHtml(e.employee_code) : ''}</option>`
-    ).join('');
+function bindIdealSelect(inputId, key) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const sel = createSearchableSelect(input, 'employees');
+    idealSelects[key] = sel;
+    const initialId = input.dataset.empId;
+    if (initialId) sel.setValue(initialId, input.value);
 }
 
 async function loadIdeal() {
@@ -104,19 +110,11 @@ async function loadIdeal() {
     const month = document.getElementById('idealMonth').value;
     const year  = document.getElementById('idealYear').value;
 
+    idealSelects = {};
     box.innerHTML = '<div class="text-center py-4"><div class="spinner mx-auto" style="width:34px;height:34px;border-width:3px"></div></div>';
 
     try {
-        const [empRes, idealRes] = await Promise.all([
-            apiFetch('/employees?per_page=1000&status=active'),
-            apiFetch(`/ideal?month=${month}&year=${year}`),
-        ]);
-
-        idealEmployees = (empRes.data?.data || empRes.data || []).map(e => ({
-            id: e.id,
-            name: e.name,
-            employee_code: e.employee_code || ''
-        }));
+        const idealRes = await apiFetch(`/ideal?month=${month}&year=${year}`);
 
         if (!idealRes.success) {
             box.innerHTML = '<div class="text-danger text-center py-4">تعذر تحميل بيانات الموظف المثالي</div>';
@@ -151,7 +149,8 @@ async function loadIdeal() {
             <div class="row g-3 mb-3 align-items-end">
                 <div class="col-md-7">
                     <label class="form-label mb-1">اختيار موظف الشهر</label>
-                    <select id="selMonthEmp" class="form-select">${idealEmpOptions(monthEmp?.id)}</select>
+                    <input type="text" id="selMonthEmp" class="form-control" placeholder="ابحث عن موظف..." autocomplete="off"
+                           value="${monthEmp ? escHtml(monthEmp.name) : ''}" ${monthEmp ? `data-emp-id="${monthEmp.id}"` : ''}>
                 </div>
                 <div class="col-md-5 d-flex gap-2">
                     <button class="btn-primary-custom" onclick="saveIdeal('month')">
@@ -167,6 +166,11 @@ async function loadIdeal() {
             <h6 class="fw-bold text-muted mb-3"><i class="fas fa-calendar-week me-1"></i> موظفو الأسابيع</h6>
             <div class="row g-3" id="idealWeeksRows">${(d.weeks || []).map(w => renderIdealWeek(w)).join('')}</div>
         `;
+
+bindIdealSelect('selMonthEmp', 'month');
+        document.querySelectorAll('[data-week]').forEach(el => {
+            bindIdealSelect(el.id, `week:${el.dataset.week}`);
+        });
     } catch (e) {
         box.innerHTML = '<div class="text-danger text-center py-4">حدث خطأ أثناء تحميل البيانات</div>';
     }
@@ -187,7 +191,10 @@ function renderIdealWeek(w) {
                         : '<span class="text-muted" style="font-size:.85rem">لم يتم الاختيار</span>'}
                 </div>
                 <div class="d-flex gap-2">
-                    <select id="selWeek${w.week}" class="form-select form-select-sm">${idealEmpOptions(emp?.id)}</select>
+                    <div class="flex-grow-1">
+                        <input type="text" id="selWeek${w.week}" class="form-control form-control-sm ideal-search" placeholder="ابحث عن موظف..." autocomplete="off"
+                               data-week="${w.week}" value="${emp ? escHtml(emp.name) : ''}" ${emp ? `data-emp-id="${emp.id}"` : ''}>
+                    </div>
                     <button class="btn btn-sm btn-primary text-nowrap" onclick="saveIdeal('week', ${w.week})" title="حفظ">
                         <i class="fas fa-save"></i>
                     </button>
@@ -201,8 +208,8 @@ function renderIdealWeek(w) {
 }
 
 async function saveIdeal(period, week = null) {
-    const selectId = period === 'month' ? 'selMonthEmp' : `selWeek${week}`;
-    const employee_id = document.getElementById(selectId)?.value;
+    const key = period === 'month' ? 'month' : `week:${week}`;
+    const employee_id = idealSelects[key]?.getValue() || '';
     const month = document.getElementById('idealMonth').value;
     const year  = document.getElementById('idealYear').value;
 
