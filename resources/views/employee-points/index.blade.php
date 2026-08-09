@@ -139,9 +139,9 @@
         </div>
 
         <div class="d-flex flex-wrap gap-2 align-items-center ms-auto">
-            <select id="filterEmp" class="form-select form-select-sm" style="width:160px" onchange="loadPoints()">
-                <option value="">كل الموظفين</option>
-            </select>
+            <div class="position-relative" style="width:210px">
+                <input type="text" id="filterEmp" class="form-control form-control-sm" placeholder="كل الموظفين - ابحث بالاسم أو الكود...">
+            </div>
 
             <select id="filterType" class="form-select form-select-sm" style="width:130px" onchange="loadPoints()">
                 <option value="">كل الأنواع</option>
@@ -328,19 +328,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
 let allEmployeesForPoints = [];
 let selectedPointEmployees = [];
+let filterEmpSearch = null;
 
 async function loadEmployeesDropdown() {
     try {
         const res = await apiFetch('/employees?per_page=1000&status=active');
-        const list = res.data?.data || res.data || [];
-        allEmployeesForPoints = list;
-
-        const filterSelect = document.getElementById('filterEmp');
-        filterSelect.innerHTML = '<option value="">كل الموظفين</option>' + list.map(emp =>
-            `<option value="${emp.id}">${escHtml(emp.name)} (${escHtml(emp.employee_code || '')})</option>`
-        ).join('');
+        allEmployeesForPoints = res.data?.data || res.data || [];
 
         renderEmpPicker();
+
+        filterEmpSearch = createSearchableSelect(document.getElementById('filterEmp'), 'employees', {
+            onSelect: () => loadPoints(),
+        });
     } catch (e) {
         console.error('Failed loading employees', e);
     }
@@ -437,7 +436,7 @@ async function loadPoints(page = 1) {
     const tableBody = document.getElementById('pointsTableBody');
     tableBody.innerHTML = '<tr><td colspan="10" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>';
 
-    const empId = document.getElementById('filterEmp').value;
+    const empId = filterEmpSearch?.getValue() || '';
     const type  = document.getElementById('filterType').value;
     const month = document.getElementById('filterMonth').value;
     const year  = document.getElementById('filterYear').value;
@@ -620,7 +619,7 @@ function renderPagination(data) {
 }
 
 async function printPointsPDF() {
-    const empId = document.getElementById('filterEmp').value;
+    const empId = filterEmpSearch?.getValue() || '';
     const type  = document.getElementById('filterType').value;
     const month = document.getElementById('filterMonth').value;
     const year  = document.getElementById('filterYear').value;

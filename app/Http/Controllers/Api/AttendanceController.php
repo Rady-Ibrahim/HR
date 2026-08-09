@@ -84,14 +84,17 @@ class AttendanceController
     {
         $validated = $request->validate([
             'employee_id'     => 'required|exists:employees,id',
-            'date'            => 'nullable|date',
-            'attendance_date' => 'nullable|date',
+            'date'            => 'nullable|date|before_or_equal:today',
+            'attendance_date' => 'nullable|date|before_or_equal:today',
             'status'          => 'required|in:present,absent,late,early_leave,on_leave,excused',
             'check_in_time'   => 'nullable|date_format:H:i',
             'check_out_time'  => 'nullable|date_format:H:i',
             'late_minutes'    => 'nullable|integer|min:0',
             'shift_id'        => 'nullable|exists:shifts,id',
             'notes'           => 'nullable|string',
+        ], [
+            'date.before_or_equal'            => 'لا يمكن تسجيل حضور في تاريخ مستقبلي',
+            'attendance_date.before_or_equal' => 'لا يمكن تسجيل حضور في تاريخ مستقبلي',
         ]);
 
         $attendanceDate = $validated['attendance_date'] ?? $validated['date'] ?? today()->toDateString();
@@ -163,14 +166,17 @@ class AttendanceController
         $record = Attendance::findOrFail($id);
         $validated = $request->validate([
             'employee_id'     => 'sometimes|exists:employees,id',
-            'date'            => 'nullable|date',
-            'attendance_date' => 'nullable|date',
+            'date'            => 'nullable|date|before_or_equal:today',
+            'attendance_date' => 'nullable|date|before_or_equal:today',
             'status'          => 'sometimes|in:present,absent,late,early_leave,on_leave,excused',
             'check_in_time'   => 'nullable|date_format:H:i',
             'check_out_time'  => 'nullable|date_format:H:i',
             'late_minutes'    => 'nullable|integer|min:0',
             'shift_id'        => 'nullable|exists:shifts,id',
             'notes'           => 'nullable|string',
+        ], [
+            'date.before_or_equal'            => 'لا يمكن تسجيل حضور في تاريخ مستقبلي',
+            'attendance_date.before_or_equal' => 'لا يمكن تسجيل حضور في تاريخ مستقبلي',
         ]);
 
         $attendanceDate = $validated['attendance_date'] ?? $validated['date'] ?? $record->attendance_date->toDateString();
@@ -574,16 +580,24 @@ class AttendanceController
 
     public function leaveRequests(Request $request): JsonResponse
     {
-        $employee = $this->getCurrentEmployee();
-
-        $query = AttendanceRequest::with('employee')
-            ->where('employee_id', $employee?->id ?? -1);
+        $query = AttendanceRequest::with('employee');
 
         if ($request->filled('request_type')) $query->where('request_type', $request->request_type);
         else $query->where('request_type', '!=', 'early');
         if ($request->filled('status'))    $query->where('approval_status', $request->status);
         if ($request->filled('date_from')) $query->whereDate('from_date', '>=', $request->date_from);
         if ($request->filled('date_to'))   $query->whereDate('to_date', '<=', $request->date_to);
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->whereHas('employee', function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('employee_code', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%");
+            });
+        }
+
+        $this->scopeSubordinates($query);
 
         $requests = $query->orderByDesc('created_at')->paginate($request->get('per_page', 15));
 

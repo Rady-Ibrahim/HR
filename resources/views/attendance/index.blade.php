@@ -192,7 +192,7 @@
                     <input type="hidden" id="attId">
                     <div class="row g-3">
                         <div class="col-12"><label class="form-label">الموظف *</label><select name="employee_id" id="atf_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select></div>
-                        <div class="col-md-6"><label class="form-label">التاريخ *</label><input type="date" name="date" id="atf_date" class="form-control" required value="{{ date('Y-m-d') }}"></div>
+                        <div class="col-md-6"><label class="form-label">التاريخ *</label><input type="date" name="date" id="atf_date" class="form-control" required value="{{ date('Y-m-d') }}" max="{{ date('Y-m-d') }}"></div>
                         <div class="col-md-6"><label class="form-label">الحالة *</label>
                             <select name="status" id="atf_status" class="form-select" required>
                                 <option value="present">حاضر</option><option value="absent">غائب</option>
