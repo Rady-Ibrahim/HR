@@ -122,7 +122,7 @@
                                             <option value="fixed_amount">مبلغ ثابت</option>
                                         </select>
                                     </td>
-                                    <td><input type="number" class="form-control form-control-sm lr-value" min="0" step="0.01" placeholder="لنسبة/مبلغ"></td>
+                                    <td><input type="number" class="form-control form-control-sm lr-value" min="0" step="0.01" placeholder="قيمة الخصم"></td>
                                     <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="fas fa-trash"></i></button></td>
                                 </tr>
                             </tbody>
@@ -142,6 +142,7 @@
                                     <td><input type="number" class="form-control form-control-sm er-max" min="0" placeholder="بدون حد"></td>
                                     <td>
                                         <select class="form-select form-select-sm er-type">
+                                            <option value="minutes">دقائق</option>
                                             <option value="quarter_day">ربع يوم</option>
                                             <option value="half_day">نصف يوم</option>
                                             <option value="full_day">يوم كامل</option>
@@ -149,7 +150,7 @@
                                             <option value="fixed_amount">مبلغ ثابت</option>
                                         </select>
                                     </td>
-                                    <td><input type="number" class="form-control form-control-sm er-value" min="0" step="0.01" placeholder="لنسبة/مبلغ"></td>
+                                    <td><input type="number" class="form-control form-control-sm er-value" min="0" step="0.01" placeholder="قيمة الخصم"></td>
                                     <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="fas fa-trash"></i></button></td>
                                 </tr>
                             </tbody>
@@ -279,7 +280,7 @@ function resetLateRules() {
             <td><input type="number" class="form-control form-control-sm lr-min" min="0" value="1"></td>
             <td><input type="number" class="form-control form-control-sm lr-max" min="0" placeholder="بدون حد"></td>
             <td><select class="form-select form-select-sm lr-type"><option value="minutes">دقائق</option><option value="quarter_day">ربع يوم</option><option value="half_day">نصف يوم</option><option value="full_day">يوم كامل</option><option value="percentage">نسبة مئوية</option><option value="fixed_amount">مبلغ ثابت</option></select></td>
-            <td><input type="number" class="form-control form-control-sm lr-value" min="0" step="0.01" placeholder="لنسبة/مبلغ"></td>
+            <td><input type="number" class="form-control form-control-sm lr-value" min="0" step="0.01" placeholder="قيمة الخصم"></td>
             <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="fas fa-trash"></i></button></td>
         </tr>`;
 }
@@ -289,8 +290,8 @@ function resetEarlyRules() {
         <tr class="early-rule-row">
             <td><input type="number" class="form-control form-control-sm er-min" min="0" value="1"></td>
             <td><input type="number" class="form-control form-control-sm er-max" min="0" placeholder="بدون حد"></td>
-            <td><select class="form-select form-select-sm er-type"><option value="quarter_day">ربع يوم</option><option value="half_day">نصف يوم</option><option value="full_day">يوم كامل</option><option value="percentage">نسبة مئوية</option><option value="fixed_amount">مبلغ ثابت</option></select></td>
-            <td><input type="number" class="form-control form-control-sm er-value" min="0" step="0.01" placeholder="لنسبة/مبلغ"></td>
+            <td><select class="form-select form-select-sm er-type"><option value="minutes">دقائق</option><option value="quarter_day">ربع يوم</option><option value="half_day">نصف يوم</option><option value="full_day">يوم كامل</option><option value="percentage">نسبة مئوية</option><option value="fixed_amount">مبلغ ثابت</option></select></td>
+            <td><input type="number" class="form-control form-control-sm er-value" min="0" step="0.01" placeholder="قيمة الخصم"></td>
             <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="fas fa-trash"></i></button></td>
         </tr>`;
 }
@@ -378,7 +379,7 @@ async function openEditShift(id) {
             <td><input type="number" class="form-control form-control-sm lr-min" min="0" value="${r.min_delay_minutes}"></td>
             <td><input type="number" class="form-control form-control-sm lr-max" min="0" value="${r.max_delay_minutes ?? ''}" placeholder="بدون حد"></td>
             <td><select class="form-select form-select-sm lr-type">${['minutes','quarter_day','half_day','full_day','percentage','fixed_amount'].map(t => `<option value="${t}" ${t === r.deduction_type ? 'selected' : ''}>${deductionLabels[t]}</option>`).join('')}</select></td>
-            <td><input type="number" class="form-control form-control-sm lr-value" min="0" step="0.01" value="${r.deduction_value ?? ''}" placeholder="لنسبة/مبلغ"></td>
+            <td><input type="number" class="form-control form-control-sm lr-value" min="0" step="0.01" value="${r.deduction_value ?? ''}" placeholder="قيمة الخصم"></td>
             <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="fas fa-trash"></i></button></td>`;
         document.getElementById('lateRulesBody').appendChild(row);
     });
@@ -392,8 +393,8 @@ async function openEditShift(id) {
         row.innerHTML = `
             <td><input type="number" class="form-control form-control-sm er-min" min="0" value="${r.min_early_minutes}"></td>
             <td><input type="number" class="form-control form-control-sm er-max" min="0" value="${r.max_early_minutes ?? ''}" placeholder="بدون حد"></td>
-            <td><select class="form-select form-select-sm er-type">${['quarter_day','half_day','full_day','percentage','fixed_amount'].map(t => `<option value="${t}" ${t === r.deduction_type ? 'selected' : ''}>${deductionLabels[t]}</option>`).join('')}</select></td>
-            <td><input type="number" class="form-control form-control-sm er-value" min="0" step="0.01" value="${r.deduction_value ?? ''}" placeholder="لنسبة/مبلغ"></td>
+            <td><select class="form-select form-select-sm er-type">${['minutes','quarter_day','half_day','full_day','percentage','fixed_amount'].map(t => `<option value="${t}" ${t === r.deduction_type ? 'selected' : ''}>${deductionLabels[t]}</option>`).join('')}</select></td>
+            <td><input type="number" class="form-control form-control-sm er-value" min="0" step="0.01" value="${r.deduction_value ?? ''}" placeholder="قيمة الخصم"></td>
             <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="fas fa-trash"></i></button></td>`;
         document.getElementById('earlyRulesBody').appendChild(row);
     });
@@ -425,6 +426,12 @@ async function saveShift() {
         early_exit_rules: collectRuleRows('#earlyRulesTable', 'er'),
     };
     if (!data.name || !data.start_time) { showAlert('يرجى ملء الحقول المطلوبة', 'warning'); return; }
+    for (const r of [...lateRules, ...data.early_exit_rules]) {
+        if (r.deduction_value === null || r.deduction_value === undefined) {
+            showAlert('يرجى إدخال قيمة الخصم لكل قاعدة', 'warning');
+            return;
+        }
+    }
     if (!data.end_time) data.end_time = null;
     const r = await apiFetch(id ? `/shifts/${id}` : '/shifts', { method: id ? 'PUT' : 'POST', body: JSON.stringify(data) });
     if (r.success) {

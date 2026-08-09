@@ -259,7 +259,7 @@ class AttendanceController
         $lateResult = ['late_minutes' => 0, 'deduction_type' => null, 'deduction_amount' => 0.0];
 
         if ($shift) {
-            $lateResult = $this->penaltyService->calculateLatePenalty($shift, $now, $date);
+            $lateResult = $this->penaltyService->calculateLatePenalty($shift, $now, $date, $employee);
         } else {
             $lateResult = $this->penaltyService->calculateLateFromConfig($now, $date);
         }

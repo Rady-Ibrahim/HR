@@ -51,11 +51,11 @@ class AttendanceDeductionTest extends TestCase
             'is_active'           => true,
         ]);
 
-        ShiftLateRule::create(['shift_id' => $shift->id, 'min_delay_minutes' => 1, 'max_delay_minutes' => 119, 'deduction_type' => 'minutes', 'deduction_value' => null]);
-        ShiftLateRule::create(['shift_id' => $shift->id, 'min_delay_minutes' => 120, 'max_delay_minutes' => null, 'deduction_type' => 'half_day', 'deduction_value' => null]);
+        ShiftLateRule::create(['shift_id' => $shift->id, 'min_delay_minutes' => 1, 'max_delay_minutes' => 119, 'deduction_type' => 'minutes', 'deduction_value' => 5]);
+        ShiftLateRule::create(['shift_id' => $shift->id, 'min_delay_minutes' => 120, 'max_delay_minutes' => null, 'deduction_type' => 'half_day', 'deduction_value' => 100]);
 
-        ShiftEarlyExitRule::create(['shift_id' => $shift->id, 'min_early_minutes' => 1, 'max_early_minutes' => 59, 'deduction_type' => 'minutes', 'deduction_value' => null]);
-        ShiftEarlyExitRule::create(['shift_id' => $shift->id, 'min_early_minutes' => 60, 'max_early_minutes' => null, 'deduction_type' => 'half_day', 'deduction_value' => null]);
+        ShiftEarlyExitRule::create(['shift_id' => $shift->id, 'min_early_minutes' => 1, 'max_early_minutes' => 59, 'deduction_type' => 'minutes', 'deduction_value' => 5]);
+        ShiftEarlyExitRule::create(['shift_id' => $shift->id, 'min_early_minutes' => 60, 'max_early_minutes' => null, 'deduction_type' => 'half_day', 'deduction_value' => 100]);
 
         return $shift;
     }
@@ -122,9 +122,8 @@ class AttendanceDeductionTest extends TestCase
         $processed = app(AttendancePenaltyService::class)->processAttendance($att);
         $result    = app(AttendancePenaltyService::class)->calculateRecordDeduction($processed);
 
-        $dailyRate   = 5000 / $this->workingDays((int) now()->month, (int) now()->year);
-        $minuteRate  = $dailyRate / 8 / 60;
-        $expected    = round(30 * $minuteRate + ($dailyRate / 2), 2);
+        // 30 min late, 15 beyond grace → 15 × 5 EGP/minute + half-day 100 EGP
+        $expected = round(15 * 5 + 100, 2);
 
         $this->assertEqualsWithDelta($expected, $result['amount'], 0.01);
         $this->assertStringContainsString('تأخير', $result['label']);
@@ -248,9 +247,8 @@ class AttendanceDeductionTest extends TestCase
         $this->assertSame(20, $att->late_minutes);
         $this->assertSame('minutes', $att->applied_late_deduction_type);
 
-        $dailyRate  = 5000 / $this->workingDays((int) now()->month, (int) now()->year);
-        $minuteRate = $dailyRate / 8 / 60;
-        $this->assertEqualsWithDelta(20 * $minuteRate, app(AttendancePenaltyService::class)->calculateRecordDeduction($att)['amount'], 0.01);
+        // 20 min late, 10 beyond grace → 10 × 5 EGP/minute
+        $this->assertEqualsWithDelta(10 * 5, app(AttendancePenaltyService::class)->calculateRecordDeduction($att)['amount'], 0.01);
     }
 
     public function test_salary_deduction_includes_early_exit(): void
@@ -274,8 +272,7 @@ class AttendanceDeductionTest extends TestCase
 
         $summary = $svc->calculateAttendanceDeductionForSalary($emp, (int) now()->month, (int) now()->year, (float) $emp->base_salary);
 
-        $this->assertGreaterThan(0, $summary['amount']);
-        $this->assertSame(1, $summary['half_days']);
-        $this->assertStringContainsString('نصف يوم', $summary['label']);
+        $this->assertEqualsWithDelta(100, $summary['amount'], 0.01);
+        $this->assertStringContainsString('انصراف مبكر', $summary['label']);
     }
 }

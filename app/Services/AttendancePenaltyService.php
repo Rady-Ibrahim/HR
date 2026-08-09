@@ -28,7 +28,7 @@ class AttendancePenaltyService
         return null;
     }
 
-    public function calculateLatePenalty(Shift $shift, Carbon $checkInTime, Carbon $date): array
+    public function calculateLatePenalty(Shift $shift, Carbon $checkInTime, Carbon $date, ?Employee $employee = null): array
     {
         $scheduledStart = Carbon::parse($date->toDateString() . ' ' . $shift->start_time);
         $actualDelayMinutes = (int) $scheduledStart->diffInMinutes($checkInTime, false);
@@ -64,7 +64,7 @@ class AttendancePenaltyService
             ];
         }
 
-        $amount = $this->resolveAmount($matchedRule->deduction_type, $matchedRule->deduction_value, 0);
+        $amount = $this->resolveAmount($matchedRule->deduction_type, $matchedRule->deduction_value, (float) ($employee?->base_salary ?? 0), $effectiveDelay);
 
         return [
             'late_minutes' => $actualDelayMinutes,
@@ -74,7 +74,7 @@ class AttendancePenaltyService
         ];
     }
 
-    public function calculateEarlyExitPenalty(Shift $shift, Carbon $checkInTime, Carbon $checkOutTime, Carbon $date): array
+    public function calculateEarlyExitPenalty(Shift $shift, Carbon $checkInTime, Carbon $checkOutTime, Carbon $date, ?Employee $employee = null): array
     {
         if ($shift->end_time === null) {
             return [
@@ -121,7 +121,7 @@ class AttendancePenaltyService
             ];
         }
 
-        $amount = $this->resolveAmount($matchedRule->deduction_type, $matchedRule->deduction_value, 0);
+        $amount = $this->resolveAmount($matchedRule->deduction_type, $matchedRule->deduction_value, (float) ($employee?->base_salary ?? 0), $earlyMinutes);
 
         return [
             'early_exit_minutes' => $earlyMinutes,
@@ -185,7 +185,7 @@ class AttendancePenaltyService
                 : Carbon::parse($date->toDateString() . ' ' . $attendance->check_in_time);
 
             $lateResult = $shift
-                ? $this->calculateLatePenalty($shift, $checkIn, $date)
+                ? $this->calculateLatePenalty($shift, $checkIn, $date, $employee)
                 : $this->calculateLateFromConfig($checkIn, $date);
 
             if ($attendance->check_out_time) {
@@ -194,7 +194,7 @@ class AttendancePenaltyService
                     : Carbon::parse($date->toDateString() . ' ' . $attendance->check_out_time);
 
                 $earlyResult = $shift
-                    ? $this->calculateEarlyExitPenalty($shift, $checkIn, $checkOut, $date)
+                    ? $this->calculateEarlyExitPenalty($shift, $checkIn, $checkOut, $date, $employee)
                     : $this->calculateEarlyExitFromConfig($checkIn, $checkOut, $date);
             }
         }
@@ -216,7 +216,6 @@ class AttendancePenaltyService
 
     public function calculateAttendanceDeductionForSalary(Employee $employee, int $month, int $year, float $baseSalary): array
     {
-        $halfDayAfterMinutes = (int) Config::get('hr.working_hours.half_day_deduction_after_minutes', 120);
         $workingDays = $this->getWorkingDaysInMonth($month, $year);
 
         if ($workingDays === 0) {
@@ -224,8 +223,6 @@ class AttendancePenaltyService
         }
 
         $dailyRate = $baseSalary / $workingDays;
-        $hourlyRate = $dailyRate / 8;
-        $minuteRate = $hourlyRate / 60;
 
         $records = Attendance::where('employee_id', $employee->id)
             ->whereMonth('attendance_date', $month)
@@ -235,66 +232,30 @@ class AttendancePenaltyService
         $absentDays = $records->where('status', 'absent')->count();
         $absentDeduction = $absentDays * $dailyRate;
 
-        $halfDayCount = 0;
-        $regularLateMinutes = 0;
-        $regularEarlyMinutes = 0;
-        $fixedAmountDeduction = 0.0;
+        $penaltyRecords = $records->where('status', '!=', 'absent');
+        $penaltyDeduction = (float) $penaltyRecords->sum('deduction_amount');
+        $lateMinutes = (int) $penaltyRecords->sum('late_minutes') + (int) $penaltyRecords->sum('early_exit_minutes');
 
-        foreach ($records as $record) {
-            $deductionType = $record->applied_late_deduction_type;
-
-            if ($deductionType === 'half_day') {
-                $halfDayCount++;
-            } elseif ($deductionType === 'full_day') {
-                $absentDeduction += $dailyRate;
-            } elseif ($deductionType === 'quarter_day') {
-                $halfDayCount += 0.5;
-            } elseif ($deductionType === 'fixed_amount') {
-                $fixedAmountDeduction += (float) ($record->deduction_amount ?? 0);
-            } else {
-                $regularLateMinutes += $record->late_minutes ?? 0;
-            }
-
-            $earlyType = $record->applied_early_deduction_type;
-
-            if ($earlyType === 'half_day') {
-                $halfDayCount++;
-            } elseif ($earlyType === 'full_day') {
-                $absentDeduction += $dailyRate;
-            } elseif ($earlyType === 'quarter_day') {
-                $halfDayCount += 0.5;
-            } elseif ($earlyType === 'fixed_amount') {
-                if ($deductionType !== 'fixed_amount') {
-                    $fixedAmountDeduction += (float) ($record->deduction_amount ?? 0);
-                }
-            } else {
-                $regularEarlyMinutes += $record->early_exit_minutes ?? 0;
-            }
-        }
-
-        $halfDayDeduction = $halfDayCount * ($dailyRate / 2);
-        $lateDeduction = ($regularLateMinutes + $regularEarlyMinutes) * $minuteRate;
-
-        $totalAmount = round($absentDeduction + $halfDayDeduction + $lateDeduction + $fixedAmountDeduction, 2);
+        $totalAmount = round($absentDeduction + $penaltyDeduction, 2);
 
         return [
             'amount' => $totalAmount,
             'label' => sprintf(
-                'خصم حضور: %d غياب، %d نصف يوم، %d دقيقة تأخير/انصراف مبكر',
+                'خصم حضور: %d غياب، %d دقيقة تأخير/انصراف مبكر',
                 $absentDays,
-                (int) $halfDayCount,
-                $regularLateMinutes + $regularEarlyMinutes
+                $lateMinutes
             ),
             'absent' => $absentDays,
-            'half_days' => (int) $halfDayCount,
-            'late_minutes' => $regularLateMinutes + $regularEarlyMinutes,
+            'half_days' => 0,
+            'late_minutes' => $lateMinutes,
         ];
     }
 
-    private function resolveAmount(string $deductionType, ?float $deductionValue, float $baseSalary): float
+    private function resolveAmount(string $deductionType, ?float $deductionValue, float $baseSalary, int $minutes = 0): float
     {
         return match ($deductionType) {
-            'quarter_day', 'half_day', 'full_day' => 0.0,
+            'minutes' => (float) ($deductionValue ?? 0) * $minutes,
+            'quarter_day', 'half_day', 'full_day' => (float) ($deductionValue ?? 0),
             'percentage' => $baseSalary * ($deductionValue ?? 0) / 100,
             'fixed_amount' => $deductionValue ?? 0,
             default => 0.0,
@@ -303,55 +264,9 @@ class AttendancePenaltyService
 
     public function calculateRecordDeduction(Attendance $attendance): array
     {
-        $date = $attendance->attendance_date instanceof Carbon
-            ? $attendance->attendance_date
-            : Carbon::parse($attendance->attendance_date);
-
-        $baseSalary = (float) ($attendance->employee?->base_salary ?? 0);
-        $workingDays = $this->getWorkingDaysInMonth((int) $date->month, (int) $date->year);
-
-        if ($baseSalary <= 0 || $workingDays === 0) {
-            return ['amount' => 0.0, 'label' => '-'];
-        }
-
-        $dailyRate = $baseSalary / $workingDays;
-        $hourlyRate = $dailyRate / 8;
-        $minuteRate = $hourlyRate / 60;
-
-        $amount = 0.0;
-        $halfDays = 0;
+        $amount = (float) ($attendance->deduction_amount ?? 0);
         $lateMinutes = (int) ($attendance->late_minutes ?? 0);
         $earlyMinutes = (int) ($attendance->early_exit_minutes ?? 0);
-
-        $lateType = $attendance->applied_late_deduction_type;
-        if ($lateType === 'half_day') {
-            $halfDays += 1;
-        } elseif ($lateType === 'full_day') {
-            $amount += $dailyRate;
-        } elseif ($lateType === 'quarter_day') {
-            $halfDays += 0.5;
-        } elseif ($lateType === 'fixed_amount') {
-            $amount += (float) ($attendance->deduction_amount ?? 0);
-        } else {
-            $amount += $lateMinutes * $minuteRate;
-        }
-
-        $earlyType = $attendance->applied_early_deduction_type;
-        if ($earlyType === 'half_day') {
-            $halfDays += 1;
-        } elseif ($earlyType === 'full_day') {
-            $amount += $dailyRate;
-        } elseif ($earlyType === 'quarter_day') {
-            $halfDays += 0.5;
-        } elseif ($earlyType === 'fixed_amount') {
-            if ($lateType !== 'fixed_amount') {
-                $amount += (float) ($attendance->deduction_amount ?? 0);
-            }
-        } else {
-            $amount += $earlyMinutes * $minuteRate;
-        }
-
-        $amount += $halfDays * ($dailyRate / 2);
 
         $label = [];
         if ($lateMinutes > 0) {
