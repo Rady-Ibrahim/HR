@@ -13,8 +13,8 @@ class AttendanceRequest extends Model
     ];
 
     protected $casts = [
-        'from_date' => 'date',
-        'to_date' => 'date',
+        'from_date' => 'date:Y-m-d',
+        'to_date' => 'date:Y-m-d',
     ];
 
     public function employee(): BelongsTo

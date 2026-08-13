@@ -89,11 +89,11 @@
             </div>
             <div class="col-md-2">
                 <label class="form-label">التاريخ من</label>
-                <input type="date" id="dateFrom" class="form-control">
+                <input type="date" id="dateFrom" class="form-control" value="{{ date('Y-m-01') }}">
             </div>
             <div class="col-md-2">
                 <label class="form-label">إلى</label>
-                <input type="date" id="dateTo" class="form-control">
+                <input type="date" id="dateTo" class="form-control" value="{{ date('Y-m-d') }}">
             </div>
             <div class="col-md-1">
                 <button class="btn-primary-custom w-100" onclick="applyFilters()"><i class="fas fa-search me-1"></i> بحث</button>
@@ -278,6 +278,9 @@ const deductionLabels = {
 const workStartTime = '{{ config("hr.working_hours.check_in_time", "08:00") }}';
 
 let ACTIVE_TAB = 'attendance';
+const DEFAULT_DATE_FROM = '{{ date('Y-m-01') }}';
+const DEFAULT_DATE_TO = '{{ date('Y-m-d') }}';
+let dateFilterTouched = false;
 const attStatusOptions = [
     { value: '', label: 'الكل' },
     { value: 'present', label: 'حاضر' },
@@ -401,8 +404,10 @@ async function loadLeaves(page = 1, requestType = null) {
     if (requestType) params.append('request_type', requestType);
     if (s) params.append('status', s);
     if (e) params.append('search', e);
-    if (f) params.append('date_from', f);
-    if (t) params.append('date_to', t);
+    if (dateFilterTouched) {
+        if (f) params.append('date_from', f);
+        if (t) params.append('date_to', t);
+    }
 
     const r = await apiFetch('/attendance/leave-requests?' + params);
     if (!r.success) return;
@@ -551,8 +556,9 @@ function filterByStatus(status) {
     document.getElementById('empSearch').value = '';
     document.getElementById('attStatus').value = status;
     document.getElementById('shiftFilter').value = '';
-    document.getElementById('dateFrom').value = '';
-    document.getElementById('dateTo').value = '';
+    document.getElementById('dateFrom').value = DEFAULT_DATE_FROM;
+    document.getElementById('dateTo').value = DEFAULT_DATE_TO;
+    dateFilterTouched = false;
     loadTodayList(status);
 }
 
@@ -599,7 +605,12 @@ function showTab(tab, btn) {
 }
 
 function resetAttFilters() {
-    ['empSearch','attStatus','shiftFilter','dateFrom','dateTo'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('empSearch').value = '';
+    document.getElementById('attStatus').value = '';
+    document.getElementById('shiftFilter').value = '';
+    document.getElementById('dateFrom').value = DEFAULT_DATE_FROM;
+    document.getElementById('dateTo').value = DEFAULT_DATE_TO;
+    dateFilterTouched = false;
     setStatusOptions(ACTIVE_TAB === 'attendance' ? attStatusOptions : leaveStatusOptions);
     applyFilters();
 }
@@ -684,6 +695,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('atf_in').addEventListener('change', updateLateFromTime);
     document.getElementById('atf_late').addEventListener('input', updateDeductionPreview);
     document.getElementById('atf_shift').addEventListener('change', updateShiftAlert);
+    document.getElementById('dateFrom').addEventListener('change', () => { dateFilterTouched = true; });
+    document.getElementById('dateTo').addEventListener('change', () => { dateFilterTouched = true; });
     loadTodaySummary();
     loadAttendance();
     loadShiftSelect();
