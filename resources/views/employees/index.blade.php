@@ -8,9 +8,14 @@
         <h1><i class="fas fa-user-tie me-2 text-primary"></i> الموظفين</h1>
         <div class="breadcrumb">إدارة بيانات الموظفين</div>
     </div>
-    <button class="btn-primary-custom" onclick="openAddModal()">
-        <i class="fas fa-plus me-1"></i> إضافة موظف
-    </button>
+    <div class="d-flex gap-2">
+        <button class="btn btn-success" onclick="exportEmployees()" id="exportBtn">
+            <i class="fas fa-file-excel me-1"></i> تحميل Excel
+        </button>
+        <button class="btn-primary-custom" onclick="openAddModal()">
+            <i class="fas fa-plus me-1"></i> إضافة موظف
+        </button>
+    </div>
 </div>
 
 <!-- FILTERS -->
@@ -548,6 +553,44 @@ async function changeStatus(id, status) {
 }
 
 function resetFilters() { ['searchInput','statusFilter','typeFilter','deptFilter'].forEach(id=>document.getElementById(id).value=''); loadEmployees(); }
+
+// ─── EXPORT EXCEL ─────────────────────────────────────
+async function exportEmployees() {
+    const btn = document.getElementById('exportBtn');
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> جارٍ التحضير...';
+    try {
+        const params = new URLSearchParams({
+            search: document.getElementById('searchInput').value,
+            status: document.getElementById('statusFilter').value,
+            employee_type: document.getElementById('typeFilter').value,
+            department: document.getElementById('deptFilter').value,
+        });
+        const res = await fetch(API_BASE + '/employees/export?' + params, {
+            headers: {
+                'Accept': 'application/json',
+                'Authorization': 'Bearer ' + TOKEN,
+            },
+        });
+        if (!res.ok) throw new Error('فشل تحميل الملف');
+        const blob = await res.blob();
+        const disposition = res.headers.get('Content-Disposition') || '';
+        const match = disposition.match(/filename="?(.+?)"?$/);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = match ? match[1] : `employees_${new Date().toISOString().slice(0,10)}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+    } catch (e) {
+        showAlert(e.message || 'حدث خطأ أثناء تحميل الملف', 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+    }
+}
 
 function toggleCommissionRateField() {
     const type = document.getElementById('ef_employee_type').value;

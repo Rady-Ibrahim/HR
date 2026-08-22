@@ -123,6 +123,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Employees
     Route::prefix('employees')->group(function () {
         Route::get('/mobile-list',          [EmployeeController::class, 'mobileList']);
+        Route::get('/export',               [EmployeeController::class, 'export']);
         Route::get('/',                    [EmployeeController::class, 'index']);
         Route::post('/',                   [EmployeeController::class, 'store']);
         Route::get('/managers',            [EmployeeController::class, 'managers']);

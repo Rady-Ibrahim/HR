@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Enums\EmployeeTypeEnum;
+use App\Exports\EmployeesExport;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\Role;
@@ -12,6 +13,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class EmployeeController
 {
@@ -54,6 +57,14 @@ class EmployeeController
             'success' => true,
             'data' => $employees,
         ]);
+    }
+
+    public function export(Request $request): BinaryFileResponse
+    {
+        $filters = $request->only(['search', 'status', 'employee_type', 'sub_role', 'department']);
+        $fileName = 'employees_' . now()->format('Y-m-d_His') . '.xlsx';
+
+        return Excel::download(new EmployeesExport($filters), $fileName);
     }
 
     public function store(Request $request)
