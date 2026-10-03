@@ -63,6 +63,94 @@
     </div>
 </div>
 
+<!-- CUSTOM FLEXIBLE ATTENDANCE (نظام الحضور المخصص بالساعات) -->
+<div class="section-card mb-4" id="customPunchCard" style="display:none">
+    <div class="section-header">
+        <i class="fas fa-stopwatch text-info"></i>
+        <h5 class="section-title">الحضور المخصص بالساعات</h5>
+        <div class="ms-auto d-flex align-items-center gap-2">
+            <select id="customEmpSelect" class="form-select form-select-sm" style="min-width:200px" onchange="syncCustomEmp(this.value)"></select>
+            <button class="btn btn-success btn-sm" id="btnCustomCheckIn" onclick="customPunch('in')"><i class="fas fa-fingerprint me-1"></i> حضور</button>
+            <button class="btn btn-danger btn-sm" id="btnCustomCheckOut" onclick="customPunch('out')"><i class="fas fa-sign-out-alt me-1"></i> انصراف</button>
+        </div>
+    </div>
+    <div class="section-body">
+        <div class="row g-3 align-items-center mb-3">
+            <div class="col-6 col-md-3">
+                <div class="stat-card text-center py-2">
+                    <div class="stat-value" id="custWorked">-</div>
+                    <div class="stat-label">ساعات اليوم</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stat-card text-center py-2">
+                    <div class="d-flex align-items-center justify-content-center gap-1">
+                        <input type="number" id="custReqHoursInput" class="form-control form-control-sm text-center fw-bold" style="width:80px" step="0.5" min="0.5" max="24" placeholder="-">
+                        <button class="btn btn-sm btn-outline-primary px-2" onclick="saveRequiredHours()" title="حفظ الساعات المطلوبة"><i class="fas fa-check"></i></button>
+                    </div>
+                    <div class="stat-label">المطلوب يومياً (عدّل واحفظ)</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stat-card text-center py-2">
+                    <div class="stat-value text-warning" id="custRemaining">-</div>
+                    <div class="stat-label">المتبقي (دقيقة)</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stat-card text-center py-2">
+                    <div class="stat-value" id="custOpenTimer" style="font-variant-numeric:tabular-nums">--:--:--</div>
+                    <div class="stat-label" id="custStatusLabel">الجلسة الحالية</div>
+                </div>
+            </div>
+        </div>
+        <div class="progress mb-3" style="height:10px">
+            <div class="progress-bar bg-info" id="custProgressBar" role="progressbar" style="width:0%"></div>
+        </div>
+        <!-- حضور مخصص: admin picks employee + types check-in / check-out / required hours -->
+        <div class="border rounded p-2 mb-3" style="background:#f8f9fc">
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-user-clock text-info me-2"></i>
+                <strong style="font-size:.85rem">حضور مخصص — سجّل وقت الحضور والانصراف والساعات المطلوبة</strong>
+            </div>
+            <div class="row g-2 align-items-end">
+                <div class="col-6 col-md-3">
+                    <label class="form-label mb-1" style="font-size:.75rem">الموظف *</label>
+                    <select id="cm_emp" class="form-select form-select-sm" onchange="syncCustomEmp(this.value)"></select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label mb-1" style="font-size:.75rem">التاريخ</label>
+                    <input type="date" id="cm_date" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" max="{{ date('Y-m-d') }}">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label mb-1" style="font-size:.75rem">وقت الحضور *</label>
+                    <input type="time" id="cm_in" class="form-control form-control-sm">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label mb-1" style="font-size:.75rem">وقت الانصراف *</label>
+                    <input type="time" id="cm_out" class="form-control form-control-sm">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label mb-1" style="font-size:.75rem">الساعات المطلوبة</label>
+                    <input type="number" id="cm_req" class="form-control form-control-sm" step="0.5" min="0" max="24" placeholder="افتراضي الموظف">
+                </div>
+                <div class="col-md-1">
+                    <button class="btn btn-info btn-sm w-100 text-white" onclick="saveManualSession()" title="تسجيل الجلسة"><i class="fas fa-plus"></i></button>
+                </div>
+                <div class="col-12 col-md-11">
+                    <input type="text" id="cm_notes" class="form-control form-control-sm" maxlength="500" placeholder="ملاحظات (اختياري)">
+                </div>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-0" style="font-size:.85rem">
+                <thead class="table-light"><tr><th>الموظف</th><th>حضور</th><th>انصراف</th><th>المدة</th><th>الحالة</th><th></th></tr></thead>
+                <tbody id="customSessionsTable"><tr><td colspan="6" class="text-center text-muted py-3">لا توجد جلسات اليوم</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <!-- FILTERS -->
 <div class="section-card mb-4">
     <div class="section-body">
@@ -127,13 +215,14 @@
                         <th>انصراف مبكر</th>
                         <th>الخصم</th>
                         <th>ساعات العمل</th>
+                        <th>الساعات المرنة</th>
                         <th>الحالة</th>
                         <th>الموقع</th>
                         <th>إجراءات</th>
                     </tr>
                 </thead>
                 <tbody id="attTable">
-                    <tr><td colspan="12" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>
+                    <tr><td colspan="13" class="text-center py-4"><div class="spinner mx-auto" style="width:30px;height:30px;border-width:3px"></div></td></tr>
                 </tbody>
             </table>
         </div>
@@ -191,7 +280,9 @@
                 <form id="attForm">
                     <input type="hidden" id="attId">
                     <div class="row g-3">
-                        <div class="col-12"><label class="form-label">الموظف *</label><select name="employee_id" id="atf_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select></div>
+                        <div class="col-12"><label class="form-label">الموظف *</label><select name="employee_id" id="atf_emp" class="form-select" data-lookup="employees" data-placeholder="اختر الموظف" required></select>
+                            <div class="small text-primary fw-semibold mt-1" id="atf_emp_info" style="display:none"></div>
+                        </div>
                         <div class="col-md-6"><label class="form-label">التاريخ *</label><input type="date" name="date" id="atf_date" class="form-control" required value="{{ date('Y-m-d') }}" max="{{ date('Y-m-d') }}"></div>
                         <div class="col-md-6"><label class="form-label">الحالة *</label>
                             <select name="status" id="atf_status" class="form-select" required>
@@ -211,6 +302,61 @@
                         <div class="col-12">
                             <div class="alert alert-info py-2 mb-0" style="font-size:.82rem" id="shiftInfoAlert">
                                 بداية العمل {{ config('hr.working_hours.check_in_time', '08:00') }}، سماح {{ config('hr.working_hours.late_threshold_minutes', 15) }} دقيقة.
+                            </div>
+                        </div>
+                        <div class="col-12" id="atf_penalty_box" style="display:none">
+                            <div class="border rounded p-3">
+                                <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                                    <div>
+                                        <div class="fw-bold" style="font-size:.85rem"><i class="fas fa-money-bill-wave text-danger me-1"></i> الخصم</div>
+                                        <small class="text-muted d-block" style="font-size:.75rem">فعّل التعديل اليدوي لتغيير الحساب، أو أبقِه مطفأً ليُحسب تلقائياً حسب القواعد</small>
+                                    </div>
+                                    <div class="form-check form-switch m-0">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="atf_manual" onchange="toggleManualOverride()">
+                                        <label class="form-check-label fw-semibold" for="atf_manual">تعديل يدوي</label>
+                                    </div>
+                                </div>
+                                <div class="row g-2" id="atf_penalty_fields" style="display:none">
+                                    <div class="col-6 col-md-3">
+                                        <label class="form-label mb-1" style="font-size:.75rem">دقائق التأخير</label>
+                                        <input type="number" id="atf_late_manual" class="form-control form-control-sm" min="0" value="0">
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <label class="form-label mb-1" style="font-size:.75rem">نوع خصم التأخير</label>
+                                        <select id="atf_late_type" class="form-select form-select-sm">
+                                            <option value="">— لا يوجد —</option>
+                                            <option value="quarter_day">ربع يوم</option>
+                                            <option value="half_day">نصف يوم</option>
+                                            <option value="full_day">يوم كامل</option>
+                                            <option value="percentage">نسبة مئوية</option>
+                                            <option value="fixed_amount">مبلغ ثابت</option>
+                                            <option value="minutes">عن كل دقيقة</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <label class="form-label mb-1" style="font-size:.75rem">دقائق الانصراف المبكر</label>
+                                        <input type="number" id="atf_early" class="form-control form-control-sm" min="0" value="0">
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <label class="form-label mb-1" style="font-size:.75rem">نوع خصم الانصراف المبكر</label>
+                                        <select id="atf_early_type" class="form-select form-select-sm">
+                                            <option value="">— لا يوجد —</option>
+                                            <option value="quarter_day">ربع يوم</option>
+                                            <option value="half_day">نصف يوم</option>
+                                            <option value="full_day">يوم كامل</option>
+                                            <option value="percentage">نسبة مئوية</option>
+                                            <option value="fixed_amount">مبلغ ثابت</option>
+                                            <option value="minutes">عن كل دقيقة</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6 col-md-4">
+                                        <label class="form-label mb-1" style="font-size:.75rem">إجمالي الخصم</label>
+                                        <input type="number" id="atf_deduction_amount" class="form-control form-control-sm" min="0" step="0.01" value="0" required>
+                                    </div>
+                                    <div class="col-12 col-md-8 d-flex align-items-center">
+                                        <small class="text-muted" style="font-size:.72rem">عند الحفظ يُستخدم هذا الخصم كما هو دون إعادة حساب تلقائية.</small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="col-12"><label class="form-label">ملاحظات</label><textarea name="notes" id="atf_notes" class="form-control" rows="2"></textarea></div>
@@ -265,12 +411,295 @@
         </div>
     </div></div>
 </div>
+
+<!-- ═══ SESSIONS BREAKDOWN MODAL ═══ -->
+<div class="modal fade" id="sessionsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-layer-group me-2"></i> جلسات اليوم — <span id="sessionsEmpName"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="sessionsAttId">
+                <div class="row g-2 mb-3" id="sessionsTotals"></div>
+                <table class="data-table">
+                    <thead><tr><th>#</th><th>حضور</th><th>انصراف</th><th>المدة</th><th>المصدر</th><th>ملاحظات</th><th>إجراءات</th></tr></thead>
+                    <tbody id="sessionsTableBody"></tbody>
+                </table>
+                <hr>
+                <div class="row g-2 align-items-end" id="addSessionForm">
+                    <div class="col-md-3"><label class="form-label">حضور</label><input type="time" id="ns_in" class="form-control"></div>
+                    <div class="col-md-3"><label class="form-label">انصراف</label><input type="time" id="ns_out" class="form-control"></div>
+                    <div class="col-md-2"><label class="form-label">الساعات المطلوبة</label><input type="number" id="ns_req" class="form-control" step="0.5" min="0" max="24" placeholder="بدون تغيير"></div>
+                    <div class="col-md-3"><label class="form-label">ملاحظات</label><input type="text" id="ns_notes" class="form-control"></div>
+                    <div class="col-md-1"><button class="btn-primary-custom w-100" onclick="addSession()"><i class="fas fa-plus"></i></button></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
 <script>
 const attBadge = { present:'badge-active', absent:'badge-rejected', late:'badge-pending', on_leave:'badge-approved' };
 const attLabel = { present:'حاضر', absent:'غائب', late:'متأخر', early_leave:'انصراف مبكر', on_leave:'إجازة', excused:'معذور' };
+const hoursStatusLabels = { fulfilled:'استكمل الساعات', shortfall:'نقص ساعات', overtime:'ساعات إضافية' };
+const hoursStatusBadges = { fulfilled:'badge-active', shortfall:'badge-rejected', overtime:'badge-approved' };
+function hoursStatusLabel(s) { return s ? (hoursStatusLabels[s] || s) : '-'; }
+function hoursStatusBadge(s) { return s ? (hoursStatusBadges[s] || 'badge-draft') : 'badge-draft'; }
+
+// ═══ CUSTOM FLEXIBLE ATTENDANCE WIDGET ══════════════════
+let customTimerInterval = null;
+let customEmployees = [];
+const customSourceLabels = { mobile: 'تطبيق', admin: 'إدارة', manual: 'يدوي' };
+
+async function initCustomAttendance() {
+    // Load active employees into the picker; auto-detect current user's employee.
+    const r = await apiFetch('/employees?per_page=1000&status=active');
+    if (!r.success) return;
+    customEmployees = r.data?.data ?? [];
+
+    let meId = null;
+    try {
+        const me = await apiFetch('/auth/me');
+        if (me.success) meId = me.data?.employee?.id ?? null;
+    } catch (e) {}
+
+    const sel = document.getElementById('customEmpSelect');
+    const customOnly = customEmployees.filter(e => e.is_custom_attendance);
+    if (!customOnly.length) { document.getElementById('customPunchCard').style.display = 'none'; return; }
+
+    document.getElementById('customPunchCard').style.display = '';
+    const options = '<option value="">اختر الموظف</option>' + customOnly.map(e =>
+        `<option value="${e.id}">${e.name} (${e.employee_code})</option>`).join('');
+    sel.innerHTML = options;
+    document.getElementById('cm_emp').innerHTML = options;
+
+    const preselect = meId && customOnly.some(e => e.id === meId) ? meId : customOnly[0].id;
+    sel.value = String(preselect);
+    document.getElementById('cm_emp').value = String(preselect);
+    await loadCustomSummary();
+}
+
+// Keep the header picker and the manual-entry picker in sync.
+function syncCustomEmp(empId) {
+    if (!empId) return;
+    document.getElementById('customEmpSelect').value = String(empId);
+    document.getElementById('cm_emp').value = String(empId);
+    loadCustomSummary();
+}
+
+// Set the selected employee's daily required hours from the widget.
+async function saveRequiredHours() {
+    const empId = document.getElementById('customEmpSelect').value;
+    if (!empId) { showAlert('اختر الموظف أولاً', 'warning'); return; }
+
+    const input = document.getElementById('custReqHoursInput');
+    const hours = parseFloat(input.value);
+    if (!hours || hours < 0.5 || hours > 24) { showAlert('أدخل عدد ساعات صحيح (0.5 - 24)', 'warning'); return; }
+
+    const r = await apiFetch('/attendance/custom/required-hours', {
+        method: 'POST',
+        body: JSON.stringify({ employee_id: parseInt(empId), daily_required_hours: hours }),
+    });
+    if (!r.success) { showAlert(r.message || 'فشل الحفظ', 'danger'); return; }
+    showAlert(r.message);
+    await loadCustomSummary();
+}
+
+function fmtMinutes(mins) {
+    mins = Math.max(0, Math.round(mins));
+    return `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2,'0')}`;
+}
+
+async function loadCustomSummary() {
+    const empId = document.getElementById('customEmpSelect').value;
+    if (!empId) return;
+    stopCustomTimer();
+    document.getElementById('custOpenTimer').textContent = '--:--:--';
+    document.getElementById('custStatusLabel').textContent = 'الجلسة الحالية';
+
+    const r = await apiFetch('/attendance/custom/today?employee_id=' + empId);
+    if (!r.success) { showAlert(r.message || 'فشل تحميل الملخص', 'danger'); return; }
+    renderCustomSummary(r.data);
+}
+
+function renderCustomSummary(d) {
+    const workedH = Number(d.total_worked_hours ?? 0).toFixed(2);
+    document.getElementById('custWorked').textContent = `${workedH} س`;
+    document.getElementById('custReqHoursInput').value = Number(d.daily_required_hours ?? 0) || '';
+    document.getElementById('custRemaining').textContent = d.remaining_minutes ?? 0;
+    document.getElementById('cm_req').placeholder = `افتراضي: ${Number(d.daily_required_hours ?? 0).toFixed(2)}`;
+
+    const pct = d.daily_required_hours > 0 ? Math.min(100, (Number(d.total_worked_hours ?? 0) / Number(d.daily_required_hours)) * 100) : 0;
+    document.getElementById('custProgressBar').style.width = pct.toFixed(1) + '%';
+    document.getElementById('custProgressBar').className = 'progress-bar ' +
+        (pct >= 100 ? 'bg-success' : pct >= 50 ? 'bg-info' : 'bg-warning');
+
+    const statusEl = document.getElementById('custStatusLabel');
+    statusEl.innerHTML = d.hours_status === 'fulfilled' ? '<span class="text-success">تم استيفاء الساعات ✓</span>'
+        : d.hours_status === 'overtime' ? `<span class="text-success">إضافي ${fmtMinutes(d.overtime_minutes ?? 0)}</span>`
+        : d.hours_status === 'shortfall' ? `<span class="text-danger">نقص ${fmtMinutes(d.remaining_minutes ?? 0)}${d.shortfall_deduction_amount > 0 ? ` (خصم ~${Number(d.shortfall_deduction_amount).toLocaleString()})` : ''}</span>`
+        : 'لم يسجل بعد';
+
+    // Open session → live timer
+    stopCustomTimer();
+    if (d.open_session) {
+        let elapsed = d.elapsed_open_session_minutes ?? 0;
+        const tickStart = Date.now();
+        const render = () => {
+            const totalSec = Math.floor(elapsed * 60) + Math.floor((Date.now() - tickStart) / 1000);
+            const h = String(Math.floor(totalSec / 3600)).padStart(2,'0');
+            const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2,'0');
+            const s = String(totalSec % 60).padStart(2,'0');
+            document.getElementById('custOpenTimer').textContent = `${h}:${m}:${s}`;
+            document.getElementById('custStatusLabel').innerHTML = '<span class="text-info"><i class="fas fa-circle-notch fa-spin"></i> جلسة جارية…</span>';
+        };
+        render();
+        customTimerInterval = setInterval(render, 1000);
+        document.getElementById('btnCustomCheckIn').disabled = true;
+        document.getElementById('btnCustomCheckOut').disabled = false;
+    } else {
+        document.getElementById('btnCustomCheckIn').disabled = false;
+        document.getElementById('btnCustomCheckOut').disabled = true;
+    }
+
+    // Sessions table (with employee name)
+    const empName = d.employee_name
+        ?? (document.getElementById('customEmpSelect').selectedOptions[0]?.textContent ?? '-');
+    const rows = d.sessions ?? [];
+    document.getElementById('customSessionsTable').innerHTML = rows.length ? rows.map((s, i) => `
+        <tr>
+            <td class="fw-bold">${empName}</td>
+            <td>${s.check_in_time ?? '-'}</td>
+            <td>${s.check_out_time ?? '-'}</td>
+            <td>${s.duration_minutes ? fmtMinutes(s.duration_minutes) : (s.is_open ? '<span class="text-info">جارية</span>' : '-')}</td>
+            <td><small>${customSourceLabels[s.source] ?? s.source ?? '-'}</small></td>
+            <td><small class="text-muted">${s.notes ?? ''}</small></td>
+        </tr>`).join('')
+        : '<tr><td colspan="6" class="text-center text-muted py-3">لا توجد جلسات اليوم</td></tr>';
+}
+
+function stopCustomTimer() {
+    if (customTimerInterval) { clearInterval(customTimerInterval); customTimerInterval = null; }
+}
+
+async function customPunch(type) {
+    const empId = document.getElementById('customEmpSelect').value;
+    if (!empId) { showAlert('اختر الموظف أولاً', 'warning'); return; }
+    const btn = type === 'in' ? document.getElementById('btnCustomCheckIn') : document.getElementById('btnCustomCheckOut');
+    btn.disabled = true;
+    const r = await apiFetch(`/attendance/check-${type}`, {
+        method: 'POST',
+        body: JSON.stringify({ employee_id: parseInt(empId) }),
+    });
+    if (!r.success) {
+        showAlert(r.message || 'فشل التسجيل', 'danger');
+        btn.disabled = false;
+        return;
+    }
+    showAlert(r.message);
+    await loadCustomSummary();
+}
+
+// ═══ SESSIONS BREAKDOWN MODAL ═══════════════════════════
+let sessionsAttId = null;
+
+async function openSessionsModal(attId) {
+    sessionsAttId = attId;
+    new bootstrap.Modal(document.getElementById('sessionsModal')).show();
+    await refreshSessionsModal();
+}
+
+async function refreshSessionsModal() {
+    const r = await apiFetch('/attendance/' + sessionsAttId + '/sessions');
+    if (!r.success) { showAlert(r.message || 'فشل التحميل', 'danger'); return; }
+    const { attendance, sessions, totals } = r.data;
+    document.getElementById('sessionsEmpName').textContent =
+        `${attendance.employee?.name ?? '-'} — ${(attendance.attendance_date ?? '').substring(0,10)}`;
+
+    const t = totals ?? {};
+    document.getElementById('sessionsTotals').innerHTML = [
+        ['المعمل به', `${Number(t.total_worked_hours ?? 0).toFixed(2)} س`, 'text-primary'],
+        ['المطلوب', t.required_hours != null ? `${Number(t.required_hours).toFixed(2)} س` : '-', ''],
+        ['الحالة', hoursStatusLabel(t.hours_status), t.hours_status === 'shortfall' ? 'text-danger' : t.hours_status === 'fulfilled' ? 'text-success' : ''],
+        ['الخصم', t.deduction_amount > 0 ? `- ${Number(t.deduction_amount).toLocaleString()} ج.م` : '-', t.deduction_amount > 0 ? 'text-danger fw-bold' : ''],
+    ].map(([label, val, cls]) => `
+        <div class="col-6 col-md-3"><div class="stat-card text-center py-2">
+            <div class="stat-value ${cls}" style="font-size:1.1rem">${val}</div>
+            <div class="stat-label">${label}</div>
+        </div></div>`).join('');
+
+    document.getElementById('sessionsTableBody').innerHTML = sessions.length ? sessions.map((s, i) => `
+        <tr>
+            <td>${i + 1}</td>
+            <td>${s.check_in_time ?? '-'}</td>
+            <td>${s.check_out_time ?? '-'}</td>
+            <td class="fw-bold">${s.duration_minutes ? fmtMinutes(s.duration_minutes) : (s.is_open ? '<span class="text-info">جارية</span>' : '-')}</td>
+            <td><small>${customSourceLabels[s.source] ?? s.source ?? '-'}</small></td>
+            <td><small class="text-muted">${s.notes ?? '-'}</small></td>
+            <td>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteSession(${s.id})" title="حذف الجلسة"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>`).join('')
+        : '<tr><td colspan="7" class="text-center text-muted py-3">لا توجد جلسات مسجلة</td></tr>';
+}
+
+async function addSession() {
+    const body = {};
+    if (document.getElementById('ns_in').value) body.check_in_time = document.getElementById('ns_in').value;
+    if (document.getElementById('ns_out').value) body.check_out_time = document.getElementById('ns_out').value;
+    if (document.getElementById('ns_req').value !== '') body.required_hours = parseFloat(document.getElementById('ns_req').value);
+    if (document.getElementById('ns_notes').value) body.notes = document.getElementById('ns_notes').value;
+    const r = await apiFetch(`/attendance/${sessionsAttId}/sessions`, { method: 'POST', body: JSON.stringify(body) });
+    if (!r.success) { showAlert(r.message || 'فشل الإضافة', 'danger'); return; }
+    ['ns_in','ns_out','ns_req','ns_notes'].forEach(id => document.getElementById(id).value = '');
+    showAlert('تمت إضافة الجلسة');
+    await Promise.all([refreshSessionsModal(), loadCustomSummary(), loadAttendance()]);
+}
+
+// Manual entry from the flexible-attendance widget (date + in/out times + required hours)
+async function saveManualSession() {
+    const empId = document.getElementById('cm_emp').value;
+    if (!empId) { showAlert('اختر الموظف أولاً', 'warning'); return; }
+
+    const date = document.getElementById('cm_date').value;
+    const checkIn = document.getElementById('cm_in').value;
+    const checkOut = document.getElementById('cm_out').value;
+
+    if (!checkIn || !checkOut) { showAlert('أدخل وقت الحضور ووقت الانصراف', 'warning'); return; }
+
+    const body = {
+        employee_id: parseInt(empId),
+        check_in_time: checkIn,
+        check_out_time: checkOut,
+    };
+    if (date) body.date = date;
+    if (document.getElementById('cm_req').value !== '') body.required_hours = parseFloat(document.getElementById('cm_req').value);
+    if (document.getElementById('cm_notes').value) body.notes = document.getElementById('cm_notes').value;
+
+    const r = await apiFetch('/attendance/custom/manual-session', { method: 'POST', body: JSON.stringify(body) });
+    if (!r.success) { showAlert(r.message || 'فشل تسجيل الجلسة', 'danger'); return; }
+
+    const d = r.data ?? {};
+    const statusText = d.hours_status === 'shortfall' ? ' — نقص ساعات'
+        : d.hours_status === 'overtime' ? ' — ساعات إضافية'
+        : d.hours_status === 'fulfilled' ? ' — استكمل الساعات' : '';
+    showAlert(`${r.message}${statusText} | إجمالي اليوم: ${Number(d.total_worked_hours ?? 0).toFixed(2)} ساعة`);
+    ['cm_in','cm_out','cm_req','cm_notes'].forEach(id => document.getElementById(id).value = '');
+    await Promise.all([loadCustomSummary(), loadAttendance()]);
+}
+
+async function deleteSession(logId) {
+    if (!confirm('حذف هذه الجلسة وإعادة حساب الإجماليات؟')) return;
+    const r = await apiFetch(`/attendance/sessions/${logId}`, { method: 'DELETE' });
+    if (!r.success) { showAlert(r.message || 'فشل الحذف', 'danger'); return; }
+    showAlert('تم حذف الجلسة');
+    await Promise.all([refreshSessionsModal(), loadCustomSummary(), loadAttendance()]);
+}
+
 const deductionLabels = {
     minutes: 'دقائق', quarter_day: 'ربع يوم', half_day: 'نصف يوم',
     full_day: 'يوم كامل', percentage: 'نسبة مئوية', fixed_amount: 'مبلغ ثابت'
@@ -319,7 +748,7 @@ async function loadShiftSelect() {
     const sel2 = document.getElementById('atf_shift');
     const sel3 = document.getElementById('shiftFilter');
     const opts = '<option value="">اختر الوردية</option>' + all.filter(s => s.is_active).map(s =>
-        `<option value="${s.id}">${s.name} (${s.start_time?.substring(0,5)} - ${s.end_time?.substring(0,5)})</option>`
+        `<option value="${s.id}" data-start-time="${s.start_time || ''}" data-end-time="${s.end_time || ''}" data-grace="${s.grace_period_minutes || 0}">${s.name} (${s.start_time?.substring(0,5)} - ${s.end_time?.substring(0,5)})</option>`
     ).join('');
     sel.innerHTML = '<option value="">عرض الوردية</option>' + opts.substring(22);
     sel2.innerHTML = '<option value="">الوردية الافتراضية</option>' + opts.substring(22);
@@ -356,7 +785,7 @@ async function loadAttendance(page = 1) {
     document.getElementById('attPagInfo').textContent = `إجمالي: ${data.total}`;
     const all = data.data;
     if (!all.length) {
-        document.getElementById('attTable').innerHTML = '<tr><td colspan="12" class="text-center py-4 text-muted">لا توجد سجلات</td></tr>';
+        document.getElementById('attTable').innerHTML = '<tr><td colspan="13" class="text-center py-4 text-muted">لا توجد سجلات</td></tr>';
         return;
     }
     document.getElementById('attTable').innerHTML = all.map(a => `
@@ -368,10 +797,13 @@ async function loadAttendance(page = 1) {
             <td>${a.check_out_time ?? '-'}</td>
             <td>${lateText(a.late_minutes ?? 0, a.applied_late_deduction_type)}</td>
             <td>${a.early_exit_minutes ? earlyText(a.early_exit_minutes, a.applied_early_deduction_type) : '-'}</td>
-            <td>${a.salary_deduction_amount > 0
-                ? `<span class="fw-bold text-danger">-${Number(a.salary_deduction_amount).toLocaleString()} ج.م</span><br><small class="text-muted">${a.salary_deduction_label ?? ''}</small>`
+            <td>${(a.salary_deduction_amount > 0 || a.penalty_overridden)
+                ? `<span class="fw-bold text-danger">-${Number(a.salary_deduction_amount ?? 0).toLocaleString()} ج.م</span><br><small class="text-muted">${a.salary_deduction_label ?? ''}</small>${a.penalty_overridden ? '<span class="badge-status badge-pending d-inline-block mt-1"><i class="fas fa-pen"></i> تعديل يدوي</span>' : ''}`
                 : '-'}</td>
-            <td>${a.actual_worked_hours ? Number(a.actual_worked_hours).toFixed(2) : (a.working_hours ?? '-')}</td>
+            <td>${a.actual_worked_hours ? Number(a.actual_worked_hours).toFixed(2) : (a.working_hours ?? '-')}${(a.hours_status || a.logs_count > 0) ? `<br><small class="text-muted"><i class="fas fa-layer-group"></i> ${a.logs_count ?? 0} جلسة${a.required_hours ? ` / مطلوب ${Number(a.required_hours).toFixed(2)} س` : ''}</small>` : ''}</td>
+            <td>${a.hours_status
+                ? `<span class="badge-status ${hoursStatusBadge(a.hours_status)}">${hoursStatusLabel(a.hours_status)}</span><button class="btn btn-sm btn-outline-info d-block mt-1 w-100" onclick="openSessionsModal(${a.id})" title="عرض الجلسات"><i class="fas fa-list me-1"></i> الجلسات</button>`
+                : '<span class="text-muted">-</span>'}</td>
             <td><span class="badge-status ${attBadge[a.status] || 'badge-draft'}">${attLabel[a.status] || a.status}</span></td>
             <td>${a.check_in_latitude ? `<span class="badge bg-info"><i class="fas fa-map-marker-alt"></i> GPS</span>` : '-'}</td>
             <td>
@@ -465,6 +897,10 @@ function openAddAttModal() {
     document.getElementById('atf_date').value='{{ date("Y-m-d") }}';
     document.getElementById('atf_status').value='present';
     document.getElementById('atf_late').value='';
+    document.getElementById('atf_emp_info').style.display='none';
+    document.getElementById('atf_penalty_box').style.display='none';
+    document.getElementById('atf_penalty_fields').style.display='none';
+    document.getElementById('atf_manual').checked=false;
     updateDeductionPreview();
     updateShiftAlert();
     new bootstrap.Modal(document.getElementById('attAddModal')).show();
@@ -475,7 +911,13 @@ async function openEditAttModal(id) {
     new bootstrap.Modal(document.getElementById('attAddModal')).show();
     const r=await apiFetch('/attendance/'+id); if(!r.success) return; const a=r.data;
     document.getElementById('attId').value=a.id;
-    document.getElementById('atf_emp').value=a.employee_id;
+    if (a.employee) {
+        document.getElementById('atf_emp_info').innerHTML=`<i class="fas fa-user me-1"></i> ${a.employee.name}${a.employee.employee_code ? ` <span class="text-muted">(${a.employee.employee_code})</span>` : ''}`;
+        document.getElementById('atf_emp_info').style.display='';
+    } else {
+        document.getElementById('atf_emp_info').style.display='none';
+    }
+    resetLookupSelect(document.getElementById('atf_emp'), a.employee_id ?? '');
     document.getElementById('atf_date').value=a.attendance_date?a.attendance_date.substring(0,10):'';
     document.getElementById('atf_status').value=a.status;
     document.getElementById('atf_shift').value=a.shift_id||'';
@@ -483,6 +925,16 @@ async function openEditAttModal(id) {
     document.getElementById('atf_out').value=timeOnly(a.check_out_time);
     document.getElementById('atf_late').value=a.late_minutes??0;
     document.getElementById('atf_notes').value=a.notes??'';
+    // Penalty manual-override fields
+    const overridden=!!a.penalty_overridden;
+    document.getElementById('atf_penalty_box').style.display='';
+    document.getElementById('atf_manual').checked=overridden;
+    document.getElementById('atf_penalty_fields').style.display=overridden?'':'none';
+    document.getElementById('atf_late_manual').value=a.late_minutes??0;
+    document.getElementById('atf_late_type').value=a.applied_late_deduction_type??'';
+    document.getElementById('atf_early').value=a.early_exit_minutes??0;
+    document.getElementById('atf_early_type').value=a.applied_early_deduction_type??'';
+    document.getElementById('atf_deduction_amount').value=a.salary_deduction_amount??a.deduction_amount??0;
     updateDeductionPreview();
     updateShiftAlert();
 }
@@ -498,9 +950,25 @@ async function saveAttendance() {
     if(!data.notes) delete data.notes;
     if(!data.shift_id) delete data.shift_id;
     else data.shift_id=parseInt(data.shift_id);
+    // Manual penalty override: send the values verbatim, skipping auto-recalc
+    const manual = document.getElementById('atf_manual').checked && document.getElementById('atf_penalty_box').style.display !== 'none';
+    if (manual) {
+        data.late_minutes = parseInt(document.getElementById('atf_late_manual').value || 0);
+        data.early_exit_minutes = parseInt(document.getElementById('atf_early').value || 0);
+        const lt = document.getElementById('atf_late_type').value;
+        const et = document.getElementById('atf_early_type').value;
+        data.applied_late_deduction_type = lt ? lt : null;
+        data.applied_early_deduction_type = et ? et : null;
+        data.deduction_amount = parseFloat(document.getElementById('atf_deduction_amount').value || 0);
+    }
     const r=await apiFetch(id?`/attendance/${id}`:'/attendance',{method:id?'PUT':'POST',body:JSON.stringify(data)});
     if(r.success){bootstrap.Modal.getInstance(document.getElementById('attAddModal')).hide();showAlert(id?'تم التحديث':'تم الإضافة');loadAttendance();}
     else showAlert(r.message||'فشل الحفظ','danger');
+}
+
+function toggleManualOverride() {
+    const on=document.getElementById('atf_manual').checked;
+    document.getElementById('atf_penalty_fields').style.display=on?'':'none';
 }
 
 function confirmDeleteAtt(id) { attDeleteId=id; new bootstrap.Modal(document.getElementById('attDeleteModal')).show(); }
@@ -569,7 +1037,7 @@ async function loadTodayList(status) {
     document.getElementById('attPagInfo').textContent = `إجمالي اليوم: ${list.length}`;
     document.getElementById('attPagination').innerHTML = '';
     if (!list.length) {
-        document.getElementById('attTable').innerHTML = '<tr><td colspan="12" class="text-center py-4 text-muted">لا توجد سجلات</td></tr>';
+        document.getElementById('attTable').innerHTML = '<tr><td colspan="13" class="text-center py-4 text-muted">لا توجد سجلات</td></tr>';
         return;
     }
     document.getElementById('attTable').innerHTML = list.map(a => `
@@ -583,6 +1051,7 @@ async function loadTodayList(status) {
             <td>-</td>
             <td>-</td>
             <td>-</td>
+            <td><span class="text-muted">-</span></td>
             <td><span class="badge-status ${attBadge[status] || 'badge-draft'}">${attLabel[status] || status}</span></td>
             <td>-</td>
             <td>-</td>
@@ -645,19 +1114,31 @@ function earlyText(minutes, deductionType) {
 }
 
 function updateDeductionPreview() {
-    const late = Number(document.getElementById('atf_late').value || 0);
+    const lateField = document.getElementById('atf_late');
     const preview = document.getElementById('atf_deduction_preview');
     if (!preview) return;
-    if (late > 0) {
+
+    const grace = Number(lateField.dataset.grace || 0);
+    const effectiveLate = Number(lateField.dataset.effectiveLate ?? (Number(lateField.value || 0) - grace));
+    const totalLate = Number(lateField.value || 0);
+
+    if ((grace && totalLate > 0 && totalLate <= grace) || effectiveLate <= 0) {
+        // Within the grace period -> on time, no deduction.
+        preview.value = 'لا يوجد خصم (داخل فترة السماح)';
+        preview.classList.remove('text-danger', 'fw-bold');
+        return;
+    }
+
+    if (totalLate > 0) {
         const halfDayAfterMinutes = 120;
-        if (late >= halfDayAfterMinutes) {
+        if (effectiveLate >= halfDayAfterMinutes) {
             preview.value = 'خصم نصف يوم من المرتب';
             preview.classList.add('text-danger', 'fw-bold');
-        } else if (late >= 30) {
+        } else if (effectiveLate >= 30) {
             preview.value = 'خصم ربع يوم من المرتب';
             preview.classList.add('text-danger', 'fw-bold');
         } else {
-            preview.value = `خصم ${late} دقيقة من المرتب`;
+            preview.value = `خصم ${effectiveLate} دقيقة من المرتب`;
             preview.classList.remove('text-danger');
             preview.classList.add('fw-bold');
         }
@@ -670,9 +1151,34 @@ function updateDeductionPreview() {
 function updateLateFromTime() {
     const checkIn = document.getElementById('atf_in').value;
     if (!checkIn) return;
-    const late = minutesBetween(workStartTime, checkIn);
-    document.getElementById('atf_late').value = late;
-    if (late > 0) document.getElementById('atf_status').value = 'late';
+    // Parse the selected shift's own start time & grace from the dropdown option
+    // (falls back to the global config start time when no shift is selected).
+    const shiftSel = document.getElementById('atf_shift');
+    const selOpt = shiftSel.selectedOptions ? shiftSel.selectedOptions[0] : null;
+    const shiftStart = selOpt && selOpt.dataset.startTime ? selOpt.dataset.startTime : workStartTime;
+    const grace = selOpt && selOpt.dataset.grace ? Number(selOpt.dataset.grace) : 0;
+
+    // Total delay in minutes vs the shift start (matches backend late_minutes field).
+    const totalLate = minutesBetween(shiftStart, checkIn);
+    // Effective delay beyond the grace period (for status/deduction eligibility).
+    const effectiveLate = Math.max(0, totalLate - (grace || 0));
+
+    const lateField = document.getElementById('atf_late');
+    const statusField = document.getElementById('atf_status');
+
+    // Show the total delay minutes (matches the backend late_minutes) and keep the
+    // effective (post-grace) value on the element for the deduction preview.
+    lateField.value = totalLate;
+    lateField.dataset.effectiveLate = effectiveLate;
+    lateField.dataset.grace = grace;
+
+    if (statusField) {
+        if (totalLate > (grace || 0)) {
+            statusField.value = 'late';
+        } else if (totalLate > 0) {
+            statusField.value = 'present'; // within grace = on time
+        }
+    }
     updateDeductionPreview();
 }
 
@@ -694,12 +1200,17 @@ function updateShiftAlert() {
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('atf_in').addEventListener('change', updateLateFromTime);
     document.getElementById('atf_late').addEventListener('input', updateDeductionPreview);
-    document.getElementById('atf_shift').addEventListener('change', updateShiftAlert);
+    document.getElementById('atf_shift').addEventListener('change', () => {
+        updateShiftAlert();
+        // Recompute late minutes when the shift changes (its start/grace differ).
+        if (document.getElementById('atf_in').value) updateLateFromTime();
+    });
     document.getElementById('dateFrom').addEventListener('change', () => { dateFilterTouched = true; });
     document.getElementById('dateTo').addEventListener('change', () => { dateFilterTouched = true; });
     loadTodaySummary();
     loadAttendance();
     loadShiftSelect();
+    initCustomAttendance();
 });
 </script>
 @endpush

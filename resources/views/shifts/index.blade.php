@@ -14,6 +14,25 @@
     </div>
 </div>
 
+<!-- GLOBAL EARLY-EXIT SWITCH -->
+<div class="section-card mb-4">
+    <div class="section-body">
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <div class="stat-icon mb-0" style="width:46px;height:46px;background:#fce4ec;color:#c62828">
+                <i class="fas fa-door-open"></i>
+            </div>
+            <div class="flex-grow-1">
+                <div class="fw-bold text-primary">خصم الانصراف المبكر</div>
+                <div class="text-muted" style="font-size:.82rem" id="earlyGlobalNote">...</div>
+            </div>
+            <div class="form-check form-switch ms-auto me-3 mb-0" style="min-width:190px">
+                <input type="checkbox" class="form-check-input" id="earlyExitGlobalSwitch" checked onchange="toggleEarlyExitGlobal(this.checked)">
+                <label class="form-check-label fw-semibold" for="earlyExitGlobalSwitch">مفعّل لجميع الموظفين</label>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- SHIFTS LIST -->
 <div class="section-card mb-4">
     <div class="section-header">
@@ -196,11 +215,46 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">من تاريخ *</label>
-                            <input type="date" name="effective_from" id="af_from" class="form-control" required value="{{ date('Y-m-d') }}">
+                            <input type="date" name="effective_from" id="af_from" class="form-control" required value="{{ date('Y-m-d') }}" onchange="updateAssignmentPreview()">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">إلى تاريخ</label>
-                            <input type="date" name="effective_to" id="af_to" class="form-control" placeholder="بدون تاريخ = مستمر">
+                            <input type="date" name="effective_to" id="af_to" class="form-control" placeholder="بدون تاريخ = مستمر" onchange="updateAssignmentPreview()">
+                        </div>
+                        <div class="col-12">
+                            <hr class="my-1">
+                            <div class="form-check form-switch">
+                                <input type="checkbox" class="form-check-input" id="af_enable_extra" onchange="toggleExtraFields()">
+                                <label class="form-check-label fw-semibold" for="af_enable_extra">
+                                    <i class="fas fa-money-bill-wave text-success me-1"></i> إضافة ساعات إضافية / بدل وردية
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-12 d-none" id="af_extraFields">
+                            <div class="border rounded p-3">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">الساعات الإضافية / يوم</label>
+                                        <input type="number" step="0.5" min="0.1" id="af_extra_hours" class="form-control" placeholder="مثال: 2" oninput="updateAssignmentPreview()">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">سعر الساعة (جنيه)</label>
+                                        <input type="number" step="0.5" min="0" id="af_hourly_rate" class="form-control" placeholder="مثال: 50" oninput="updateAssignmentPreview()">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">بداية الساعات الإضافية</label>
+                                        <input type="date" id="af_extra_start" class="form-control" onchange="updateAssignmentPreview()">
+                                        <small class="text-muted">لو النهاية فاضية = يوم واحد بس</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">نهاية الساعات الإضافية (اختياري)</label>
+                                        <input type="date" id="af_extra_end" class="form-control" onchange="updateAssignmentPreview()">
+                                    </div>
+                                </div>
+                                <div class="alert alert-info d-none p-2 px-3 mt-3 mb-0" id="af_previewBar" style="font-size:0.9rem">
+                                    <i class="fas fa-calculator me-1"></i> <span id="af_previewText"></span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </form>
@@ -504,6 +558,9 @@ function openAssignModal() {
     document.getElementById('assignForm').reset();
     document.getElementById('af_from').value = '{{ date("Y-m-d") }}';
     document.getElementById('af_search').value = '';
+    document.getElementById('af_enable_extra').checked = false;
+    document.getElementById('af_extraFields').classList.add('d-none');
+    document.getElementById('af_previewBar').classList.add('d-none');
     selectedEmployees = [];
     updateAssignDisplay();
     loadShiftSelect();
@@ -592,6 +649,62 @@ function uncheckEmployee(id) {
     updateAssignDisplay();
 }
 
+// ─── EXTRA HOURS / SHIFT ALLOWANCE PREVIEW ────────────────
+function toggleExtraFields() {
+    const on = document.getElementById('af_enable_extra').checked;
+    document.getElementById('af_extraFields').classList.toggle('d-none', !on);
+    if (on && !document.getElementById('af_extra_start').value) {
+        document.getElementById('af_extra_start').value = document.getElementById('af_from').value;
+    }
+    updateAssignmentPreview();
+}
+
+function daysCountFromTo(from, to) {
+    if (!from || !to) return 1; // open-ended / incomplete → matches backend single-day behaviour
+    const a = Date.parse(from + 'T00:00:00');
+    const b = Date.parse(to + 'T00:00:00');
+    const diff = Math.round((b - a) / 86400000);
+    return Math.max(1, diff + 1);
+}
+
+function extraDaysFromInputs() {
+    const es = document.getElementById('af_extra_start').value;
+    const ee = document.getElementById('af_extra_end').value;
+    const useExtra = !!es || !!ee;
+    const start = es || document.getElementById('af_from').value;
+    const end = useExtra ? (ee || start) : (document.getElementById('af_to').value || start);
+    if (!end) return 1;
+    return daysCountFromTo(start, end);
+}
+
+function fmtNum(n) {
+    if (!isFinite(n)) return '—';
+    return Number(n.toFixed(2)).toString();
+}
+
+function updateAssignmentPreview() {
+    const bar = document.getElementById('af_previewBar');
+    const text = document.getElementById('af_previewText');
+    if (!document.getElementById('af_enable_extra').checked) {
+        bar.classList.add('d-none');
+        return;
+    }
+
+    const hours = parseFloat(document.getElementById('af_extra_hours').value);
+    const rate  = parseFloat(document.getElementById('af_hourly_rate').value);
+    const days  = extraDaysFromInputs();
+
+    if (!hours || hours <= 0 || isNaN(rate) || rate < 0) {
+        bar.classList.add('d-none');
+        return;
+    }
+
+    const total = hours * rate * days;
+    const dayPhrase = days === 1 ? 'يوم واحد (بداية فقط)' : days + ' يوم';
+    text.textContent = fmtNum(hours) + ' ساعة/يوم × ' + fmtNum(rate) + ' جنيه × ' + dayPhrase + ' = ' + fmtNum(total) + ' جنيه بدل وردية';
+    bar.classList.remove('d-none');
+}
+
 async function saveAssignment() {
     const employee_ids = selectedEmployees.map(e => e.id);
     const shift_id = parseInt(document.getElementById('af_shift').value);
@@ -601,9 +714,25 @@ async function saveAssignment() {
     if (!employee_ids.length) { showAlert('اختر موظف واحد على الأقل', 'warning'); return; }
     if (!shift_id) { showAlert('اختر الوردية', 'warning'); return; }
 
+    const payload = { employee_ids, shift_id, effective_from, effective_to };
+
+    if (document.getElementById('af_enable_extra').checked) {
+        const extraHours = document.getElementById('af_extra_hours').value;
+        const hourlyRate = document.getElementById('af_hourly_rate').value;
+        if (extraHours && hourlyRate) {
+            payload.extra_hours = parseFloat(extraHours);
+            payload.hourly_rate = parseFloat(hourlyRate);
+            const extraStart = document.getElementById('af_extra_start').value;
+            if (extraStart) {
+                payload.extra_start_date = extraStart;
+                payload.extra_end_date = document.getElementById('af_extra_end').value || null;
+            }
+        }
+    }
+
     const r = await apiFetch('/employee-shifts/bulk', {
         method: 'POST',
-        body: JSON.stringify({ employee_ids, shift_id, effective_from, effective_to }),
+        body: JSON.stringify(payload),
     });
     if (r.success) {
         bootstrap.Modal.getInstance(document.getElementById('assignModal')).hide();
@@ -612,12 +741,41 @@ async function saveAssignment() {
     } else showAlert(r.message || 'فشل التعيين', 'danger');
 }
 
+async function loadEarlyExitGlobal() {
+    const r = await apiFetch('/settings/attendance');
+    if (!r.success) return;
+    const enabled = r.data?.early_exit_deduction_enabled ?? true;
+    document.getElementById('earlyExitGlobalSwitch').checked = !!enabled;
+    updateEarlyGlobalNote(!!enabled);
+}
+
+function updateEarlyGlobalNote(enabled) {
+    document.getElementById('earlyGlobalNote').textContent =
+        enabled ? 'الخصم على الانصراف المبكر مفعّل للجميع — حسب قواعد الورديات أو استثناءات الموظفين'
+                : 'الخصم على الانصراف المبكر موقوف مؤقتاً لجميع الموظفين (لا يُحتسب)';
+}
+
+async function toggleEarlyExitGlobal(checked) {
+    updateEarlyGlobalNote(checked);
+    const r = await apiFetch('/settings/attendance', {
+        method: 'PUT',
+        body: JSON.stringify({ early_exit_deduction_enabled: checked }),
+    });
+    if (!r.success) {
+        showAlert(r.message || 'فشل الحفظ', 'danger');
+        loadEarlyExitGlobal();
+        return;
+    }
+    showAlert(r.message || (checked ? 'تم تفعيل الخصم' : 'تم إيقاف الخصم'));
+}
+
 // ─── INIT ────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('sf_grace').addEventListener('input', updateLateGraceNote);
     loadShifts();
     loadAssignments();
     loadShiftSelect();
+    loadEarlyExitGlobal();
 });
 </script>
 @endpush

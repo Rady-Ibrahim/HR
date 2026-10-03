@@ -127,6 +127,75 @@
                                 <option value="on_leave">إجازة</option><option value="suspended">موقوف</option><option value="resigned">استقال</option>
                             </select>
                         </div>
+                        <div class="col-md-6">
+                            <div class="border rounded p-2 h-100 d-flex align-items-center justify-content-between gap-2">
+                                <div>
+                                    <label class="form-label mb-0 fw-bold">حضور مخصص بالساعات</label>
+                                    <small class="text-muted d-block">تسجيل حضور/انصراف متعدد بدون ورديات</small>
+                                </div>
+                                <div class="form-check form-switch m-0">
+                                    <input class="form-check-input" type="checkbox" role="switch" name="is_custom_attendance" id="ef_custom_attendance" onchange="toggleCustomHours()">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6" id="customHoursGroup" style="display:none">
+                            <label class="form-label">الساعات المطلوبة يومياً</label>
+                            <div class="input-group">
+                                <input type="number" name="daily_required_hours" id="ef_daily_hours" class="form-control" min="0.5" max="24" step="0.5">
+                                <span class="input-group-text"><i class="fas fa-clock"></i> ساعة</span>
+                            </div>
+                            <small class="text-muted">يُحسب الخصم على أساس النقص عن هذه الساعات</small>
+                        </div>
+                        <div class="col-12">
+                            <div class="border rounded p-3">
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <div class="d-flex align-items-center justify-content-between gap-2 h-100">
+                                            <div>
+                                                <label class="form-label mb-0 fw-bold">خصم الانصراف المبكر</label>
+                                                <small class="text-muted d-block" style="font-size:.75rem">تفعيل أو إيقاف الخصم على الانصراف المبكر لهذا الموظف</small>
+                                            </div>
+                                            <div class="form-check form-switch m-0">
+                                                <input class="form-check-input" type="checkbox" role="switch" id="ef_early_enabled" checked onchange="toggleEarlyExitOverrideUI()">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="d-flex align-items-center justify-content-between gap-2 h-100">
+                                            <div>
+                                                <label class="form-label mb-0 fw-bold">قيمة مخصصة</label>
+                                                <small class="text-muted d-block" style="font-size:.75rem">قاعدة خاصة للموظف بدل قواعد الوردية (تزيد أو تقلل الخصم)</small>
+                                            </div>
+                                            <div class="form-check form-switch m-0">
+                                                <input class="form-check-input" type="checkbox" role="switch" id="ef_early_override" onchange="toggleEarlyExitOverrideUI()">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-12" id="ef_early_override_fields" style="display:none">
+                                        <div class="row g-2 align-items-end">
+                                            <div class="col-6 col-md-4">
+                                                <label class="form-label mb-1" style="font-size:.75rem">نوع الخصم</label>
+                                                <select id="ef_early_type" class="form-select form-select-sm">
+                                                    <option value="quarter_day">ربع يوم</option>
+                                                    <option value="half_day">نصف يوم</option>
+                                                    <option value="full_day">يوم كامل</option>
+                                                    <option value="percentage">نسبة مئوية</option>
+                                                    <option value="fixed_amount">مبلغ ثابت</option>
+                                                    <option value="minutes">عن كل دقيقة</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-6 col-md-3">
+                                                <label class="form-label mb-1" style="font-size:.75rem">القيمة</label>
+                                                <input type="number" id="ef_early_value" class="form-control form-control-sm" min="0" step="0.01" placeholder="مثال: 50">
+                                            </div>
+                                            <div class="col-12 col-md-5">
+                                                <small class="text-muted d-block p-1" style="font-size:.72rem">لو مش محدد = يحسب حسب قواعد الوردية تلقائياً</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                         <div class="col-md-6"><label class="form-label">رقم السيارة</label><input type="text" name="car_number" id="ef_car_number" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">رخصة القيادة</label><input type="text" name="car_license" id="ef_car_license" class="form-control"></div>
                         <div class="col-md-6"><label class="form-label">الرقم القومي</label><input type="text" name="national_id" id="ef_national_id" class="form-control"></div>
@@ -244,7 +313,9 @@ async function loadEmployees(page = 1) {
     }
     document.getElementById('employeesTable').innerHTML = data.map(e => `
         <tr>
-            <td><span class="fw-bold text-primary">${e.employee_code}</span></td>
+            <td><span class="fw-bold text-primary">${e.employee_code}</span>
+                ${e.is_custom_attendance ? '<br><small><span class="badge bg-info" title="حضور مخصص بالساعات"><i class="fas fa-stopwatch"></i> ساعات مرنة</span></small>' : ''}
+            </td>
             <td><strong>${e.name}</strong><br><small class="text-muted">${e.email??''}</small></td>
             <td><span class="badge-status ${typeBadge[e.employee_type]||'badge-draft'}">${e.employee_type_label || typeLabels[e.employee_type] || e.employee_type || '-'}</span></td>
             <td>${e.position}</td>
@@ -277,7 +348,15 @@ function openAddModal() {
     document.getElementById('ef_status').value = 'active';
     document.getElementById('ef_employee_type').value = 'employee';
     document.getElementById('ef_commission_rate').value = '';
+    document.getElementById('ef_custom_attendance').checked = false;
+    document.getElementById('ef_daily_hours').value = '';
     toggleCommissionRateField();
+    toggleCustomHours();
+    document.getElementById('ef_early_enabled').checked = true;
+    document.getElementById('ef_early_override').checked = false;
+    document.getElementById('ef_early_type').value = 'quarter_day';
+    document.getElementById('ef_early_value').value = '';
+    toggleEarlyExitOverrideUI();
     document.getElementById('ef_password').required = true;
     document.getElementById('ef_password_confirmation').required = true;
     document.getElementById('passwordRequired').style.display = '';
@@ -311,6 +390,16 @@ async function openEditModal(id) {
     document.getElementById('ef_national_id').value = e.national_id ?? '';
     document.getElementById('ef_manager_id').value  = e.reporting_manager_id ?? e.manager_id ?? '';
     document.getElementById('ef_notes').value       = e.notes ?? '';
+    document.getElementById('ef_custom_attendance').checked = !!e.is_custom_attendance;
+    document.getElementById('ef_daily_hours').value = e.daily_required_hours ?? '';
+    toggleCustomHours();
+    // Early-exit discount override
+    document.getElementById('ef_early_enabled').checked = e.early_exit_penalty_enabled !== false;
+    const hasEarlyOverride = e.early_exit_deduction_type && e.early_exit_deduction_value !== null && e.early_exit_deduction_value !== undefined && e.early_exit_deduction_value !== '';
+    document.getElementById('ef_early_override').checked = !!hasEarlyOverride;
+    document.getElementById('ef_early_type').value = e.early_exit_deduction_type || 'quarter_day';
+    document.getElementById('ef_early_value').value = e.early_exit_deduction_value ?? '';
+    toggleEarlyExitOverrideUI();
     // Password optional in edit mode
     document.getElementById('ef_password').value = '';
     document.getElementById('ef_password_confirmation').value = '';
@@ -332,6 +421,26 @@ async function saveEmployee() {
     }
     if (data.manager_id) data.manager_id = parseInt(data.manager_id); else delete data.manager_id;
     delete data.is_manager;
+
+    // Custom attendance toggle + required hours
+    data.is_custom_attendance = document.getElementById('ef_custom_attendance').checked;
+    if (data.is_custom_attendance && data.daily_required_hours !== '' && data.daily_required_hours !== undefined) {
+        data.daily_required_hours = parseFloat(data.daily_required_hours);
+    } else {
+        data.daily_required_hours = null;
+    }
+
+    // Early-exit discount toggle + optional per-employee override
+    data.early_exit_penalty_enabled = document.getElementById('ef_early_enabled').checked;
+    const earlyOverrideOn = document.getElementById('ef_early_override').checked;
+    const earlyValue = document.getElementById('ef_early_value').value;
+    if (earlyOverrideOn && earlyValue !== '' && parseFloat(earlyValue) >= 0) {
+        data.early_exit_deduction_type = document.getElementById('ef_early_type').value;
+        data.early_exit_deduction_value = parseFloat(earlyValue);
+    } else {
+        data.early_exit_deduction_type = null;
+        data.early_exit_deduction_value = null;
+    }
 
     const password = data.password;
     const passwordConfirmation = data.password_confirmation;
@@ -600,6 +709,20 @@ function toggleCommissionRateField() {
     if (type !== 'driver_representative') {
         // keep value if switching back, but optional clear is nicer for non-drivers
     }
+}
+
+function toggleCustomHours() {
+    const checked = document.getElementById('ef_custom_attendance').checked;
+    document.getElementById('customHoursGroup').style.display = checked ? '' : 'none';
+    if (!checked) document.getElementById('ef_daily_hours').value = '';
+}
+
+function toggleEarlyExitOverrideUI() {
+    const enabled = document.getElementById('ef_early_enabled').checked;
+    const ovrEl = document.getElementById('ef_early_override');
+    ovrEl.disabled = !enabled;
+    if (!enabled) ovrEl.checked = false;
+    document.getElementById('ef_early_override_fields').style.display = (enabled && ovrEl.checked) ? '' : 'none';
 }
 
 document.getElementById('ef_employee_type').addEventListener('change', toggleCommissionRateField);

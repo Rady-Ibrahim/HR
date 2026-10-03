@@ -1,6 +1,11 @@
 <?php
 
 return [
+    // Allow client-supplied check-in/check-out timestamps (custom_check_in_time /
+    // custom_check_out_time) outside local/testing/staging. Useful for QA / Postman
+    // simulation against production. Disabled by default for safety.
+    'allow_timestamp_override' => env('HR_ALLOW_TIMESTAMP_OVERRIDE', false),
+
     // Employee Statuses
     'employee_statuses' => [
         'active' => 'نشط',
@@ -94,6 +99,7 @@ return [
         'housing' => 'بدل سكن',
         'meal' => 'بدل طعام',
         'phone' => 'بدل هاتف',
+        'shift' => 'بدل وردية',
     ],
 
     // Incentive Types
@@ -145,6 +151,8 @@ return [
         'late_threshold_minutes' => 15,
         'half_day_deduction_after_minutes' => 120,
         'timezone' => 'Africa/Cairo',
+        // Maximum hours after check-in before a forgotten session is auto-closed.
+        'auto_close_after_hours' => 20,
     ],
 
     // Salary Calculation Settings

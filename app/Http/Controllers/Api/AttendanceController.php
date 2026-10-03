@@ -4,10 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\Traits\RestrictToSubordinates;
 use App\Models\Attendance;
+use App\Models\AttendanceLog;
 use App\Models\AttendanceRequest;
 use App\Models\Employee;
 use App\Models\WorkLocation;
+use App\Services\AttendanceHoursService;
 use App\Services\AttendancePenaltyService;
+use App\Services\CustomAttendanceService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,11 +19,18 @@ use Illuminate\Support\Facades\Config;
 class AttendanceController
 {
     use RestrictToSubordinates;
-    public function __construct(private AttendancePenaltyService $penaltyService) {}
+    public function __construct(
+        private AttendancePenaltyService $penaltyService,
+        private ?CustomAttendanceService $customService = null,
+        private ?AttendanceHoursService $hoursService = null,
+    ) {
+        $this->customService ??= app(CustomAttendanceService::class);
+        $this->hoursService ??= app(AttendanceHoursService::class);
+    }
 
     public function index(Request $request): JsonResponse
     {
-        $query = Attendance::with(['employee', 'shift', 'employee.shiftAssignments.shift']);
+        $query = Attendance::with(['employee', 'shift', 'employee.shiftAssignments.shift'])->withCount('logs');
 
         if ($request->filled('employee_id')) $query->where('employee_id', $request->employee_id);
         if ($request->filled('status'))      $query->where('status', $request->status);
@@ -75,6 +85,12 @@ class AttendanceController
             $deduction = $this->penaltyService->calculateRecordDeduction($attendance);
             $attendance->setAttribute('salary_deduction_amount', $deduction['amount']);
             $attendance->setAttribute('salary_deduction_label', $deduction['label']);
+
+            // Expose a consistent hours block so the list never has to guess
+            // (and never falls back to a hardcoded value).
+            $attendance->setAttribute('overtime_enabled', $this->hoursService->overtimeEnabled($attendance->employee));
+            $attendance->setAttribute('worked_hours_display', $attendance->workedHours());
+            $attendance->setAttribute('overtime_hours_display', $attendance->overtimeHours());
         });
 
         return response()->json(['success' => true, 'data' => $records]);
@@ -90,6 +106,10 @@ class AttendanceController
             'check_in_time'   => 'nullable|date_format:H:i',
             'check_out_time'  => 'nullable|date_format:H:i',
             'late_minutes'    => 'nullable|integer|min:0',
+            'early_exit_minutes' => 'nullable|integer|min:0',
+            'applied_late_deduction_type' => 'nullable|string|max:50',
+            'applied_early_deduction_type' => 'nullable|string|max:50',
+            'deduction_amount' => 'nullable|numeric|min:0',
             'shift_id'        => 'nullable|exists:shifts,id',
             'notes'           => 'nullable|string',
         ], [
@@ -100,6 +120,52 @@ class AttendanceController
         $attendanceDate = $validated['attendance_date'] ?? $validated['date'] ?? today()->toDateString();
         $employee = Employee::findOrFail($validated['employee_id']);
         $date = Carbon::parse($attendanceDate);
+
+        // Custom-attendance employees: manual entry creates a completed session segment.
+        if ($employee->isCustomAttendance() && !empty($validated['check_in_time'])) {
+            $attendance = Attendance::firstOrCreate(
+                ['employee_id' => $employee->id, 'attendance_date' => $attendanceDate],
+                ['status' => 'present', 'required_hours' => $employee->requiredDailyHours()]
+            );
+
+            if ($validated['status'] === 'absent') {
+                $attendance->update(['status' => 'absent']);
+                $this->customService->recalculateDay($attendance->id);
+                return response()->json(['success' => true, 'message' => 'تم حفظ سجل الغياب', 'data' => $attendance->fresh('logs')], 201);
+            }
+
+            // Manual entry creates ONE session with its own punch pair. The
+            // duration is measured per session (never against another session's
+            // clock) and a missing check-out means an open session = 0 minutes.
+            $sessionMinutes = !empty($validated['check_in_time'])
+                ? $this->hoursService->minutesBetween(
+                    $attendanceDate,
+                    $validated['check_in_time'],
+                    $validated['check_out_time'] ?? null
+                )
+                : 0;
+
+            AttendanceLog::create([
+                'employee_id' => $employee->id,
+                'attendance_id' => $attendance->id,
+                'log_date' => $attendanceDate,
+                'check_in_time' => $validated['check_in_time'],
+                'check_out_time' => $validated['check_out_time'] ?? null,
+                'duration_minutes' => $sessionMinutes,
+                'source' => 'admin',
+                'notes' => $validated['notes'] ?? null,
+            ]);
+
+            $attendance->update(['status' => $validated['status']]);
+            $this->customService->recalculateDay($attendance->id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم حفظ جلسة الحضور وسيتم احتساب الخصم تلقائياً في المرتب',
+                'data' => $attendance->fresh(['employee', 'shift', 'logs']),
+                'summary' => $this->customService->todaySummary($employee),
+            ], 201);
+        }
 
         $record = Attendance::updateOrCreate(
             ['employee_id' => $validated['employee_id'], 'attendance_date' => $attendanceDate],
@@ -112,24 +178,30 @@ class AttendanceController
             ]
         );
 
-        if ($validated['status'] === 'absent') {
+        if (array_key_exists('deduction_amount', $validated)) {
+            $record = $this->applyPenaltyOverride($record, $validated);
+        } elseif ($validated['status'] === 'absent') {
             $record->update([
                 'late_minutes' => 0,
                 'working_hours' => 0,
                 'early_exit_minutes' => 0,
                 'actual_worked_hours' => 0,
+                'total_worked_minutes' => 0,
+                'total_worked_hours' => 0,
+                'hours_status' => null,
+                'overtime_minutes' => 0,
+                'overtime_hours' => 0,
                 'applied_late_deduction_type' => 'full_day',
                 'deduction_amount' => 0,
+                'penalty_overridden' => false,
             ]);
+        } elseif ($employee->isCustomAttendance()) {
+            // No shift rules apply; keep aggregates from existing sessions.
+            $this->customService->recalculateDay($record->id);
         } else {
             $record = $this->penaltyService->processAttendance($record);
 
-            if ($record->check_in_time && $record->check_out_time) {
-                $checkIn = Carbon::parse($attendanceDate . ' ' . $record->check_in_time);
-                $checkOut = Carbon::parse($attendanceDate . ' ' . $record->check_out_time);
-                $record->working_hours = max(0, (int) $checkIn->diffInHours($checkOut));
-                $record->save();
-            }
+            $this->syncStandardHours($record, $attendanceDate);
 
             // Auto-set status based on late minutes
             $lateThreshold = (int) Config::get('hr.working_hours.late_threshold_minutes', 15);
@@ -142,15 +214,58 @@ class AttendanceController
             'success' => true,
             'message' => 'تم حفظ سجل الحضور وسيتم احتساب الخصم تلقائياً في المرتب',
             'data' => $record->load(['employee', 'shift']),
-            'penalty' => [
-                'late_minutes' => $record->late_minutes,
-                'early_exit_minutes' => $record->early_exit_minutes,
-                'actual_worked_hours' => $record->actual_worked_hours,
-                'applied_late_deduction_type' => $record->applied_late_deduction_type,
-                'applied_early_deduction_type' => $record->applied_early_deduction_type,
-                'deduction_amount' => $record->deduction_amount,
-            ],
+            'penalty' => $this->penaltyPayload($record, $record->employee),
         ], 201);
+    }
+
+    /**
+     * Recompute the shift-based attendance hours from the record's OWN
+     * check-in/check-out pair.
+     *
+     * Previously this used diffInHours(), which truncated to whole hours and
+     * produced 0 for anything under an hour (and negative values for overnight
+     * shifts). It now measures minutes through Carbon and returns 0.00 whenever
+     * either punch time is missing - there is no hardcoded fallback.
+     */
+    private function syncStandardHours(Attendance $record, ?string $date = null): void
+    {
+        $date = $date ?: ($record->attendance_date?->toDateString());
+
+        $workedMinutes = $this->hoursService->minutesBetween(
+            $date,
+            $record->check_in_time,
+            $record->check_out_time
+        );
+
+        $record->working_hours = (int) floor($workedMinutes / 60);
+        $record->actual_worked_hours = round($workedMinutes / 60, 2);
+        $record->total_worked_minutes = $workedMinutes;
+        $record->total_worked_hours = round($workedMinutes / 60, 2);
+        $record->save();
+    }
+
+    /**
+     * Uniform hours/overtime block shared by every attendance endpoint.
+     */
+    private function penaltyPayload(Attendance $record, ?Employee $employee = null): array
+    {
+        $employee = $employee ?? $record->employee;
+
+        return [
+            'late_minutes'            => $record->late_minutes,
+            'early_exit_minutes'      => $record->early_exit_minutes,
+            'working_hours'           => (int) ($record->working_hours ?? 0),
+            'actual_worked_hours'     => (float) ($record->actual_worked_hours ?? 0),
+            'total_worked_hours'      => (float) ($record->total_worked_hours ?? $record->actual_worked_hours ?? 0),
+            'required_hours'          => (float) ($record->required_hours ?? 0),
+            'hours_status'            => $record->hours_status,
+            'overtime_enabled'        => $this->hoursService->overtimeEnabled($employee),
+            'overtime_minutes'        => (int) ($record->overtime_minutes ?? 0),
+            'overtime_hours'          => (float) ($record->overtime_hours ?? 0),
+            'applied_late_deduction_type'   => $record->applied_late_deduction_type,
+            'applied_early_deduction_type' => $record->applied_early_deduction_type,
+            'deduction_amount'        => $record->deduction_amount,
+        ];
     }
 
     public function show($id): JsonResponse
@@ -172,6 +287,10 @@ class AttendanceController
             'check_in_time'   => 'nullable|date_format:H:i',
             'check_out_time'  => 'nullable|date_format:H:i',
             'late_minutes'    => 'nullable|integer|min:0',
+            'early_exit_minutes' => 'nullable|integer|min:0',
+            'applied_late_deduction_type' => 'nullable|string|max:50',
+            'applied_early_deduction_type' => 'nullable|string|max:50',
+            'deduction_amount' => 'nullable|numeric|min:0',
             'shift_id'        => 'nullable|exists:shifts,id',
             'notes'           => 'nullable|string',
         ], [
@@ -193,16 +312,27 @@ class AttendanceController
             'notes' => $validated['notes'] ?? $record->notes,
         ]);
 
-        if ($record->status !== 'absent') {
+        if (array_key_exists('deduction_amount', $validated)) {
+            $record = $this->applyPenaltyOverride($record, $validated);
+        } elseif ($record->status === 'absent') {
+            $record->update([
+                'deduction_amount' => 0,
+                'total_worked_minutes' => 0,
+                'total_worked_hours' => 0,
+                'actual_worked_hours' => 0,
+                'working_hours' => 0,
+                'hours_status' => null,
+                'overtime_minutes' => 0,
+                'overtime_hours' => 0,
+                'penalty_overridden' => false,
+            ]);
+        } elseif ($record->employee?->isCustomAttendance()) {
+            // Aggregates live in attendance_logs; keep the daily record in sync.
+            $this->customService->recalculateDay($record->id);
+        } else {
             $record = $this->penaltyService->processAttendance($record);
 
-            if ($record->check_in_time && $record->check_out_time) {
-                $date = Carbon::parse($attendanceDate);
-                $ci = Carbon::parse($date->toDateString() . ' ' . $record->check_in_time);
-                $co = Carbon::parse($date->toDateString() . ' ' . $record->check_out_time);
-                $record->working_hours = max(0, (int) $ci->diffInHours($co));
-                $record->save();
-            }
+            $this->syncStandardHours($record, $attendanceDate);
 
             $lateThreshold = (int) Config::get('hr.working_hours.late_threshold_minutes', 15);
             if ($record->status === 'present' && $record->late_minutes > $lateThreshold) {
@@ -214,14 +344,7 @@ class AttendanceController
             'success' => true,
             'message' => 'تم تحديث سجل الحضور',
             'data' => $record->load(['employee', 'shift']),
-            'penalty' => [
-                'late_minutes' => $record->late_minutes,
-                'early_exit_minutes' => $record->early_exit_minutes,
-                'actual_worked_hours' => $record->actual_worked_hours,
-                'applied_late_deduction_type' => $record->applied_late_deduction_type,
-                'applied_early_deduction_type' => $record->applied_early_deduction_type,
-                'deduction_amount' => $record->deduction_amount,
-            ],
+            'penalty' => $this->penaltyPayload($record, $record->employee),
         ]);
     }
 
@@ -232,6 +355,134 @@ class AttendanceController
         return response()->json(['success' => true, 'message' => 'تم حذف سجل الحضور']);
     }
 
+    /**
+     * Persist a manual override of the attendance penalties. Used when an admin
+     * edits the discount from the attendance screen (e.g. waive or increase the
+     * early-exit discount). Skipping auto-recomputation keeps the entered values
+     * as-is and flags the record so payroll uses them verbatim.
+     */
+    private function applyPenaltyOverride(Attendance $record, array $fields): Attendance
+    {
+        $workedMinutes = $this->hoursService->minutesBetween(
+            $record->attendance_date?->toDateString(),
+            $record->check_in_time,
+            $record->check_out_time
+        );
+
+        $payload = [
+            'late_minutes' => (int) ($record->late_minutes ?? 0),
+            'early_exit_minutes' => (int) ($record->early_exit_minutes ?? 0),
+            'actual_worked_hours' => round($workedMinutes / 60, 2),
+            'working_hours' => (int) floor($workedMinutes / 60),
+            'total_worked_minutes' => $workedMinutes,
+            'total_worked_hours' => round($workedMinutes / 60, 2),
+            // An override may only waive/adjust penalties; it can never grant
+            // hours or overtime, so both are re-derived from the punch pair.
+            'overtime_minutes' => 0,
+            'overtime_hours' => 0.0,
+            'applied_late_deduction_type' => $record->applied_late_deduction_type,
+            'applied_early_deduction_type' => $record->applied_early_deduction_type,
+            'deduction_amount' => (float) $fields['deduction_amount'],
+            'penalty_overridden' => true,
+        ];
+
+        if (array_key_exists('late_minutes', $fields)) {
+            $payload['late_minutes'] = (int) $fields['late_minutes'];
+        }
+
+        if (array_key_exists('early_exit_minutes', $fields)) {
+            $payload['early_exit_minutes'] = (int) $fields['early_exit_minutes'];
+        }
+
+        if (array_key_exists('applied_late_deduction_type', $fields)) {
+            $payload['applied_late_deduction_type'] = $fields['applied_late_deduction_type'] ?: null;
+        }
+
+        if (array_key_exists('applied_early_deduction_type', $fields)) {
+            $payload['applied_early_deduction_type'] = $fields['applied_early_deduction_type'] ?: null;
+        }
+
+        $record->update($payload);
+
+        return $record->fresh(['employee', 'shift']);
+    }
+
+    /**
+     * Auto-close open attendance records whose scheduled shift has ended more
+     * than the forgotten-checkout grace period ago (default 4 hours past the
+     * shift's end time). This clears "open session" states so the employee can
+     * immediately check in again for a new shift / handover.
+     * Recomputed penalties/hours afterwards via the penalty service.
+     */
+    private function autoCloseOpenShifts(int $employeeId): void
+    {
+        $this->penaltyService->autoCloseForgotten($employeeId);
+    }
+
+    /**
+     * Validation rule accepting an optional timestamp in either
+     * "Y-m-d H:i:s" (full datetime) or "H:i:s" (time-of-day) format.
+     */
+    private function customTimestampRule(): \Closure
+    {
+        return function (string $attribute, $value, $fail) {
+            if ($value === null || trim((string) $value) === '') {
+                return;
+            }
+
+            $value = (string) $value;
+
+            $full = \DateTime::createFromFormat('Y-m-d H:i:s', $value);
+            $fullErrors = \DateTime::getLastErrors();
+            $fullValid = $full !== false && (!$fullErrors || ($fullErrors['warning_count'] === 0 && $fullErrors['error_count'] === 0));
+
+            $time = \DateTime::createFromFormat('H:i:s', $value);
+            $timeErrors = \DateTime::getLastErrors();
+            $timeValid = $time !== false && (!$timeErrors || ($timeErrors['warning_count'] === 0 && $timeErrors['error_count'] === 0));
+
+            if (!$fullValid && !$timeValid) {
+                $fail('The :attribute must be in Y-m-d H:i:s or H:i:s format.');
+            }
+        };
+    }
+
+    /**
+     * Resolve an optional custom timestamp (from request fields like
+     * custom_check_in_time / check_in_time) for use DURING local/testing/staging
+     * environments only. Accepts "YYYY-MM-DD HH:mm:ss" (full datetime) or
+     * "HH:mm:ss" (time-of-day applied to today). Returns null when not applicable,
+     * so the caller falls back to Carbon::now().
+     */
+    private function resolveCustomTimestamp(?string $value): ?Carbon
+    {
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+
+        // Allow timestamp overrides for local/testing/staging, plus a config flag
+        // so staging/QA (or Postman against production) can simulate clock times.
+        if (!app()->environment(['local', 'testing', 'staging'])
+            && !(bool) config('hr.allow_timestamp_override', false)) {
+            return null;
+        }
+
+        try {
+            // Resolve against the app timezone so a bare "H:i:s" or "Y-m-d H:i:s"
+            // always lands on the configured local clock (Africa/Cairo), never UTC.
+            $tz = config('app.timezone', 'Africa/Cairo');
+
+            if (str_contains($value, ' ')) {
+                // Full datetime "Y-m-d H:i:s".
+                return Carbon::createFromFormat('Y-m-d H:i:s', $value, $tz);
+            }
+
+            // Time-of-day only "H:i:s" -> applied to today in the app timezone.
+            return Carbon::createFromFormat('H:i:s', $value, $tz);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
     public function checkIn(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -239,23 +490,70 @@ class AttendanceController
             'latitude'    => 'nullable|numeric',
             'longitude'   => 'nullable|numeric',
             'photo'       => 'nullable|image|max:3072',
+            'custom_check_in_time' => ['nullable', $this->customTimestampRule()],
+            'check_in_time' => ['nullable', $this->customTimestampRule()],
         ]);
 
-        $today  = today()->toDateString();
-        $exists = Attendance::where('employee_id', $validated['employee_id'])
-                            ->where('attendance_date', $today)
-                            ->whereNotNull('check_in_time')
-                            ->exists();
+        $employee = Employee::findOrFail($validated['employee_id']);
 
-        if ($exists) {
-            return response()->json(['success' => false, 'message' => 'تم تسجيل الحضور مسبقاً لهذا اليوم'], 422);
+        // Optional timestamp override for local/testing/staging environments.
+        $customNow = $this->resolveCustomTimestamp($validated['custom_check_in_time'] ?? $validated['check_in_time'] ?? null);
+
+        // ── Custom flexible attendance: sequential sessions per day ──
+        if ($employee->isCustomAttendance()) {
+            $photo = $request->hasFile('photo') ? $request->file('photo') : null;
+            $locationData = ($validated['latitude'] ?? null) !== null && ($validated['longitude'] ?? null) !== null
+                ? $this->detectLocation((float) $validated['latitude'], (float) $validated['longitude'])
+                : ['id' => null, 'name' => null, 'within' => false, 'distance' => null];
+
+            $result = $this->customService->startSession(
+                $employee,
+                [
+                    'latitude' => $validated['latitude'] ?? null,
+                    'longitude' => $validated['longitude'] ?? null,
+                    'photo' => $photo,
+                ],
+                $this->isAdminUser() ? 'admin' : 'mobile',
+                $customNow
+            );
+
+            if (!$result['success']) {
+                return response()->json(['success' => false, 'message' => $result['message']], 422);
+            }
+
+            return response()->json([
+                'success'  => true,
+                'message'  => $result['message'],
+                'data'     => $result['session'],
+                'summary'  => array_merge($this->customService->todaySummary($employee), ['location' => $locationData]),
+                'location' => $locationData,
+                'shift'    => null,
+                'late_minutes' => 0,
+                'status'   => 'present',
+            ]);
         }
 
-        $employee = Employee::findOrFail($validated['employee_id']);
-        $now = now();
+        // ── Standard shift-based attendance (unchanged behavior) ──
+        $today  = ($customNow ?? now())->toDateString();
+
+        // If the employee forgot to check out, auto-close any stale open shift so the
+        // new check-in isn't blocked and old records don't stay open forever.
+        $this->autoCloseOpenShifts($validated['employee_id']);
+
+        $openExists = Attendance::where('employee_id', $validated['employee_id'])
+                               ->where('attendance_date', $today)
+                               ->whereNotNull('check_in_time')
+                               ->whereNull('check_out_time')
+                               ->exists();
+
+        if ($openExists) {
+            return response()->json(['success' => false, 'message' => 'لديك جلسة عمل مفتوحة حالياً، يجب تسجيل الانصراف أولاً'], 422);
+        }
+
+        $now = $customNow ?? now();
         $date = Carbon::parse($today);
 
-        $shift = $this->penaltyService->resolveShift($employee, $date);
+        $shift = $this->penaltyService->resolveShift($employee, $date, $now);
         $lateResult = ['late_minutes' => 0, 'deduction_type' => null, 'deduction_amount' => 0.0];
 
         if ($shift) {
@@ -264,8 +562,13 @@ class AttendanceController
             $lateResult = $this->penaltyService->calculateLateFromConfig($now, $date);
         }
 
+        // Status = late only when a deduction actually applies, i.e. the check-in
+        // falls beyond the shift grace period (effective delay > 0). This keeps the
+        // displayed status consistent with the applied penalty (no more "late with
+        // 0.00 deduction"). When no shift matched, fall back to the configured threshold.
         $lateThreshold = (int) Config::get('hr.working_hours.late_threshold_minutes', 15);
-        $status = $lateResult['late_minutes'] > $lateThreshold ? 'late' : 'present';
+        $effectiveDelay = $lateResult['effective_delay'] ?? max(0, $lateResult['late_minutes'] - $lateThreshold);
+        $status = $effectiveDelay > 0 ? 'late' : 'present';
 
         $photoPath = null;
         if ($request->hasFile('photo')) {
@@ -279,17 +582,19 @@ class AttendanceController
         $record = Attendance::updateOrCreate(
             ['employee_id' => $validated['employee_id'], 'attendance_date' => $today],
             [
-                'check_in_time'              => $now->toTimeString(),
-                'check_in_latitude'          => $validated['latitude'] ?? null,
-                'check_in_longitude'         => $validated['longitude'] ?? null,
-                'check_in_photo'             => $photoPath,
-                'status'                     => $status,
-                'late_minutes'               => $lateResult['late_minutes'],
-                'shift_id'                   => $shift?->id,
+                'check_in_time'             => $now->toTimeString(),
+                'check_in_latitude'         => $validated['latitude'] ?? null,
+                'check_in_longitude'        => $validated['longitude'] ?? null,
+                'check_in_photo'            => $photoPath,
+                'status'                    => $status,
+                'late_minutes'              => $lateResult['late_minutes'],
+                'shift_id'                  => $shift?->id,
                 'applied_late_deduction_type' => $lateResult['deduction_type'],
-                'check_in_location_id'       => $locationData['id'],
-                'check_in_location_name'     => $locationData['name'],
-                'is_within_location'         => $locationData['within'],
+                'deduction_amount'          => round((float) ($lateResult['deduction_amount'] ?? 0), 2),
+                'check_in_location_id'      => $locationData['id'],
+                'check_in_location_name'    => $locationData['name'],
+                'is_within_location'        => $locationData['within'],
+                'check_out_time'            => null,
             ]
         );
 
@@ -302,6 +607,7 @@ class AttendanceController
             'location'          => $locationData,
             'shift'             => $shift ? ['id' => $shift->id, 'name' => $shift->name, 'grace_period_minutes' => $shift->grace_period_minutes] : null,
             'applied_deduction_type' => $lateResult['deduction_type'],
+            'deduction_amount'  => round((float) ($lateResult['deduction_amount'] ?? 0), 2),
         ]);
     }
 
@@ -312,12 +618,63 @@ class AttendanceController
             'latitude'    => 'nullable|numeric',
             'longitude'   => 'nullable|numeric',
             'photo'       => 'nullable|image|max:3072',
+            'custom_check_out_time' => ['nullable', $this->customTimestampRule()],
+            'check_out_time' => ['nullable', $this->customTimestampRule()],
         ]);
 
+        $employee = Employee::findOrFail($validated['employee_id']);
+
+        // Optional timestamp override for local/testing/staging environments.
+        $customNow = $this->resolveCustomTimestamp($validated['custom_check_out_time'] ?? $validated['check_out_time'] ?? null);
+
+        // ── Custom flexible attendance: close the open session & re-aggregate ──
+        if ($employee->isCustomAttendance()) {
+            // Auto-close any stale open sessions before looking for the active one.
+            $this->customService->autoCloseStaleSessions($employee->id);
+
+            $openSession = $this->customService->openSession($employee);
+
+            if (!$openSession) {
+                return response()->json(['success' => false, 'message' => 'لا توجد جلسة عمل مفتوحة لتسجيل الانصراف'], 422);
+            }
+
+            $result = $this->customService->endSession($openSession, [
+                'latitude' => $validated['latitude'] ?? null,
+                'longitude' => $validated['longitude'] ?? null,
+                'photo' => $request->hasFile('photo') ? $request->file('photo') : null,
+            ], $customNow);
+
+            if (!$result['success']) {
+                return response()->json(['success' => false, 'message' => $result['message']], 422);
+            }
+
+            return response()->json([
+                'success'          => true,
+                'message'          => $result['message'],
+                'data'             => $openSession->fresh(),
+                'session_duration_minutes' => $result['session_duration_minutes'],
+                'summary'          => $result['summary'],
+            ]);
+        }
+
+        // ── Standard shift-based attendance ──
+        // For night shifts that cross midnight, the check-out may happen on the next
+        // calendar day while the attendance record was created the previous day.
+        // Find the latest attendance record that is still open (checked in, not yet
+        // checked out), falling back to today's record for backward compatibility.
         $today  = today()->toDateString();
+
         $record = Attendance::where('employee_id', $validated['employee_id'])
-                            ->where('attendance_date', $today)
+                            ->whereNotNull('check_in_time')
+                            ->whereNull('check_out_time')
+                            ->orderByDesc('attendance_date')
                             ->first();
+
+        if (!$record) {
+            $record = Attendance::where('employee_id', $validated['employee_id'])
+                                ->where('attendance_date', $today)
+                                ->first();
+        }
 
         if (!$record || !$record->check_in_time) {
             return response()->json(['success' => false, 'message' => 'لم يتم تسجيل الحضور بعد'], 422);
@@ -327,9 +684,11 @@ class AttendanceController
             return response()->json(['success' => false, 'message' => 'تم تسجيل الانصراف مسبقاً'], 422);
         }
 
-        $checkIn = Carbon::parse($today . ' ' . $record->check_in_time);
-        $checkOut = now();
-        $date = Carbon::parse($today);
+        // The open record may belong to a previous day (overnight shift), so the
+        // hours maths must be anchored to the RECORD's date, not to today.
+        $recordDate = $record->attendance_date?->toDateString() ?? $today;
+
+        $checkOut = $customNow ?? now();
 
         $photoPath = null;
         if ($request->hasFile('photo')) {
@@ -344,28 +703,280 @@ class AttendanceController
         ]);
 
         $record = $this->penaltyService->processAttendance($record);
-
-        $workingHours = $record->actual_worked_hours ?? 0;
+        $this->syncStandardHours($record, $recordDate);
 
         return response()->json([
             'success'       => true,
             'message'       => 'تم تسجيل الانصراف بنجاح',
             'data'          => $record,
-            'working_hours' => $workingHours,
-            'penalty'       => [
-                'late_minutes' => $record->late_minutes,
-                'early_exit_minutes' => $record->early_exit_minutes,
-                'actual_worked_hours' => $record->actual_worked_hours,
-                'applied_late_deduction_type' => $record->applied_late_deduction_type,
-                'applied_early_deduction_type' => $record->applied_early_deduction_type,
-                'deduction_amount' => $record->deduction_amount,
+            'working_hours' => (float) ($record->total_worked_hours ?? 0),
+            'overtime'      => [
+                'enabled' => $this->hoursService->overtimeEnabled($employee),
+                'minutes' => (int) ($record->overtime_minutes ?? 0),
+                'hours'   => (float) ($record->overtime_hours ?? 0),
+            ],
+            'penalty'       => $this->penaltyPayload($record, $employee),
+        ]);
+    }
+
+    /**
+     * Live punch summary for custom-attendance employees (current user by default).
+     */
+    public function customToday(Request $request): JsonResponse
+    {
+        $employee = $this->currentEmployee();
+
+        if ($request->filled('employee_id')) {
+            if (!$this->isAdminUser() && (int) $request->employee_id !== (int) $employee?->id) {
+                return response()->json(['success' => false, 'message' => 'غير مصرح بعرض بيانات موظف آخر'], 403);
+            }
+            $employee = Employee::findOrFail($request->employee_id);
+        }
+
+        if (!$employee) {
+            return response()->json(['success' => false, 'message' => 'لا يوجد ملف موظف مرتبط بحسابك'], 404);
+        }
+
+        if (!$employee->isCustomAttendance()) {
+            return response()->json(['success' => false, 'message' => 'هذا الموظف على نظام الورديات وليس الحضور المرن'], 422);
+        }
+
+        return response()->json(['success' => true, 'data' => $this->customService->todaySummary($employee)]);
+    }
+
+    /**
+     * All check-in/check-out segments of a specific day.
+     */
+    public function daySessions($id): JsonResponse
+    {
+        $attendance = Attendance::with(['employee', 'shift'])->findOrFail($id);
+
+        // Strictly this day's sessions: whereDate('log_date', attendance_date).
+        $logs = $this->hoursService->dayLogs($attendance);
+        // Mode-aware AND status-aware: a shift-based record without logs reports
+        // its own punch pair, and an absent/leave day reports 0.00 hours even if
+        // stale session rows are attached.
+        $totals = $this->hoursService->effectiveTotals($attendance, $attendance->employee);
+        $overtime = $this->hoursService->resolveOvertime($attendance, $attendance->employee);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'attendance' => $attendance,
+                'date' => $totals['date'],
+                'sessions' => $logs->map(fn (AttendanceLog $log) => [
+                    'id' => $log->id,
+                    'log_date' => $log->log_date?->toDateString(),
+                    'check_in_time' => $log->check_in_time ? substr($log->check_in_time, 0, 5) : null,
+                    'check_out_time' => $log->check_out_time ? substr($log->check_out_time, 0, 5) : null,
+                    'duration_minutes' => $this->hoursService->sessionMinutes($log),
+                    'is_open' => $log->isOpen(),
+                    'source' => $log->source,
+                    'notes' => $log->notes,
+                ])->values(),
+                'totals' => [
+                    'total_worked_minutes'     => $totals['total_minutes'],
+                    'total_worked_hours'       => $totals['total_hours'],
+                    'required_hours'           => (float) ($attendance->required_hours ?? 0),
+                    'sessions_count'           => $totals['sessions_count'],
+                    'completed_sessions_count' => $totals['completed_sessions_count'],
+                    'open_sessions_count'      => $totals['open_sessions_count'],
+                    'hours_status'             => $attendance->hours_status,
+                    'overtime_enabled'         => $overtime['enabled'],
+                    'overtime_minutes'         => $overtime['minutes'],
+                    'overtime_hours'           => $overtime['hours'],
+                    'deduction_amount'         => (float) ($attendance->deduction_amount ?? 0),
+                ],
             ],
         ]);
+    }
+
+    public function sessionStore(Request $request, $id): JsonResponse
+    {
+        if (!$this->isAdminUser()) {
+            return response()->json(['success' => false, 'message' => 'غير مصرح'], 403);
+        }
+
+        $attendance = Attendance::findOrFail($id);
+        $validated = $this->validateSessionPayload($request);
+        $date = $attendance->attendance_date->toDateString();
+
+        // Per-session duration from this session's own punch pair.
+        $duration = empty($validated['check_out_time'])
+            ? 0
+            : $this->hoursService->minutesBetween($date, $validated['check_in_time'], $validated['check_out_time']);
+
+        AttendanceLog::create([
+            'employee_id' => $attendance->employee_id,
+            'attendance_id' => $attendance->id,
+            'log_date' => $date,
+            'check_in_time' => $validated['check_in_time'],
+            'check_out_time' => $validated['check_out_time'] ?? null,
+            'duration_minutes' => $duration,
+            'source' => 'admin',
+            'notes' => $validated['notes'] ?? null,
+        ]);
+
+        if (array_key_exists('required_hours', $validated)) {
+            $this->customService->applyRequiredHours(
+                $attendance->id,
+                $validated['required_hours'] !== null ? (float) $validated['required_hours'] : null
+            );
+        }
+
+        $updated = $this->customService->recalculateDay($attendance->id);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تمت إضافة الجلسة وتحديث الإجماليات',
+            'data' => $updated?->load('logs'),
+        ], 201);
+    }
+
+    public function sessionUpdate(Request $request, $logId): JsonResponse
+    {
+        if (!$this->isAdminUser()) {
+            return response()->json(['success' => false, 'message' => 'غير مصرح'], 403);
+        }
+
+        $log = AttendanceLog::findOrFail($logId);
+        $validated = $this->validateSessionPayload($request, false);
+
+        $log->update(array_filter([
+            'check_in_time' => $validated['check_in_time'] ?? null,
+            'check_out_time' => array_key_exists('check_out_time', $validated) ? $validated['check_out_time'] : $log->check_out_time,
+            'notes' => $validated['notes'] ?? $log->notes,
+        ], fn ($v) => $v !== null));
+
+        if (array_key_exists('required_hours', $validated)) {
+            $this->customService->applyRequiredHours(
+                $log->attendance_id,
+                $validated['required_hours'] !== null ? (float) $validated['required_hours'] : null
+            );
+        }
+
+        // Recompute duration from this session's own pair; clear it when the
+        // session is re-opened (no check-out = 0 counted minutes).
+        $log->refresh();
+        $log->update([
+            'duration_minutes' => $log->isOpen() ? 0 : $this->hoursService->sessionMinutes($log),
+        ]);
+
+        $updated = $this->customService->recalculateDay($log->attendance_id);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم تحديث الجلسة وتحديث الإجماليات',
+            'data' => $updated?->load('logs'),
+        ]);
+    }
+
+    public function sessionDestroy($logId): JsonResponse
+    {
+        if (!$this->isAdminUser()) {
+            return response()->json(['success' => false, 'message' => 'غير مصرح'], 403);
+        }
+
+        $log = AttendanceLog::findOrFail($logId);
+        $attendanceId = $log->attendance_id;
+        $log->delete();
+        $this->customService->recalculateDay($attendanceId);
+
+        return response()->json(['success' => true, 'message' => 'تم حذف الجلسة وتحديث الإجماليات']);
+    }
+
+    /**
+     * Set the employee's daily required hours from the flexible-attendance widget.
+     */
+    public function customSetRequiredHours(Request $request): JsonResponse
+    {
+        if (!$this->isAdminUser()) {
+            return response()->json(['success' => false, 'message' => 'غير مصرح'], 403);
+        }
+
+        $validated = $request->validate([
+            'employee_id'          => ['required', 'integer', 'exists:employees,id'],
+            'daily_required_hours' => ['required', 'numeric', 'min:0.5', 'max:24'],
+        ]);
+
+        $employee = Employee::findOrFail($validated['employee_id']);
+
+        if (!$employee->isCustomAttendance()) {
+            return response()->json(['success' => false, 'message' => 'الموظف ليس على نظام الحضور المخصص'], 422);
+        }
+
+        $result = $this->customService->setDailyRequiredHours(
+            $employee,
+            (float) $validated['daily_required_hours']
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => $result['message'],
+            'data'    => ['daily_required_hours' => (float) $validated['daily_required_hours']],
+        ]);
+    }
+
+    private function validateSessionPayload(Request $request, bool $requireCheckIn = true): array
+    {
+        $rules = [
+            'check_in_time'  => [$requireCheckIn ? 'required' : 'sometimes', 'nullable', 'date_format:H:i'],
+            'check_out_time' => ['nullable', 'date_format:H:i'],
+            'required_hours' => ['nullable', 'numeric', 'min:0', 'max:24'],
+            'notes'          => ['nullable', 'string'],
+        ];
+
+        return $request->validate($rules);
+    }
+
+    /**
+     * Admin quick manual entry from the flexible-attendance widget:
+     * check-in time, check-out time and the day's required hours.
+     */
+    public function customManualSession(Request $request): JsonResponse
+    {
+        if (!$this->isAdminUser()) {
+            return response()->json(['success' => false, 'message' => 'غير مصرح'], 403);
+        }
+
+        $validated = $request->validate([
+            'employee_id'    => ['required', 'integer', 'exists:employees,id'],
+            'date'           => ['nullable', 'date', 'before_or_equal:today'],
+            'check_in_time'  => ['required', 'date_format:H:i'],
+            'check_out_time' => ['required', 'date_format:H:i'],
+            'required_hours' => ['nullable', 'numeric', 'min:0', 'max:24'],
+            'notes'          => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $employee = Employee::findOrFail($validated['employee_id']);
+
+        if (!$employee->isCustomAttendance()) {
+            return response()->json(['success' => false, 'message' => 'الموظف ليس على نظام الحضور المخصص'], 422);
+        }
+
+        $result = $this->customService->manualSession($employee, $validated);
+
+        if (!$result['success']) {
+            return response()->json($result, 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $result['message'],
+            'data'    => $result['summary'],
+        ], 201);
     }
 
     public function penaltyDetails($id): JsonResponse
     {
         $record = Attendance::with(['employee', 'shift.lateRules', 'shift.earlyExitRules'])->findOrFail($id);
+
+        $date = $record->attendance_date instanceof Carbon
+            ? $record->attendance_date->toDateString()
+            : (string) $record->attendance_date;
+
+        $totals = $this->hoursService->effectiveTotals($record, $record->employee);
+        $overtime = $this->hoursService->resolveOvertime($record, $record->employee);
 
         $details = [
             'shift_name' => $record->shift?->name,
@@ -383,17 +994,25 @@ class AttendanceController
                 'minutes' => $record->early_exit_minutes,
                 'deduction_type' => $record->applied_early_deduction_type,
             ],
-            'actual_worked_hours' => $record->actual_worked_hours,
+            // Always recomputed from the record's own punches/sessions so the
+            // details can never display a stale/phantom hours value.
+            'total_worked_minutes' => $totals['total_minutes'],
+            'total_worked_hours'   => $totals['total_hours'],
+            'actual_worked_hours'  => $totals['total_hours'],
+            'required_hours'       => (float) ($record->required_hours ?? 0),
+            'hours_status'         => $record->hours_status,
+            'overtime' => [
+                'enabled' => $overtime['enabled'],
+                'minutes' => $overtime['minutes'],
+                'hours'   => $overtime['hours'],
+            ],
             'total_deduction_amount' => $record->deduction_amount,
             'payroll_pushed' => $record->payroll_pushed,
         ];
 
         if ($record->shift && $record->check_in_time) {
-            $date = $record->attendance_date instanceof Carbon
-                ? $record->attendance_date
-                : Carbon::parse($record->attendance_date);
-            $checkIn = Carbon::parse($date->toDateString() . ' ' . $record->check_in_time);
-            $scheduledStart = Carbon::parse($date->toDateString() . ' ' . $record->shift->start_time);
+            $scheduledStart = Carbon::parse($date . ' ' . $record->shift->start_time);
+            $checkIn = Carbon::parse($date . ' ' . $record->check_in_time);
             $actualDelay = max(0, (int) $scheduledStart->diffInMinutes($checkIn, false));
             $effectiveDelay = max(0, $actualDelay - $record->shift->grace_period_minutes);
 
@@ -413,10 +1032,11 @@ class AttendanceController
                 'data'       => [],
                 'statistics' => [
                     'present'            => 0,
-                    'absent'             => 0,
+                    'absent'            => 0,
                     'late'               => 0,
                     'on_leave'           => 0,
                     'total_hours'        => 0,
+                    'total_overtime_hours' => 0,
                     'total_late_minutes' => 0,
                     'total_early_exit_minutes' => 0,
                     'total_deduction_amount' => 0,
@@ -432,22 +1052,184 @@ class AttendanceController
             ->whereMonth('attendance_date', $month)
             ->whereYear('attendance_date', $year)
             ->orderBy('attendance_date')
-            ->get();
+            ->get()
+            ->groupBy(fn ($r) => $r->attendance_date instanceof Carbon
+                ? $r->attendance_date->toDateString()
+                : $r->attendance_date
+            );
+
+        $grouped = $records->map(function ($dayRecords) {
+            $first = $dayRecords->first();
+            $date = $first->attendance_date instanceof Carbon
+                ? $first->attendance_date->toDateString()
+                : (string) $first->attendance_date;
+
+            return [
+                'id' => $first->id,
+                'employee_id' => $first->employee_id,
+                'attendance_date' => $date,
+                'status' => $first->status,
+                'check_in_time' => $first->check_in_time,
+                'check_out_time' => $dayRecords->last()?->check_out_time,
+                'shift_id' => $first->shift_id,
+                'shift' => $first->shift,
+                'late_minutes' => $dayRecords->sum('late_minutes'),
+                'early_exit_minutes' => $dayRecords->sum('early_exit_minutes'),
+                // Minutes are the single source of truth for the day; hours are
+                // derived from them (never summed from stored rounded values).
+                'total_worked_minutes' => $dayRecords->sum('total_worked_minutes'),
+                'total_worked_hours' => round($dayRecords->sum('total_worked_minutes') / 60, 2),
+                'actual_worked_hours' => round($dayRecords->sum('total_worked_minutes') / 60, 2),
+                'working_hours' => (int) floor($dayRecords->sum('total_worked_minutes') / 60),
+                'required_hours' => round((float) ($first->required_hours ?? 0), 2),
+                'hours_status' => $first->hours_status,
+                'overtime_minutes' => $dayRecords->sum('overtime_minutes'),
+                'overtime_hours' => round($dayRecords->sum('overtime_minutes') / 60, 2),
+                'deduction_amount' => round($dayRecords->sum('deduction_amount'), 2),
+            ];
+        })->values();
 
         $stats = [
-            'present'            => $records->where('status', 'present')->count(),
-            'absent'             => $records->where('status', 'absent')->count(),
-            'late'               => $records->where('status', 'late')->count(),
-            'on_leave'           => $records->where('status', 'on_leave')->count(),
-            'total_hours'        => $records->sum('actual_worked_hours'),
-            'total_late_minutes' => $records->sum('late_minutes'),
-            'total_early_exit_minutes' => $records->sum('early_exit_minutes'),
-            'total_deduction_amount'   => $records->sum('deduction_amount'),
+            'present'            => $grouped->where('status', 'present')->count(),
+            'absent'            => $grouped->where('status', 'absent')->count(),
+            'late'               => $grouped->where('status', 'late')->count(),
+            'on_leave'           => $grouped->where('status', 'on_leave')->count(),
+            'total_hours'        => round($grouped->sum('total_worked_hours'), 2),
+            'total_overtime_hours' => round($grouped->sum('overtime_hours'), 2),
+            'total_late_minutes' => $grouped->sum('late_minutes'),
+            'total_early_exit_minutes' => $grouped->sum('early_exit_minutes'),
+            'total_deduction_amount'   => $grouped->sum('deduction_amount'),
         ];
 
         return response()->json([
             'success'    => true,
-            'data'       => $records,
+            'data'       => $grouped,
+            'statistics' => $stats,
+        ]);
+    }
+
+    public function myDailyLog(Request $request): JsonResponse
+    {
+        $employee = $this->currentEmployee();
+
+        if (!$employee) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'لا يوجد ملف موظف مرتبط بحسابك',
+            ], 404);
+        }
+
+        $month = (int) $request->get('month', now()->month);
+        $year  = (int) $request->get('year', now()->year);
+
+        $start = Carbon::createFromDate($year, $month, 1);
+        $end   = $start->copy()->endOfMonth();
+
+        $employeeShift = $employee->currentShift();
+
+        $records = Attendance::with('shift')
+            ->where('employee_id', $employee->id)
+            ->where('attendance_date', '>=', $start->toDateString())
+            ->where('attendance_date', '<=', $end->toDateString())
+            ->orderBy('attendance_date')
+            ->get()
+            ->groupBy(fn ($r) => $r->attendance_date instanceof Carbon
+                ? $r->attendance_date->toDateString()
+                : $r->attendance_date
+            );
+
+        $days = [];
+        for ($day = $start->copy(); $day->lte($end); $day->addDay()) {
+            $key = $day->toDateString();
+            $dayRecords = $records->get($key);
+
+            if ($dayRecords && $dayRecords->count() > 0) {
+                $first = $dayRecords->first();
+                $totalLate = $dayRecords->sum('late_minutes');
+                $totalEarly = $dayRecords->sum('early_exit_minutes');
+                $totalDeduction = $dayRecords->sum('deduction_amount');
+                $totalMinutes = $dayRecords->sum('total_worked_minutes');
+                $totalOvertimeMinutes = $dayRecords->sum('overtime_minutes');
+
+                // Sessions of THIS day only (whereDate('log_date', $key)) so a
+                // neighbouring day's sessions can never inflate the totals.
+                $dayLogs = $dayRecords
+                    ->flatMap(fn (Attendance $r) => $this->hoursService->dayLogs($r, $key))
+                    ->values();
+
+                $hasOpen = $dayLogs->contains(fn ($l) => $l->check_in_time !== null && $l->isOpen())
+                    || $dayRecords->contains(fn ($r) => !$r->check_out_time && $r->check_in_time);
+                $activeShift = $first?->shift ?? $employeeShift;
+
+                $days[] = [
+                    'date'              => $key,
+                    'day_name'          => $day->isoFormat('dddd'),
+                    'status'            => $hasOpen ? 'present' : ($first->status ?? 'absent'),
+                    'check_in_time'     => $dayLogs->whereNotNull('check_in_time')->min('check_in_time') ?? $first?->check_in_time,
+                    'check_out_time'    => $dayLogs->whereNotNull('check_out_time')->max('check_out_time') ?? $dayRecords->last()?->check_out_time,
+                    'shift_name'        => $dayRecords->pluck('shift')->filter()->pluck('name')->implode(', ') ?: $activeShift?->name,
+                    'shift_start'       => $activeShift?->start_time,
+                    'shift_end'         => $activeShift?->end_time,
+                    'late_minutes'      => $totalLate,
+                    'early_exit_minutes'=> $totalEarly,
+                    'total_worked_minutes' => $totalMinutes,
+                    'actual_worked_hours'=> round($totalMinutes / 60, 2),
+                    'required_hours'    => round((float) ($first->required_hours ?? 0), 2),
+                    'hours_status'      => $first->hours_status,
+                    'overtime_minutes'  => $totalOvertimeMinutes,
+                    'overtime_hours'    => round($totalOvertimeMinutes / 60, 2),
+                    'deduction_amount'  => round($totalDeduction, 2),
+                    'sessions_count'    => $dayLogs->count() ?: $dayRecords->count(),
+                ];
+            } else {
+                $days[] = [
+                    'date'              => $key,
+                    'day_name'          => $day->isoFormat('dddd'),
+                    'status'            => 'absent',
+                    'check_in_time'     => null,
+                    'check_out_time'    => null,
+                    'shift_name'        => $employeeShift?->name,
+                    'shift_start'       => $employeeShift?->start_time,
+                    'shift_end'         => $employeeShift?->end_time,
+                    'late_minutes'      => 0,
+                    'early_exit_minutes'=> 0,
+                    'total_worked_minutes' => 0,
+                    'actual_worked_hours'=> 0.0,
+                    'required_hours'    => 0.0,
+                    'hours_status'      => null,
+                    'overtime_minutes'  => 0,
+                    'overtime_hours'    => 0.0,
+                    'deduction_amount'  => 0.0,
+                    'sessions_count'    => 0,
+                ];
+            }
+        }
+
+        $present   = collect($days)->where('status', 'present')->count()
+                   + collect($days)->where('status', 'late')->count();
+        $absent    = collect($days)->where('status', 'absent')->count();
+        $late      = collect($days)->where('status', 'late')->count();
+        $onLeave   = collect($days)->where('status', 'on_leave')->count();
+        $daysTotal = collect($days);
+
+        $stats = [
+            'month'                 => $month,
+            'year'                  => $year,
+            'working_days'          => $this->getWorkingDaysInMonth($month, $year),
+            'present'               => $present,
+            'absent'                => $absent,
+            'late'                  => $late,
+            'on_leave'              => $onLeave,
+            'total_hours'           => round($daysTotal->sum('actual_worked_hours'), 2),
+            'total_overtime_hours'  => round($daysTotal->sum('overtime_hours'), 2),
+            'total_late_minutes'    => $daysTotal->sum('late_minutes'),
+            'total_early_exit_minutes' => $daysTotal->sum('early_exit_minutes'),
+            'total_deduction_amount'   => round($daysTotal->sum('deduction_amount'), 2),
+        ];
+
+        return response()->json([
+            'success'    => true,
+            'data'       => $days,
             'statistics' => $stats,
         ]);
     }
@@ -459,11 +1241,38 @@ class AttendanceController
 
         $todayRecords = Attendance::with('employee')
             ->where('attendance_date', $today)
-            ->get();
+            ->get()
+            ->groupBy('employee_id');
 
-        $present = $todayRecords->where('status', 'present')->values();
-        $late    = $todayRecords->where('status', 'late')->values();
-        $onLeave = $todayRecords->where('status', 'on_leave')->values();
+        $present = collect();
+        $late    = collect();
+        $onLeave = collect();
+
+        foreach ($todayRecords as $empId => $empRecords) {
+            $hasOpen = $empRecords->contains(fn ($r) => !$r->check_out_time && $r->check_in_time);
+            $best = $empRecords->first();
+            $firstCheckIn = $empRecords->min('check_in_time');
+            $lastCheckOut = $empRecords->whereNotNull('check_out_time')->max('check_out_time');
+
+            $merged = (object) [
+                'id' => $best->id,
+                'employee' => $best->employee,
+                'employee_id' => $empId,
+                'check_in_time' => $firstCheckIn,
+                'check_out_time' => $lastCheckOut,
+                'late_minutes' => $empRecords->sum('late_minutes'),
+                'deduction_amount' => round((float) $empRecords->sum('deduction_amount'), 2),
+                'status' => $hasOpen ? 'present' : ($best->status ?? 'present'),
+            ];
+
+            if ($merged->status === 'late') {
+                $late->push($merged);
+            } elseif ($merged->status === 'on_leave') {
+                $onLeave->push($merged);
+            } else {
+                $present->push($merged);
+            }
+        }
 
         $absentEmployees = Employee::where('status', 'active')
             ->whereDoesntHave('attendances', function ($q) use ($today) {
@@ -479,15 +1288,18 @@ class AttendanceController
                 'check_in_time' => $a->check_in_time,
                 'check_out_time' => $a->check_out_time,
                 'late_minutes' => $a->late_minutes,
+                'deduction_amount' => round((float) ($a->deduction_amount ?? 0), 2),
             ])->values();
         };
 
+        $totalPresentCount = $present->count() + $late->count();
+
         $summary = [
             'total_employees' => $total,
-            'present'         => $present->count(),
+            'present'         => $totalPresentCount,
             'late'            => $late->count(),
-            'absent'          => $total - $todayRecords->count(),
-            'no_checkout'     => $todayRecords->whereNotNull('check_in_time')->whereNull('check_out_time')->count(),
+            'absent'          => $total - $totalPresentCount - $onLeave->count(),
+            'no_checkout'     => $todayRecords->flatten()->whereNotNull('check_in_time')->whereNull('check_out_time')->count(),
             'lists' => [
                 'present'  => $list($present),
                 'late'     => $list($late),
@@ -628,7 +1440,9 @@ class AttendanceController
             'absent'            => $records->where('status', 'absent')->count(),
             'late'              => $records->where('status', 'late')->count(),
             'on_leave'          => $records->where('status', 'on_leave')->count(),
-            'total_hours'       => $records->sum('actual_worked_hours'),
+            'overtime_days'     => $records->where('hours_status', Attendance::HOURS_OVERTIME)->count(),
+            'total_hours'       => round($records->sum('total_worked_minutes') / 60, 2),
+            'total_overtime_hours' => round($records->sum('overtime_minutes') / 60, 2),
             'total_late_minutes'=> $records->sum('late_minutes'),
             'total_early_exit_minutes' => $records->sum('early_exit_minutes'),
             'total_deduction_amount'   => $records->sum('deduction_amount'),
@@ -643,8 +1457,18 @@ class AttendanceController
         $locations = WorkLocation::where('is_active', true)->get();
 
         foreach ($locations as $location) {
-            $distance = $this->haversineDistance($lat, $lng, $location->latitude, $location->longitude);
-            if ($distance <= $location->radius_meters) {
+            // Guard against work locations with missing/invalid coordinates so we
+            // never attempt a distance calculation that could error out and break
+            // the whole check-in with "تعذر الحصول على الموقع".
+            $workLat = is_numeric($location->latitude) ? (float) $location->latitude : null;
+            $workLng = is_numeric($location->longitude) ? (float) $location->longitude : null;
+
+            if ($workLat === null || $workLng === null || !is_finite($workLat) || !is_finite($workLng)) {
+                continue;
+            }
+
+            $distance = $this->haversineDistance($lat, $lng, $workLat, $workLng);
+            if ($distance <= (float) $location->radius_meters) {
                 return [
                     'id'       => $location->id,
                     'name'     => $location->name,
@@ -654,15 +1478,32 @@ class AttendanceController
             }
         }
 
+        // No active/valid work location exists, or the coordinates fall outside every
+        // branch radius. When the company allows attendance from anywhere (no branch
+        // restriction and no geo fences configured), reported coords are within by default.
+        if ($locations->isEmpty()) {
+            return [
+                'id'       => null,
+                'name'     => null,
+                'within'   => true,
+                'distance' => 0,
+            ];
+        }
+
         return ['id' => null, 'name' => null, 'within' => false, 'distance' => null];
     }
 
     private function haversineDistance(float $lat1, float $lon1, float $lat2, float $lon2): float
     {
+        if (!is_finite($lat1) || !is_finite($lon1) || !is_finite($lat2) || !is_finite($lon2)) {
+            return PHP_FLOAT_MAX;
+        }
+
         $earthRadius = 6371000;
         $dLat = deg2rad($lat2 - $lat1);
         $dLon = deg2rad($lon2 - $lon1);
         $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) ** 2;
+        $a = max(0, min(1, $a));
         return $earthRadius * 2 * atan2(sqrt($a), sqrt(1 - $a));
     }
 

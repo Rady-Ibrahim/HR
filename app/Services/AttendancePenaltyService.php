@@ -5,36 +5,207 @@ namespace App\Services;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\EmployeeShift;
+use App\Models\HRSetting;
 use App\Models\Shift;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Config;
 
 class AttendancePenaltyService
 {
-    public function resolveShift(Employee $employee, Carbon $date): ?Shift
+    /**
+     * Hours after check-in before a forgotten session is auto-closed.
+     * This is ONLY a cleanup threshold for stale open sessions - it is never
+     * used as a worked-hours value. Hours always come from a real punch pair.
+     */
+    public static function autoCloseAfterHours(): float
     {
-        $assignment = EmployeeShift::where('employee_id', $employee->id)
-            ->active($date)
-            ->first();
+        return (float) Config::get('hr.working_hours.auto_close_after_hours', 20);
+    }
 
-        if ($assignment) {
+    public function __construct(private AttendanceHoursService $hours)
+    {
+    }
+
+    /**
+     * Dynamically resolve the shift that matches the employee's check-in time.
+     *
+     * Priority order:
+     *  1. An active assignment bound to the employee whose time window contains
+     *     the given check-in time (supports shift rotations per employee).
+     *  2. An active assignment bound to the employee (any shift, fallback).
+     *  3. Any active shift in the system whose time window contains the check-in
+     *     time (fully dynamic, supports cross-employee handovers/rotations).
+     *  4. The first active shift as a default.
+     *
+     * @param Carbon|null $checkInTime When provided, the shift window is matched
+     *                                 against this moment instead of the date bounds.
+     */
+    public function resolveShift(Employee $employee, Carbon $date, ?Carbon $checkInTime = null): ?Shift
+    {
+        $checkMoment = $checkInTime ?? Carbon::parse('23:59:59')->setDateFrom($date);
+
+        $assignments = EmployeeShift::with('shift')
+            ->where('employee_id', $employee->id)
+            ->active($date)
+            ->get();
+
+        // 1) Employee's assigned shift matching the check-in moment.
+        foreach ($assignments as $assignment) {
+            if ($this->timeInShiftWindow($assignment->shift, $checkMoment)) {
+                return $assignment->shift;
+            }
+        }
+
+        // 2) First assigned shift regardless of window.
+        if ($assignment = $assignments->first()) {
             return $assignment->shift;
         }
 
-        if ($defaultShift = Shift::where('is_active', true)->first()) {
+        // 3) Any active shift whose window contains the check-in moment.
+        $activeShifts = Shift::with(['lateRules', 'earlyExitRules'])
+            ->where('is_active', true)
+            ->get();
+
+        foreach ($activeShifts as $shift) {
+            if ($this->timeInShiftWindow($shift, $checkMoment)) {
+                return $shift;
+            }
+        }
+
+        // 4) Default active shift.
+        if ($defaultShift = $activeShifts->first()) {
             return $defaultShift;
         }
 
         return null;
     }
 
+    /**
+     * Whether a moment falls within a shift's time window, handling overnight
+     * (crossing-midnight) shifts such as 17:00 -> 05:00.
+     */
+    public function timeInShiftWindow(Shift $shift, Carbon $moment): bool
+    {
+        if ($shift->start_time === null || $shift->end_time === null) {
+            return false;
+        }
+
+        $start = Carbon::parse($shift->start_time);
+        $end = Carbon::parse($shift->end_time);
+        $time = $moment->copy()->startOfDay()->addMinutes($moment->hour * 60 + $moment->minute);
+
+        if ($end->greaterThan($start)) {
+            // Same-day shift (e.g. 08:00 -> 17:00).
+            return $time->between($start, $end, true);
+        }
+
+        // Overnight shift (e.g. 17:00 -> 05:00): window spans midnight.
+        return $time->gte($start) || $time->lte($end);
+    }
+
+    /**
+     * The scheduled end of a shift for a given attendance date, expressed as a
+     * Carbon datetime. For overnight shifts the end lands on the next calendar day.
+     */
+    public function shiftEndAt(Shift $shift, Carbon $date): ?Carbon
+    {
+        if ($shift->end_time === null) {
+            return null;
+        }
+
+        $start = Carbon::parse($shift->start_time);
+        $end = Carbon::parse($shift->end_time);
+
+        $scheduledEnd = Carbon::parse($date->toDateString() . ' ' . $shift->end_time);
+
+        // Overnight shift that ends before it starts => ends next day.
+        if ($end->lessThan($start)) {
+            $scheduledEnd->addDay();
+        }
+
+        return $scheduledEnd;
+    }
+
+    /**
+     * Whether an open attendance record is stale and should be auto-closed.
+     * A record is stale when "now" is past the check-in time by more than
+     * the configured auto_close_after_hours (default 20 hours).
+     */
+    public function isOpenRecordStale(Attendance $attendance, ?Carbon $now = null): bool
+    {
+        $now = $now ?? now();
+        $date = $attendance->attendance_date instanceof Carbon
+            ? $attendance->attendance_date->copy()
+            : Carbon::parse($attendance->attendance_date);
+
+        $checkIn = $attendance->check_in_time instanceof Carbon
+            ? $attendance->check_in_time
+            : Carbon::parse($date->toDateString() . ' ' . $attendance->check_in_time);
+
+        return $now->greaterThan($checkIn->copy()->addHours(self::autoCloseAfterHours()));
+    }
+
+    /**
+     * The check-out time to stamp on an auto-closed forgotten session:
+     * check-in time + auto_close_after_hours.
+     */
+    public function autoCloseCheckOutTime(Attendance $attendance): string
+    {
+        $date = $attendance->attendance_date instanceof Carbon
+            ? $attendance->attendance_date->copy()
+            : Carbon::parse($attendance->attendance_date);
+
+        $checkIn = $attendance->check_in_time instanceof Carbon
+            ? $attendance->check_in_time
+            : Carbon::parse($date->toDateString() . ' ' . $attendance->check_in_time);
+
+        return $checkIn->copy()->addHours(self::autoCloseAfterHours())->toTimeString();
+    }
+
+    /**
+     * Auto-close all stale open attendance records. Optionally restricted to a
+     * single employee. Returns the ids of records that were closed.
+     *
+     * @return array<int> closed attendance ids
+     */
+    public function autoCloseForgotten(?int $employeeId = null, ?Carbon $now = null): array
+    {
+        $now = $now ?? now();
+
+        $query = Attendance::whereNotNull('check_in_time')->whereNull('check_out_time');
+
+        if ($employeeId !== null) {
+            $query->where('employee_id', $employeeId);
+        }
+
+        $closed = [];
+
+        foreach ($query->get() as $attendance) {
+            if (!$this->isOpenRecordStale($attendance, $now)) {
+                continue;
+            }
+
+            $attendance->update([
+                'check_out_time' => $this->autoCloseCheckOutTime($attendance),
+                'notes' => CustomAttendanceService::AUTO_CLOSED_NOTE,
+            ]);
+
+            $this->processAttendance($attendance->fresh());
+
+            $closed[] = (int) $attendance->id;
+        }
+
+        return $closed;
+    }
+
     public function calculateLatePenalty(Shift $shift, Carbon $checkInTime, Carbon $date, ?Employee $employee = null): array
     {
         $scheduledStart = Carbon::parse($date->toDateString() . ' ' . $shift->start_time);
         $actualDelayMinutes = (int) $scheduledStart->diffInMinutes($checkInTime, false);
-        $effectiveDelay = max(0, $actualDelayMinutes - $shift->grace_period_minutes);
+        $graceMinutes = (int) ($shift->grace_period_minutes ?? 0);
 
-        if ($effectiveDelay <= 0) {
+        // Strict grace period: the first N minutes of lateness (default 15) are free.
+        if ($actualDelayMinutes <= $graceMinutes) {
             return [
                 'late_minutes' => 0,
                 'effective_delay' => 0,
@@ -43,17 +214,22 @@ class AttendancePenaltyService
             ];
         }
 
+        // Beyond the grace the free minutes are forfeited: the shift's own penalty
+        // tier is matched against the TOTAL delay (not just the excess), so e.g. a
+        // 21-minute lateness on a quarter-day tier triggers the quarter-day value.
         $rules = $shift->lateRules()->orderBy('min_delay_minutes')->get();
         $matchedRule = null;
 
         foreach ($rules as $rule) {
-            if ($effectiveDelay >= $rule->min_delay_minutes) {
-                if ($rule->max_delay_minutes === null || $effectiveDelay <= $rule->max_delay_minutes) {
+            if ($actualDelayMinutes >= $rule->min_delay_minutes) {
+                if ($rule->max_delay_minutes === null || $actualDelayMinutes <= $rule->max_delay_minutes) {
                     $matchedRule = $rule;
                     break;
                 }
             }
         }
+
+        $effectiveDelay = $actualDelayMinutes - $graceMinutes;
 
         if (!$matchedRule) {
             return [
@@ -64,7 +240,7 @@ class AttendancePenaltyService
             ];
         }
 
-        $amount = $this->resolveAmount($matchedRule->deduction_type, $matchedRule->deduction_value, (float) ($employee?->base_salary ?? 0), $effectiveDelay);
+        $amount = $this->resolveAmount($matchedRule->deduction_type, $matchedRule->deduction_value, (float) ($employee?->base_salary ?? 0), $actualDelayMinutes);
 
         return [
             'late_minutes' => $actualDelayMinutes,
@@ -85,9 +261,16 @@ class AttendancePenaltyService
             ];
         }
 
-        $expectedEnd = Carbon::parse($date->toDateString() . ' ' . $shift->end_time);
+        $shiftStart = Carbon::parse($checkInTime->format('Y-m-d') . ' ' . $shift->start_time);
+        $shiftEnd   = Carbon::parse($checkInTime->format('Y-m-d') . ' ' . $shift->end_time);
+
+        // If the shift crosses midnight (start is after end), the end falls on the next day.
+        if ($shiftEnd->lessThanOrEqualTo($shiftStart)) {
+            $shiftEnd->addDay();
+        }
+
         $workedMinutes = (int) $checkInTime->diffInMinutes($checkOutTime);
-        $earlyMinutes = max(0, (int) $checkOutTime->diffInMinutes($expectedEnd, false));
+        $earlyMinutes = max(0, (int) $checkOutTime->diffInMinutes($shiftEnd, false));
 
         $actualWorkedHours = round($workedMinutes / 60, 2);
 
@@ -97,6 +280,34 @@ class AttendancePenaltyService
                 'actual_worked_hours' => $actualWorkedHours,
                 'deduction_type' => null,
                 'deduction_amount' => 0.0,
+            ];
+        }
+
+        // Global switch + per-employee switch. Minutes are still tracked for
+        // reporting, but no discount is applied when either disables the penalty.
+        if (!$this->earlyExitDeductionEnabled() || !$this->earlyExitEnabledFor($employee)) {
+            return [
+                'early_exit_minutes' => $earlyMinutes,
+                'actual_worked_hours' => $actualWorkedHours,
+                'deduction_type' => null,
+                'deduction_amount' => 0.0,
+            ];
+        }
+
+        // Per-employee override (custom type + value) replaces the shift tiers.
+        if ($employee && $employee->early_exit_deduction_type && $employee->early_exit_deduction_value !== null) {
+            $amount = $this->resolveAmount(
+                $employee->early_exit_deduction_type,
+                (float) $employee->early_exit_deduction_value,
+                (float) ($employee->base_salary ?? 0),
+                $earlyMinutes
+            );
+
+            return [
+                'early_exit_minutes' => $earlyMinutes,
+                'actual_worked_hours' => $actualWorkedHours,
+                'deduction_type' => $employee->early_exit_deduction_type,
+                'deduction_amount' => round($amount, 2),
             ];
         }
 
@@ -143,19 +354,39 @@ class AttendancePenaltyService
         ];
     }
 
-    public function calculateEarlyExitFromConfig(Carbon $checkInTime, Carbon $checkOutTime, Carbon $date): array
+    public function calculateEarlyExitFromConfig(Carbon $checkInTime, Carbon $checkOutTime, Carbon $date, ?Employee $employee = null): array
     {
         $end = Carbon::parse($date->toDateString() . ' ' . Config::get('hr.working_hours.check_out_time', '17:00'));
 
         $workedMinutes = (int) $checkInTime->diffInMinutes($checkOutTime);
         $earlyMinutes = max(0, (int) $checkOutTime->diffInMinutes($end, false));
 
+        $disabled = !$this->earlyExitDeductionEnabled() || !$this->earlyExitEnabledFor($employee);
+
         return [
             'early_exit_minutes' => $earlyMinutes,
             'actual_worked_hours' => round($workedMinutes / 60, 2),
-            'deduction_type' => $earlyMinutes > 0 ? 'minutes' : null,
+            'deduction_type' => $earlyMinutes > 0 && !$disabled ? 'minutes' : null,
             'deduction_amount' => 0.0,
         ];
+    }
+
+    /**
+     * Whether the early-exit discount is globally enabled. A single switch in
+     * the shifts page can disable the discount for every employee at once.
+     */
+    private function earlyExitDeductionEnabled(): bool
+    {
+        return (bool) HRSetting::get(HRSetting::EARLY_EXIT_DEDUCTION_ENABLED, true);
+    }
+
+    /**
+     * Whether an employee is eligible for the early-exit discount. When the
+     * per-employee switch is off, the employee never gets the discount.
+     */
+    private function earlyExitEnabledFor(?Employee $employee): bool
+    {
+        return $employee === null || $employee->early_exit_penalty_enabled !== false;
     }
 
     public function processAttendance(Attendance $attendance): Attendance
@@ -164,6 +395,7 @@ class AttendancePenaltyService
             ? $attendance->attendance_date
             : Carbon::parse($attendance->attendance_date);
 
+        $dateString = $date->toDateString();
         $employee = $attendance->employee;
 
         if (!$employee) {
@@ -182,7 +414,7 @@ class AttendancePenaltyService
         if ($attendance->check_in_time) {
             $checkIn = $attendance->check_in_time instanceof Carbon
                 ? $attendance->check_in_time
-                : Carbon::parse($date->toDateString() . ' ' . $attendance->check_in_time);
+                : Carbon::parse($dateString . ' ' . $attendance->check_in_time);
 
             $lateResult = $shift
                 ? $this->calculateLatePenalty($shift, $checkIn, $date, $employee)
@@ -191,27 +423,115 @@ class AttendancePenaltyService
             if ($attendance->check_out_time) {
                 $checkOut = $attendance->check_out_time instanceof Carbon
                     ? $attendance->check_out_time
-                    : Carbon::parse($date->toDateString() . ' ' . $attendance->check_out_time);
+                    : Carbon::parse($dateString . ' ' . $attendance->check_out_time);
+
+                // A night shift may cross midnight: if the clock time of check-out is
+                // earlier than check-in, the check-out took place on the next day.
+                if ($attendance->check_in_time instanceof Carbon === false && $checkOut->lessThan($checkIn)) {
+                    $checkOut->addDay();
+                }
 
                 $earlyResult = $shift
                     ? $this->calculateEarlyExitPenalty($shift, $checkIn, $checkOut, $date, $employee)
-                    : $this->calculateEarlyExitFromConfig($checkIn, $checkOut, $date);
+                    : $this->calculateEarlyExitFromConfig($checkIn, $checkOut, $date, $employee);
             }
         }
+
+        // ── Hours: derived only from a real check-in/check-out pair ──────────
+        // A record with no punch times yields 0.00 hours. It NEVER falls back to
+        // the auto-close window, the default shift length, or any hardcoded value.
+        $workedMinutes = $this->hours->minutesBetween(
+            $dateString,
+            $attendance->check_in_time,
+            $attendance->check_out_time
+        );
+        $workedHours = round($workedMinutes / 60, 2);
 
         $attendance->late_minutes = $lateResult['late_minutes'];
         $attendance->applied_late_deduction_type = $lateResult['deduction_type'];
 
         $attendance->early_exit_minutes = $earlyResult['early_exit_minutes'];
-        $attendance->actual_worked_hours = $earlyResult['actual_worked_hours'];
+        $attendance->actual_worked_hours = $workedHours;
+        $attendance->working_hours = (int) floor($workedMinutes / 60);
+        $attendance->total_worked_minutes = $workedMinutes;
+        $attendance->total_worked_hours = $workedHours;
         $attendance->applied_early_deduction_type = $earlyResult['deduction_type'];
 
         $totalDeduction = ($lateResult['deduction_amount'] ?? 0) + ($earlyResult['deduction_amount'] ?? 0);
-        $attendance->deduction_amount = $totalDeduction;
+        $attendance->deduction_amount = round((float) $totalDeduction, 2);
+        $attendance->penalty_overridden = false;
+
+        // ── Unified hours status + overtime for the shift-based flow too ────
+        $this->applyHoursStatus($attendance, $employee, $shift, $workedMinutes);
 
         $attendance->save();
 
         return $attendance->fresh();
+    }
+
+    /**
+     * Persist the unified hours_status / required_hours / overtime columns for
+     * the shift-based (non custom-attendance) flow, so overtime behaves exactly
+     * the same in both attendance systems.
+     *
+     * Overtime is granted only when:
+     *  a) overtime is enabled (system + employee),
+     *  b) the day has a real completed check-in/check-out pair,
+     *  c) the day is not absent / on-leave / excused,
+     *  d) worked minutes exceed the required shift minutes.
+     *
+     * The shortfall DEDUCTION stays owned by the late/early-exit penalty flow
+     * for shift-based attendance; only the reporting flag is written here so
+     * the same absence is never charged twice.
+     */
+    private function applyHoursStatus(Attendance $attendance, Employee $employee, ?Shift $shift, int $workedMinutes): void
+    {
+        $requiredHours = $shift?->requiredHours() ?? $employee->requiredDailyHours();
+        $requiredMinutes = (int) round($requiredHours * 60);
+
+        $attendance->required_hours = round($requiredHours, 2);
+
+        // Nothing was actually worked, or the employee was not in: no hours,
+        // no overtime, no classification.
+        $hasWorkedPair = $workedMinutes > 0;
+        $isPresent = !in_array($attendance->status, ['absent', 'on_leave', 'excused'], true);
+
+        if (!$hasWorkedPair || !$isPresent) {
+            $attendance->hours_status     = null;
+            $attendance->overtime_minutes = 0;
+            $attendance->overtime_hours   = 0.0;
+
+            return;
+        }
+
+        $overtimeMinutes = 0;
+
+        if ($this->hours->overtimeEnabled($employee) && $requiredMinutes > 0 && $workedMinutes > $requiredMinutes) {
+            $overtimeMinutes = $workedMinutes - $requiredMinutes;
+        }
+
+        $attendance->hours_status = $workedMinutes < $requiredMinutes
+            ? Attendance::HOURS_SHORTFALL
+            : ($overtimeMinutes > 0 ? Attendance::HOURS_OVERTIME : Attendance::HOURS_FULFILLED);
+
+        $attendance->overtime_minutes = $overtimeMinutes;
+        $attendance->overtime_hours   = round($overtimeMinutes / 60, 2);
+    }
+
+    /**
+     * Recalculate penalties for an attendance record using an explicitly resolved shift.
+     *
+     * This is the entry point for the artisan command: the caller has already
+     * determined the correct shift (attendance.shift or employee default), so
+     * we pin it on the record and delegate to processAttendance for the full
+     * late / early-exit / deduction calculation.
+     */
+    public function recalculatePenaltyForAttendance(Attendance $attendance, Shift $shift): Attendance
+    {
+        $attendance->shift_id = $shift->id;
+        $attendance->setRelation('shift', $shift);
+
+        return $this->processAttendance($attendance);
     }
 
     public function calculateAttendanceDeductionForSalary(Employee $employee, int $month, int $year, float $baseSalary): array
@@ -236,18 +556,26 @@ class AttendancePenaltyService
         $penaltyDeduction = (float) $penaltyRecords->sum('deduction_amount');
         $lateMinutes = (int) $penaltyRecords->sum('late_minutes') + (int) $penaltyRecords->sum('early_exit_minutes');
 
+        // Custom flexible attendance: shortfall vs daily required hours is already
+        // stored per-day in deduction_amount by CustomAttendanceService::recalculateDay().
+        $shortfallDays = (int) $records->where('hours_status', 'shortfall')->count();
+        $shortfallAmount = round((float) $records->where('hours_status', 'shortfall')->sum('deduction_amount'), 2);
+
         $totalAmount = round($absentDeduction + $penaltyDeduction, 2);
 
         return [
             'amount' => $totalAmount,
             'label' => sprintf(
-                'خصم حضور: %d غياب، %d دقيقة تأخير/انصراف مبكر',
+                'خصم حضور: %d غياب، %d دقيقة تأخير/انصراف مبكر%s',
                 $absentDays,
-                $lateMinutes
+                $lateMinutes,
+                $shortfallDays > 0 ? sprintf('، نقص ساعات في %d يوم (%.2f)', $shortfallDays, $shortfallAmount) : ''
             ),
             'absent' => $absentDays,
             'half_days' => 0,
             'late_minutes' => $lateMinutes,
+            'custom_attendance_shortfall_days' => $shortfallDays,
+            'custom_attendance_shortfall_amount' => $shortfallAmount,
         ];
     }
 

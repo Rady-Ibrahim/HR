@@ -2,24 +2,14 @@
 
 namespace App\Services;
 
-use App\Models\Advance;
-use App\Models\Allowance;
-use App\Models\Attendance;
-use App\Models\CarViolation;
-use App\Models\Commission;
-use App\Models\Deduction;
 use App\Models\Employee;
-use App\Models\EmployeePoint;
-use App\Models\Incentive;
 use App\Models\Salary;
 use App\Models\SalaryComponentLog;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 
 class SalaryCalculationService
 {
-    public function __construct(private AttendancePenaltyService $attendancePenaltyService) {}
+    public function __construct(private SalaryBreakdownService $breakdownService) {}
 
     public function calculate(Employee $employee, int $month, int $year): Salary
     {
@@ -33,125 +23,31 @@ class SalaryCalculationService
                   ->where('status', 'draft')
                   ->delete();
 
-            $baseSalary      = (float) $employee->base_salary;
-            $components      = [];
+            // Every figure below comes from the one shared breakdown so the saved
+            // row can never disagree with the salary cards / financial statement.
+            $breakdown = $this->breakdownService->build($employee, $month, $year);
+            $totals    = $this->breakdownService->reconcile($breakdown);
 
-            // 1. Incentives
-            $incentives = Incentive::where('employee_id', $employee->id)
-                ->where('month', $month)->where('year', $year)
-                ->where('status', 'approved')->get();
-            $totalIncentives = $incentives->sum('amount');
-            foreach ($incentives as $inc) {
-                $components[] = ['type' => 'incentive', 'name' => $inc->incentive_type, 'id' => $inc->id, 'amount' => $inc->amount, 'reason' => $inc->reason ?? $inc->description];
-            }
-
-            // 2. Allowances
-            $allowances = Allowance::where('employee_id', $employee->id)
-                ->where('status', 'active')
-                ->where('start_date', '<=', Carbon::createFromDate($year, $month, 1)->endOfMonth())
-                ->where(function ($q) use ($month, $year) {
-                    $q->whereNull('end_date')
-                      ->orWhere('end_date', '>=', Carbon::createFromDate($year, $month, 1));
-                })->get();
-            $totalAllowances = $allowances->sum('amount');
-            foreach ($allowances as $all) {
-                $components[] = ['type' => 'allowance', 'name' => $all->allowance_type, 'id' => $all->id, 'amount' => $all->amount, 'reason' => $all->reason];
-            }
-
-            // 3. Commissions (approved only — pending wait for الاعتماد الكلي)
-            $commissions = Commission::where('employee_id', $employee->id)
-                ->where('month', $month)->where('year', $year)
-                ->where('status', 'approved')->get();
-            $totalCommissions = $commissions->sum('amount');
-            foreach ($commissions as $com) {
-                $label = $com->source === 'collection' ? 'عمولة تحصيل' : 'عمولة مبيعات';
-                $components[] = ['type' => 'commission', 'name' => $label, 'id' => $com->id, 'amount' => $com->amount, 'reason' => $com->reason];
-            }
-
-            // 3.5 Employee Points (Credit: له) — stored separately from incentives
-            $totalPointsCredit = (float) EmployeePoint::where('employee_id', $employee->id)
-                ->where('month', $month)->where('year', $year)
-                ->where('type', 'credit')->sum('total_amount');
-            if ($totalPointsCredit > 0) {
-                $components[] = ['type' => 'points_credit', 'name' => 'مكافأة نقاط (له)', 'id' => null, 'amount' => $totalPointsCredit];
-            }
-
-            // Gross salary
-            $grossSalary = $baseSalary + $totalIncentives + $totalAllowances + $totalCommissions + $totalPointsCredit;
-
-            // 4. Deductions
-            $deductions = Deduction::where('employee_id', $employee->id)
-                ->where('month', $month)->where('year', $year)
-                ->where('status', 'approved')->get();
-            $totalDeductions = $deductions->sum('amount');
-            foreach ($deductions as $ded) {
-                $components[] = ['type' => 'deduction', 'name' => $ded->deduction_type, 'id' => $ded->id, 'amount' => -$ded->amount, 'reason' => $ded->reason];
-            }
-
-            // 4.5 Employee Points (Debit: عليه) — stored separately from deductions
-            $totalPointsDebit = (float) EmployeePoint::where('employee_id', $employee->id)
-                ->where('month', $month)->where('year', $year)
-                ->where('type', 'debit')->sum('total_amount');
-            if ($totalPointsDebit > 0) {
-                $components[] = ['type' => 'points_debit', 'name' => 'خصم نقاط (عليه)', 'id' => null, 'amount' => -$totalPointsDebit];
-            }
-
-            // 5. Attendance deductions (late, half-day late & absence)
-            $attendanceSummary = $this->calculateAttendanceDeduction($employee, $month, $year, $baseSalary);
-            $attendanceDeduction = $attendanceSummary['amount'];
-            if ($attendanceDeduction > 0) {
-                $totalDeductions += $attendanceDeduction;
-                $components[]     = [
-                    'type' => 'attendance_deduction',
-                    'name' => $attendanceSummary['label'],
-                    'id' => null,
-                    'amount' => -$attendanceDeduction,
-                ];
-            }
-
-            // 6. Advances
-            $activeAdvances = Advance::where('employee_id', $employee->id)
-                ->whereIn('status', ['active', 'partially_paid'])
-                ->where('remaining_installments', '>', 0)->get();
-            $totalAdvances = $activeAdvances->sum('installment_amount');
-            foreach ($activeAdvances as $adv) {
-                $components[] = ['type' => 'advance', 'name' => 'قسط سلفة', 'id' => $adv->id, 'amount' => -$adv->installment_amount, 'reason' => $adv->reason];
-            }
-
-            // 7. Car violations
-            $violations = CarViolation::where('employee_id', $employee->id)
-                ->where('status', 'pending')
-                ->whereMonth('violation_date', $month)
-                ->whereYear('violation_date', $year)->get();
-            $totalViolations = $violations->sum('fine_amount');
-            foreach ($violations as $vio) {
-                $components[] = ['type' => 'violation', 'name' => $vio->violation_type, 'id' => $vio->id, 'amount' => -$vio->fine_amount, 'reason' => $vio->reason];
-            }
-
-            $netSalary = $grossSalary - $totalDeductions - $totalPointsDebit - $totalAdvances - $totalViolations;
-            $netSalary = max(0, $netSalary);
-
-            // Create salary record
             $salary = Salary::create([
                 'employee_id'       => $employee->id,
                 'month'             => $month,
                 'year'              => $year,
-                'base_salary'       => $baseSalary,
-                'gross_salary'      => $grossSalary,
-                'total_incentives'  => $totalIncentives,
-                'total_allowances'  => $totalAllowances,
-                'total_commissions' => $totalCommissions,
-                'total_deductions'  => $totalDeductions,
-                'total_advances'    => $totalAdvances,
-                'total_violations'  => $totalViolations,
-                'total_points_credit' => $totalPointsCredit ?? 0,
-                'total_points_debit'  => $totalPointsDebit ?? 0,
-                'net_salary'        => $netSalary,
+                'base_salary'       => $totals['base_salary'],
+                'gross_salary'      => $totals['gross_salary'],
+                'total_incentives'  => $breakdown['additions']['incentives'],
+                'total_allowances'  => $breakdown['additions']['allowances'],
+                'total_commissions' => $breakdown['additions']['commissions'],
+                'total_deductions'  => $totals['total_deductions'],
+                'total_advances'    => $totals['advances'],
+                'total_violations'  => $totals['violations'],
+                'total_points_credit' => $breakdown['additions']['points_credit'],
+                'total_points_debit'  => $totals['points_debit'],
+                'net_salary'        => $totals['net_salary'],
                 'status'            => 'draft',
             ]);
 
-            // Log components
-            foreach ($components as $comp) {
+            // Log components - every earning AND every deducted item, one row each.
+            foreach ($breakdown['components'] as $comp) {
                 SalaryComponentLog::create([
                     'salary_id'      => $salary->id,
                     'component_type' => $comp['type'],
@@ -162,19 +58,14 @@ class SalaryCalculationService
                 ]);
             }
 
-            // Mark advances as paid for this month
-            foreach ($activeAdvances as $adv) {
-                $paid      = $adv->paid_installments + 1;
-                $remaining = $adv->remaining_installments - 1;
-                $remAmount = max(0, $adv->remaining_amount - $adv->installment_amount);
-                $status    = $remaining <= 0 ? 'paid' : 'partially_paid';
-                $adv->update([
-                    'paid_installments'      => $paid,
-                    'remaining_installments' => $remaining,
-                    'remaining_amount'       => $remAmount,
-                    'status'                 => $status,
-                ]);
-            }
+            // NOTE: advance installments are deliberately NOT touched here.
+            // Calculating a salary must never move an advance: it is a read-only
+            // projection of the month. The installment is consumed exactly once, at
+            // real disbursement time, by AdvanceDeductionService::deductForSalary().
+            //
+            // Previously this loop ran here, so every press of "حساب الرواتب" burned
+            // one installment per advance. Calculating N months zeroed an N-month
+            // advance and flipped it to "مسدد" while nothing had been paid.
 
             DB::commit();
 
@@ -183,22 +74,6 @@ class SalaryCalculationService
             DB::rollBack();
             throw $e;
         }
-    }
-
-    private function calculateAttendanceDeduction(Employee $employee, int $month, int $year, float $baseSalary): array
-    {
-        return $this->attendancePenaltyService->calculateAttendanceDeductionForSalary($employee, $month, $year, $baseSalary);
-    }
-
-    private function getWorkingDaysInMonth(int $month, int $year): int
-    {
-        $start = Carbon::createFromDate($year, $month, 1);
-        $end   = $start->copy()->endOfMonth();
-        $count = 0;
-        for ($day = $start->copy(); $day->lte($end); $day->addDay()) {
-            if (!$day->isWeekend()) $count++;
-        }
-        return $count;
     }
 
     public function calculateBulk(int $month, int $year, ?array $employeeIds = null): array

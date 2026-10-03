@@ -4,11 +4,13 @@ namespace Tests\Feature;
 
 use App\Http\Controllers\Api\AttendanceController;
 use App\Models\Attendance;
+use App\Models\AttendanceLog;
 use App\Models\Employee;
 use App\Models\EmployeeShift;
 use App\Models\Shift;
 use App\Models\ShiftEarlyExitRule;
 use App\Models\ShiftLateRule;
+use App\Models\User;
 use App\Services\AttendancePenaltyService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Http\Request;
@@ -122,8 +124,8 @@ class AttendanceDeductionTest extends TestCase
         $processed = app(AttendancePenaltyService::class)->processAttendance($att);
         $result    = app(AttendancePenaltyService::class)->calculateRecordDeduction($processed);
 
-        // 30 min late, 15 beyond grace → 15 × 5 EGP/minute + half-day 100 EGP
-        $expected = round(15 * 5 + 100, 2);
+        // 30 min late, past grace → free minutes forfeited → 30 × 5 = 150, + half-day 100
+        $expected = round(30 * 5 + 100, 2);
 
         $this->assertEqualsWithDelta($expected, $result['amount'], 0.01);
         $this->assertStringContainsString('تأخير', $result['label']);
@@ -206,6 +208,89 @@ class AttendanceDeductionTest extends TestCase
         $this->assertSame($saved->early_exit_minutes, $payload['penalty']['early_exit_minutes']);
     }
 
+    public function test_checkin_auto_closes_forgotten_open_shift_after_threshold(): void
+    {
+        $emp   = $this->makeEmployee();
+        $shift = $this->makeShift();
+        $this->assignShift($emp, $shift);
+
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-01 08:00:00'));
+        $openDay = now()->toDateString();
+
+        // Employee checked in but forgot to check out (open record)
+        $open = Attendance::create([
+            'employee_id'     => $emp->id,
+            'attendance_date' => $openDay,
+            'check_in_time'   => '08:00:00',
+            'status'          => 'present',
+        ]);
+
+        // Next day, more than 20h after check-in, employee tries to check in again
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-02 09:00:00'));
+
+        $request = Request::create('/api/attendance/check-in', 'POST', [
+            'employee_id' => $emp->id,
+        ], [], [], ['HTTP_ACCEPT' => 'application/json']);
+
+        $controller = new AttendanceController(app(AttendancePenaltyService::class));
+        $response   = $controller->checkIn($request);
+        $payload    = json_decode($response->getContent(), true);
+
+        $this->assertTrue($payload['success'], 'Check-in was rejected: ' . ($payload['message'] ?? ''));
+
+        // Old open record must be auto-closed: check-in 08:00 + 20h = 04:00 next day.
+        $old = $open->fresh();
+        $this->assertNotNull($old->check_out_time);
+        $this->assertSame('04:00:00', $old->check_out_time);
+
+        \Carbon\Carbon::setTestNow(null);
+    }
+
+    public function test_checkout_after_midnight_on_night_shift_finds_open_record(): void
+    {
+        $emp   = $this->makeEmployee();
+        $shift = $this->makeShift(); // end_time 17:00, but we'll convert it to a night shift below
+        $this->assignShift($emp, $shift);
+
+        $shift->start_time = '17:00:00';
+        $shift->end_time   = '05:00:00'; // crosses midnight
+        $shift->save();
+
+        // Day X, 17:00 — employee checks in
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-01 17:00:00'));
+        $dayOne = now()->toDateString();
+
+        Attendance::create([
+            'employee_id'     => $emp->id,
+            'attendance_date' => $dayOne,
+            'check_in_time'   => now()->toTimeString(),
+            'status'          => 'present',
+        ]);
+
+        // Day X+1, 06:00 — after the shift ended (05:00) the employee checks out
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-02 06:00:00'));
+
+        $request = Request::create('/api/attendance/check-out', 'POST', [
+            'employee_id' => $emp->id,
+        ], [], [], ['HTTP_ACCEPT' => 'application/json']);
+
+        $controller = new AttendanceController(app(AttendancePenaltyService::class));
+        $response   = $controller->checkOut($request);
+        $payload    = json_decode($response->getContent(), true);
+
+        $this->assertTrue($payload['success'], 'Checkout was rejected: ' . ($payload['message'] ?? ''));
+        $this->assertSame('06:00:00', $payload['data']['check_out_time']);
+
+        // The open day-X record must be the one that received the check-out
+        $saved = Attendance::where('employee_id', $emp->id)
+            ->where('attendance_date', $dayOne)
+            ->first();
+        $this->assertNotNull($saved->check_out_time);
+        $this->assertSame('06:00:00', $saved->check_out_time);
+
+        \Carbon\Carbon::setTestNow(null);
+    }
+
     public function test_late_within_grace_period_is_not_penalized(): void
     {
         $emp = $this->makeEmployee(5000);
@@ -247,8 +332,8 @@ class AttendanceDeductionTest extends TestCase
         $this->assertSame(20, $att->late_minutes);
         $this->assertSame('minutes', $att->applied_late_deduction_type);
 
-        // 20 min late, 10 beyond grace → 10 × 5 EGP/minute
-        $this->assertEqualsWithDelta(10 * 5, app(AttendancePenaltyService::class)->calculateRecordDeduction($att)['amount'], 0.01);
+        // 20 min late, past the 10-min grace → free minutes forfeited → 20 × 5 EGP/minute
+        $this->assertEqualsWithDelta(20 * 5, app(AttendancePenaltyService::class)->calculateRecordDeduction($att)['amount'], 0.01);
     }
 
     public function test_salary_deduction_includes_early_exit(): void
@@ -274,5 +359,112 @@ class AttendanceDeductionTest extends TestCase
 
         $this->assertEqualsWithDelta(100, $summary['amount'], 0.01);
         $this->assertStringContainsString('انصراف مبكر', $summary['label']);
+    }
+
+    public function test_my_daily_log_returns_check_in_check_out_per_day(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-10 12:00:00'));
+
+        $user = User::create([
+            'name'     => 'Mobile Emp',
+            'email'    => 'mobile_' . uniqid() . '@example.com',
+            'password' => bcrypt('secret'),
+        ]);
+
+        $emp   = $this->makeEmployee();
+        $emp->update(['user_id' => $user->id]);
+        $shift = $this->makeShift();
+        $this->assignShift($emp, $shift);
+
+        Attendance::create([
+            'employee_id'       => $emp->id,
+            'attendance_date'   => '2026-09-03',
+            'check_in_time'     => '08:05:00',
+            'check_out_time'    => '17:00:00',
+            'status'            => 'late',
+            'late_minutes'      => 5,
+            'early_exit_minutes'=> 0,
+            'actual_worked_hours'=> 8.92,
+            'shift_id'          => $shift->id,
+            'deduction_amount'  => 25.0,
+        ]);
+
+        $response = $this->actingAs($user)->get('/api/attendance/my-daily-log?month=9&year=2026');
+        $payload  = json_decode($response->getContent(), true);
+
+        $this->assertTrue($payload['success']);
+        $this->assertCount(30, $payload['data']); // September 2026 has 30 days
+
+        $day3 = collect($payload['data'])->firstWhere('date', '2026-09-03');
+        $this->assertSame('late', $day3['status']);
+        $this->assertSame('08:05:00', $day3['check_in_time']);
+        $this->assertSame('17:00:00', $day3['check_out_time']);
+        $this->assertSame('Test Shift', $day3['shift_name']);
+
+        // A day without a record should be marked absent
+        $day5 = collect($payload['data'])->firstWhere('date', '2026-09-05');
+        $this->assertSame('absent', $day5['status']);
+        $this->assertNull($day5['check_in_time']);
+
+        $this->assertSame(1, $payload['statistics']['late']);
+
+        \Carbon\Carbon::setTestNow(null);
+    }
+
+    public function test_my_daily_log_falls_back_to_employee_active_shift_for_session_records(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-10 12:00:00'));
+
+        $user = User::create([
+            'name'     => 'Mobile Emp',
+            'email'    => 'mobile_' . uniqid() . '@example.com',
+            'password' => bcrypt('secret'),
+        ]);
+
+        $emp   = $this->makeEmployee();
+        $emp->update(['user_id' => $user->id]);
+        $shift = $this->makeShift();
+        $this->assignShift($emp, $shift);
+
+        // Custom-attendance day: shift lives only on the employee assignment,
+        // while check-in/out are stored in the session log.
+        $att = Attendance::create([
+            'employee_id'     => $emp->id,
+            'attendance_date' => '2026-09-02',
+            'status'          => 'present',
+        ]);
+
+        AttendanceLog::create([
+            'employee_id'    => $emp->id,
+            'attendance_id'  => $att->id,
+            'log_date'       => '2026-09-02',
+            'check_in_time'  => '09:10:28',
+            'check_out_time' => '18:54:21',
+            'duration_minutes'=> 583,
+        ]);
+
+        $response = $this->actingAs($user)->get('/api/attendance/my-daily-log?month=9&year=2026');
+        $payload  = json_decode($response->getContent(), true);
+
+        $this->assertTrue($payload['success']);
+
+        $day2 = collect($payload['data'])->firstWhere('date', '2026-09-02');
+        $this->assertSame('present', $day2['status']);
+        $this->assertSame('09:10:28', $day2['check_in_time']);
+        $this->assertSame('18:54:21', $day2['check_out_time']);
+        $this->assertSame('Test Shift', $day2['shift_name']);
+        $this->assertSame('08:00:00', $day2['shift_start']);
+        $this->assertSame('17:00:00', $day2['shift_end']);
+        $this->assertSame(1, $day2['sessions_count']);
+
+        // Absent day still surfaces the employee's assigned shift.
+        $day3 = collect($payload['data'])->firstWhere('date', '2026-09-03');
+        $this->assertSame('absent', $day3['status']);
+        $this->assertSame('Test Shift', $day3['shift_name']);
+        $this->assertSame('08:00:00', $day3['shift_start']);
+        $this->assertSame('17:00:00', $day3['shift_end']);
+        $this->assertNull($day3['check_in_time']);
+
+        \Carbon\Carbon::setTestNow(null);
     }
 }
